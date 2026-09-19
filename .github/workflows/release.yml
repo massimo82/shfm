@@ -1,0 +1,93 @@
+name: Release
+
+# Push a tag matching internal/version/version.go to cut a release, e.g. after
+# bumping Version to "0.1.0":  git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: ci
+    name: build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev
+
+      # Version is a const shown in the UI, so it can't be injected at link
+      # time: the tag has to agree with the source instead.
+      - name: Check tag matches internal/version
+        run: |
+          version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match internal/version/version.go (v$version)"
+            exit 1
+          fi
+
+      # Base build (no semantic search), built natively on each architecture
+      # because of cgo/libusb. It links libusb and glibc dynamically, so it
+      # runs on distributions at least as recent as this runner's.
+      - name: Build
+        run: |
+          name="shfm-$GITHUB_REF_NAME-linux-${{ matrix.arch }}"
+          mkdir -p "dist/$name"
+          go build -trimpath -ldflags "-s -w" -o "dist/$name/shfm" .
+          cp LICENSE README.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shfm-linux-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release and upload its assets
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # v1.2.3-rc1 and the like are flagged as pre-releases
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease=--prerelease ;;
+            *) prerelease= ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag \
+            $prerelease \
+            dist/*.tar.gz dist/*.sha256

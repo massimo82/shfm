@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Reused by release.yml, so a tag is never published without the same checks
+  # that gate main.
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Native runners for both release architectures, so what gets published
+    # has been tested on the architecture it targets.
+    name: test (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v5
+
+      # The Go version comes from go.mod, the single place it is declared.
+      # Dependencies are vendored, so the build needs no module downloads.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # MTP support is cgo (github.com/hanwen/usb -> libusb) and there is no
+      # pure-Go fallback, so the base build needs the libusb headers and gcc.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev
+
+      # First-party code only: third_party/ is vendored upstream code.
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l main.go internal)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt needed on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -race ./...
+
+      # The semantic (content search) variant is not built here: it needs the
+      # llama-go static libraries, see README "Full build".
+      - name: go build
+        run: go build -o shfm .
