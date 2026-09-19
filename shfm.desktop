@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=shfm
+GenericName=Shell File Manager
+Comment=Terminal-based file manager with SMB/NFS/SFTP/MTP support
+Exec=shfm
+Terminal=true
+Icon=system-file-manager
+Categories=System;Utility;FileTools;
+Keywords=file;manager;terminal;shell;sftp;smb;nfs;mtp;

@@ -1,0 +1,123 @@
+// Copyright (C) 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com>
+//
+// This file is part of shfm.
+//
+// shfm is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// shfm is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with shfm.  If not, see <https://www.gnu.org/licenses/>.
+
+// Package config manages the user's persistent preferences (layout, saved
+// network sources) as JSON under $XDG_CONFIG_HOME.
+package config
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+
+	"shfm/internal/secret"
+)
+
+// RemoteSource is a network source (SMB, NFS or SFTP) saved by the user,
+// with a freely chosen name to recognize it in the picker.
+type RemoteSource struct {
+	Name       string `json:"name"`
+	Kind       string `json:"kind"` // "smb" | "nfs" | "sftp"
+	Host       string `json:"host"`
+	Share      string `json:"share"`       // SMB share
+	Export     string `json:"export"`      // NFS export path
+	RemotePath string `json:"remote_path"` // SFTP starting path
+	Port       int    `json:"port,omitempty"`
+	Domain     string `json:"domain,omitempty"`
+	User       string `json:"user,omitempty"`
+	Guest      bool   `json:"guest,omitempty"`
+
+	// EncryptedPassword holds the SMB or SFTP password encrypted at rest
+	// (see package "secret"): saved only if the user entered one when the
+	// source was saved. Never written to disk in plain text.
+	EncryptedPassword string `json:"encrypted_password,omitempty"`
+}
+
+// DecryptedPassword decrypts EncryptedPassword, if present.
+func (r RemoteSource) DecryptedPassword() (string, error) {
+	return secret.Decrypt(r.EncryptedPassword)
+}
+
+// Config groups all persistent preferences.
+type Config struct {
+	DualPane      bool           `json:"dual_pane"`
+	ShowHidden    bool           `json:"show_hidden"`
+	RemoteSources []RemoteSource `json:"remote_sources"`
+
+	// LogLevel controls the verbosity of shfm's own diagnostic log (see
+	// internal/applog) — one of "debug", "info", "warn" or "error"
+	// (case-insensitive; an empty or unrecognized value, including no
+	// config file at all, falls back to "warn"). "debug" is the one worth
+	// knowing about: it's what turns on per-result semantic search tracing
+	// (embedding/reranker scores), otherwise silent, for troubleshooting
+	// relevance without a rebuild.
+	LogLevel string `json:"log_level,omitempty"`
+}
+
+// Default returns the default configuration.
+func Default() *Config {
+	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn"}
+}
+
+func path() (string, error) {
+	dir := os.Getenv("XDG_CONFIG_HOME")
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(home, ".config")
+	}
+	dir = filepath.Join(dir, "shfm")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.json"), nil
+}
+
+// Load loads the configuration from disk, returning the defaults if the
+// file doesn't exist yet.
+func Load() *Config {
+	p, err := path()
+	if err != nil {
+		return Default()
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return Default()
+	}
+	cfg := Default()
+	if err := json.Unmarshal(data, cfg); err != nil {
+		return Default()
+	}
+	return cfg
+}
+
+// Save writes the configuration to disk as readable JSON. The file has
+// 0600 permissions: even though it never contains a plain-text password,
+// it's still a "personal" file (host names, shares, network users).
+func (c *Config) Save() error {
+	p, err := path()
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, data, 0o600)
+}

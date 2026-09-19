@@ -1,0 +1,232 @@
+# github.com/atotto/clipboard v0.1.4
+## explicit
+github.com/atotto/clipboard
+# github.com/aymanbagabas/go-osc52/v2 v2.0.1
+## explicit; go 1.16
+github.com/aymanbagabas/go-osc52/v2
+# github.com/charmbracelet/bubbles v0.20.0
+## explicit; go 1.18
+github.com/charmbracelet/bubbles/cursor
+github.com/charmbracelet/bubbles/key
+github.com/charmbracelet/bubbles/runeutil
+github.com/charmbracelet/bubbles/textinput
+# github.com/charmbracelet/bubbletea v1.1.0
+## explicit; go 1.18
+github.com/charmbracelet/bubbletea
+# github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc
+## explicit; go 1.18
+github.com/charmbracelet/colorprofile
+# github.com/charmbracelet/lipgloss v1.1.0
+## explicit; go 1.18
+github.com/charmbracelet/lipgloss
+# github.com/charmbracelet/x/ansi v0.8.0
+## explicit; go 1.18
+github.com/charmbracelet/x/ansi
+github.com/charmbracelet/x/ansi/kitty
+github.com/charmbracelet/x/ansi/parser
+# github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd
+## explicit; go 1.18
+github.com/charmbracelet/x/cellbuf
+# github.com/charmbracelet/x/term v0.2.1
+## explicit; go 1.18
+github.com/charmbracelet/x/term
+# github.com/dlclark/regexp2 v1.10.0
+## explicit; go 1.13
+github.com/dlclark/regexp2
+github.com/dlclark/regexp2/syntax
+# github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f
+## explicit; go 1.16
+github.com/erikgeiser/coninput
+# github.com/godbus/dbus/v5 v5.2.2
+## explicit; go 1.20
+github.com/godbus/dbus/v5
+# github.com/google/uuid v1.6.0
+## explicit
+github.com/google/uuid
+# github.com/hanwen/go-mtpfs v1.0.0
+## explicit; go 1.12
+github.com/hanwen/go-mtpfs/mtp
+# github.com/hanwen/usb v0.0.0-20141217151552-69aee4530ac7
+## explicit
+github.com/hanwen/usb
+# github.com/jfjallid/go-smb v0.12.0
+## explicit; go 1.24.0
+github.com/jfjallid/go-smb/gss
+github.com/jfjallid/go-smb/krb5ssp
+github.com/jfjallid/go-smb/msdtyp
+github.com/jfjallid/go-smb/ntlmssp
+github.com/jfjallid/go-smb/smb
+github.com/jfjallid/go-smb/smb/compress
+github.com/jfjallid/go-smb/smb/crypto/ccm
+github.com/jfjallid/go-smb/smb/crypto/cmac
+github.com/jfjallid/go-smb/smb/unicode
+github.com/jfjallid/go-smb/spnego
+# github.com/jfjallid/gofork v1.7.6
+## explicit; go 1.7
+github.com/jfjallid/gofork/encoding/asn1
+github.com/jfjallid/gofork/x/crypto/pbkdf2
+# github.com/jfjallid/gokrb5/v9 v9.1.0
+## explicit; go 1.24
+github.com/jfjallid/gokrb5/v9/asn1tools
+github.com/jfjallid/gokrb5/v9/client
+github.com/jfjallid/gokrb5/v9/config
+github.com/jfjallid/gokrb5/v9/credentials
+github.com/jfjallid/gokrb5/v9/crypto
+github.com/jfjallid/gokrb5/v9/crypto/common
+github.com/jfjallid/gokrb5/v9/crypto/etype
+github.com/jfjallid/gokrb5/v9/crypto/rfc3961
+github.com/jfjallid/gokrb5/v9/crypto/rfc3962
+github.com/jfjallid/gokrb5/v9/crypto/rfc4757
+github.com/jfjallid/gokrb5/v9/crypto/rfc8009
+github.com/jfjallid/gokrb5/v9/iana
+github.com/jfjallid/gokrb5/v9/iana/addrtype
+github.com/jfjallid/gokrb5/v9/iana/adtype
+github.com/jfjallid/gokrb5/v9/iana/asnAppTag
+github.com/jfjallid/gokrb5/v9/iana/chksumtype
+github.com/jfjallid/gokrb5/v9/iana/errorcode
+github.com/jfjallid/gokrb5/v9/iana/etypeID
+github.com/jfjallid/gokrb5/v9/iana/flags
+github.com/jfjallid/gokrb5/v9/iana/keyusage
+github.com/jfjallid/gokrb5/v9/iana/msgtype
+github.com/jfjallid/gokrb5/v9/iana/nametype
+github.com/jfjallid/gokrb5/v9/iana/patype
+github.com/jfjallid/gokrb5/v9/imported/aescts/v2
+github.com/jfjallid/gokrb5/v9/imported/dnsutils/v2
+github.com/jfjallid/gokrb5/v9/imported/go-uuid
+github.com/jfjallid/gokrb5/v9/kadmin
+github.com/jfjallid/gokrb5/v9/keytab
+github.com/jfjallid/gokrb5/v9/krberror
+github.com/jfjallid/gokrb5/v9/messages
+github.com/jfjallid/gokrb5/v9/pac
+github.com/jfjallid/gokrb5/v9/pkinit
+github.com/jfjallid/gokrb5/v9/types
+# github.com/jfjallid/golog v0.4.0
+## explicit; go 1.17
+github.com/jfjallid/golog
+# github.com/jfjallid/mstypes v0.0.2
+## explicit; go 1.24
+github.com/jfjallid/mstypes
+# github.com/jfjallid/ndr v0.2.0
+## explicit; go 1.24
+github.com/jfjallid/ndr
+# github.com/kr/fs v0.1.0
+## explicit
+github.com/kr/fs
+# github.com/ledongthuc/pdf v0.0.0-20260907135840-6c8c28e0e8a0
+## explicit; go 1.24.1
+github.com/ledongthuc/pdf
+# github.com/lucasb-eyer/go-colorful v1.2.0
+## explicit; go 1.12
+github.com/lucasb-eyer/go-colorful
+# github.com/mattn/go-isatty v0.0.20
+## explicit; go 1.15
+github.com/mattn/go-isatty
+# github.com/mattn/go-localereader v0.0.1
+## explicit
+github.com/mattn/go-localereader
+# github.com/mattn/go-runewidth v0.0.16
+## explicit; go 1.9
+github.com/mattn/go-runewidth
+# github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
+## explicit; go 1.17
+github.com/muesli/ansi
+github.com/muesli/ansi/compressor
+# github.com/muesli/cancelreader v0.2.2
+## explicit; go 1.17
+github.com/muesli/cancelreader
+# github.com/muesli/termenv v0.16.0
+## explicit; go 1.17
+github.com/muesli/termenv
+# github.com/philippgille/chromem-go v0.7.0
+## explicit; go 1.21
+github.com/philippgille/chromem-go
+# github.com/pkg/sftp v1.13.5
+## explicit; go 1.15
+github.com/pkg/sftp
+github.com/pkg/sftp/internal/encoding/ssh/filexfer
+# github.com/pkoukk/tiktoken-go v0.1.6
+## explicit; go 1.19
+github.com/pkoukk/tiktoken-go
+# github.com/rasky/go-xdr v0.0.0-20170124162913-1a41d1a06c93
+## explicit
+github.com/rasky/go-xdr/xdr2
+# github.com/rivo/uniseg v0.4.7
+## explicit; go 1.18
+github.com/rivo/uniseg
+# github.com/tcpipuk/llama-go v0.0.0-20260828174538-992bbf8cfdc7
+## explicit; go 1.27.0
+github.com/tcpipuk/llama-go
+# github.com/tmc/langchaingo v0.1.14
+## explicit; go 1.24.4
+github.com/tmc/langchaingo/llms
+github.com/tmc/langchaingo/schema
+github.com/tmc/langchaingo/textsplitter
+# github.com/vmware/go-nfs-client v0.0.0-20190605212624-d43b92724c1b => ./third_party/go-nfs-client
+## explicit; go 1.18
+github.com/vmware/go-nfs-client/nfs
+github.com/vmware/go-nfs-client/nfs/rpc
+github.com/vmware/go-nfs-client/nfs/util
+github.com/vmware/go-nfs-client/nfs/xdr
+# github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
+## explicit; go 1.19
+github.com/xo/terminfo
+# gitlab.com/golang-commonmark/html v0.0.0-20191124015941-a22733972181
+## explicit; go 1.13
+gitlab.com/golang-commonmark/html
+# gitlab.com/golang-commonmark/linkify v0.0.0-20191026162114-a0c2df6c8f82
+## explicit
+gitlab.com/golang-commonmark/linkify
+# gitlab.com/golang-commonmark/markdown v0.0.0-20211110145824-bf3e522c626a
+## explicit; go 1.13
+gitlab.com/golang-commonmark/markdown
+# gitlab.com/golang-commonmark/mdurl v0.0.0-20191124015652-932350d1cb84
+## explicit; go 1.13
+gitlab.com/golang-commonmark/mdurl
+# gitlab.com/golang-commonmark/puny v0.0.0-20191124015043-9f83538fa04f
+## explicit; go 1.13
+gitlab.com/golang-commonmark/puny
+# golang.org/x/crypto v0.48.0 => github.com/golang/crypto v0.27.0
+## explicit; go 1.20
+golang.org/x/crypto/blowfish
+golang.org/x/crypto/chacha20
+golang.org/x/crypto/curve25519
+golang.org/x/crypto/hkdf
+golang.org/x/crypto/internal/alias
+golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/md4
+golang.org/x/crypto/pbkdf2
+golang.org/x/crypto/ssh
+golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
+golang.org/x/crypto/ssh/knownhosts
+# golang.org/x/net v0.50.0 => github.com/golang/net v0.29.0
+## explicit; go 1.18
+golang.org/x/net/http2/hpack
+golang.org/x/net/internal/socks
+golang.org/x/net/proxy
+# golang.org/x/sync v0.16.0 => github.com/golang/sync v0.8.0
+## explicit; go 1.18
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.47.0 => github.com/golang/sys v0.24.0
+## explicit; go 1.18
+golang.org/x/sys/cpu
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# golang.org/x/text v0.29.0 => github.com/golang/text v0.3.8
+## explicit; go 1.17
+golang.org/x/text/transform
+golang.org/x/text/unicode/rangetable
+# software.sslmate.com/src/go-pkcs12 v0.7.0 => github.com/SSLMate/go-pkcs12 v0.5.0
+## explicit; go 1.19
+software.sslmate.com/src/go-pkcs12
+software.sslmate.com/src/go-pkcs12/internal/rc2
+# golang.org/x/sys => github.com/golang/sys v0.24.0
+# golang.org/x/text => github.com/golang/text v0.3.8
+# golang.org/x/sync => github.com/golang/sync v0.8.0
+# golang.org/x/term => github.com/golang/term v0.23.0
+# golang.org/x/crypto => github.com/golang/crypto v0.27.0
+# golang.org/x/net => github.com/golang/net v0.29.0
+# gopkg.in/yaml.v3 => ./third_party/yaml.v3
+# github.com/vmware/go-nfs-client => ./third_party/go-nfs-client
+# software.sslmate.com/src/go-pkcs12 => github.com/SSLMate/go-pkcs12 v0.5.0
+# golang.org/x/exp => github.com/golang/exp v0.0.0-20240719175910-8a7402abbf56
+# golang.org/x/tools => ./third_party/tools

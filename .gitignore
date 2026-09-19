@@ -1,0 +1,48 @@
+# Binaries and build output
+/shfm
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries, coverage and profiling output
+*.test
+*.out
+*.prof
+coverage.*
+cover.out
+
+# Local Go workspace (points at the per-machine llama-go build, see README
+# "Building": a committed go.work would break the plain `go build` on a fresh
+# clone, where third_party/llama-go isn't there yet)
+go.work
+go.work.sum
+
+# llama-go is an upstream checkout plus a local per-machine build: only the
+# four files carrying this project's own patches are tracked (README, "Local
+# changes to llama-go"), plus its go.mod, which keeps the directory its own Go
+# module so that `go build ./...` / `go vet ./...` / `go test ./...` on a
+# fresh clone don't try to compile those files as a package of shfm
+/third_party/llama-go/*
+!/third_party/llama-go/go.mod
+!/third_party/llama-go/wrapper.cpp
+!/third_party/llama-go/wrapper.h
+!/third_party/llama-go/rank.go
+!/third_party/llama-go/llama_vulkan.go
+
+# Environment / secrets
+.env
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
