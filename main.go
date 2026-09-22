@@ -55,7 +55,17 @@ func main() {
 	}
 
 	keymap := config.LoadKeyMap()
-	m := ui.New(cfg, keymap)
+
+	// One optional positional argument: a folder to open both panes on
+	// instead of the home folder (e.g. `shfm /mnt/data`). Anything invalid
+	// (missing, not a directory, unresolvable) is silently ignored by
+	// ui.New/resolveStartPath in favor of the usual home-folder default,
+	// rather than refusing to start over a typo'd path.
+	var startPath string
+	if len(os.Args) > 1 {
+		startPath = os.Args[1]
+	}
+	m := ui.New(cfg, keymap, startPath)
 
 	p := tea.NewProgram(
 		m,

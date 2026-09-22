@@ -24,6 +24,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -119,11 +120,15 @@ type Model struct {
 
 type rect struct{ x0, y0, w, h int }
 
-// New creates the initial model, opening both panes on the user's home
-// folder (or / on error). keymap resolves keypresses to actions in
-// handleKey — see internal/config's KeyMap and config.LoadKeyMap.
-func New(cfg *config.Config, keymap *config.KeyMap) *Model {
-	start := homeOrRoot()
+// New creates the initial model, opening both panes on startPath if it's a
+// valid, existing local directory (shfm's one optional command-line
+// argument — see main.go), the user's home folder otherwise (or / on
+// error; see homeOrRoot) — including when startPath is "" (no argument
+// given at all), the pre-existing default. keymap resolves keypresses to
+// actions in handleKey — see internal/config's KeyMap and
+// config.LoadKeyMap.
+func New(cfg *config.Config, keymap *config.KeyMap, startPath string) *Model {
+	start := resolveStartPath(startPath)
 	local0 := vfs.NewLocalFS("Local", start)
 	local1 := vfs.NewLocalFS("Local", start)
 	m := &Model{
@@ -150,6 +155,26 @@ func homeOrRoot() string {
 		return h
 	}
 	return "/"
+}
+
+// resolveStartPath validates the optional starting-path argument: it must
+// resolve (relative paths are taken as relative to the current working
+// directory) to an existing local directory, otherwise New falls back to
+// homeOrRoot exactly as if no argument had been given — a typo'd, deleted,
+// or (on multi-user systems) inaccessible path shouldn't stop shfm from
+// starting somewhere sane instead of erroring out.
+func resolveStartPath(path string) string {
+	if path == "" {
+		return homeOrRoot()
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return homeOrRoot()
+	}
+	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+		return homeOrRoot()
+	}
+	return abs
 }
 
 func (m *Model) Init() tea.Cmd {

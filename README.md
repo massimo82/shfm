@@ -218,6 +218,11 @@ go build -o shfm .
 ./shfm
 ```
 
+Both panes open on your home folder by default; pass a folder as the one
+optional argument (`./shfm /mnt/data`) to open there instead. An invalid
+argument (missing, not a directory, ...) is silently ignored in favor of
+the home-folder default rather than refusing to start.
+
 This is the base build: everything except semantic (content) search. For
 a build with **every feature enabled**, including semantic search with
 Vulkan GPU acceleration, see [Full build](#full-build-every-feature-vulkan-gpu-acceleration)

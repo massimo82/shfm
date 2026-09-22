@@ -26,7 +26,7 @@ replace golang.org/x/tools => ./third_party/tools
 
 require (
 	github.com/charmbracelet/bubbles v0.20.0
-	github.com/charmbracelet/bubbletea v1.1.0
+	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/hanwen/go-mtpfs v1.0.0
@@ -46,7 +46,7 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
-	github.com/charmbracelet/x/ansi v0.8.0 // indirect
+	github.com/charmbracelet/x/ansi v0.10.1 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
@@ -75,7 +75,6 @@ require (
 	gitlab.com/golang-commonmark/mdurl v0.0.0-20191124015652-932350d1cb84 // indirect
 	gitlab.com/golang-commonmark/puny v0.0.0-20191124015043-9f83538fa04f // indirect
 	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 	software.sslmate.com/src/go-pkcs12 v0.7.0 // indirect
 )
