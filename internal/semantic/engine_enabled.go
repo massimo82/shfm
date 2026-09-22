@@ -969,14 +969,28 @@ func (e *realEngine) Search(ctx context.Context, root, query string, topK int) (
 // score, a different scale this threshold isn't calibrated for.
 const minRerankRelevance = 0.1
 
-// rerankResults re-scores the top rerankPoolSize of results (the rest are
-// left as-is, in their embedding order, after it) using the reranker's
-// classifier head, drops any that don't clear minRerankRelevance, and
-// returns the combined, re-sorted list — or nil if reranking couldn't
-// complete at all (context cancelled, a decode error, ...), telling Search
-// to keep the embedding-only ordering it already has. An empty-but-non-nil
-// result (every candidate judged irrelevant) is a valid, deliberate "no
-// matches", distinct from that nil "reranking failed" case.
+// rerankResults re-scores the top rerankPoolSize of results using the
+// reranker's classifier head and drops any that don't clear
+// minRerankRelevance, returning just that filtered, re-sorted pool — or nil
+// if reranking couldn't complete at all (context cancelled, a decode
+// error, ...), telling Search to keep the embedding-only ordering it
+// already has instead. An empty-but-non-nil result (every candidate judged
+// irrelevant) is a valid, deliberate "no matches", distinct from that nil
+// "reranking failed" case.
+//
+// Deliberately does NOT append results[poolSize:] (the never-reranked
+// tail) once reranking succeeds: that tail is ordered by raw embedding
+// similarity alone, the same noisy-for-short-queries scale
+// minRerankRelevance's own doc comment explains isn't fit for an absolute
+// cutoff — so, unfiltered, it's exactly the "confident-looking noise"
+// minRerankRelevance exists to keep out of the *reranked* pool, just
+// arriving from below poolSize instead of above it. Concatenating it back
+// on after filtering used to defeat the floor for every result beyond
+// rerankPoolSize, e.g. anything past rank 20 in a folder with more than
+// ~20 embedding-relevant files/chunks — a real, commonly-hit case given
+// chunkSize's 400-token chunks. A query genuinely irrelevant to everything
+// in the index now correctly returns few or zero results instead of
+// padding out to topK with the embedding stage's least-bad guesses.
 func (e *realEngine) rerankResults(ctx context.Context, rctx *llama.Context, query string, results []Result, content map[string]string) []Result {
 	poolSize := min(len(results), rerankPoolSize)
 	if poolSize == 0 {
@@ -1004,10 +1018,7 @@ func (e *realEngine) rerankResults(ctx context.Context, rctx *llama.Context, que
 			relevant = append(relevant, r)
 		}
 	}
-	combined := make([]Result, 0, len(relevant)+len(results)-poolSize)
-	combined = append(combined, relevant...)
-	combined = append(combined, results[poolSize:]...)
-	return combined
+	return relevant
 }
 
 // fileEntry is one extractable file found by collectFiles, carrying enough

@@ -19,10 +19,14 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"shfm/internal/applog"
+	"shfm/internal/notify"
 	"shfm/internal/semantic"
 	"shfm/internal/vfs"
 )
@@ -60,16 +64,16 @@ func (m *Model) openSemanticSearch() {
 		// query the user is about to type; an update landing a few hundred
 		// ms late is a fair trade against making every reopen wait on it.
 		m.dialog = newSingleInputDialog(DialogSemanticSearch, "Semantic search (content)", "what are you looking for…", "")
-		m.startSemanticIndex(p.Path, true)
+		m.startSemanticIndex(p.FS, p.Path, true)
 		return
 	}
-	m.startSemanticIndex(p.Path, false)
+	m.startSemanticIndex(p.FS, p.Path, false)
 }
 
 // startSemanticIndex builds or refreshes the content index for root in the
 // background, never blocking the UI: browsing (or, for a refresh, using the
 // search dialog) continues normally while it runs.
-func (m *Model) startSemanticIndex(root string, refresh bool) {
+func (m *Model) startSemanticIndex(fs vfs.FileSystem, root string, refresh bool) {
 	m.semanticIndexing[root] = true
 	if !refresh {
 		m.setStatus("Building content index for semantic search in %s… (first time only; keep browsing, you'll be notified)", root)
@@ -77,10 +81,35 @@ func (m *Model) startSemanticIndex(root string, refresh bool) {
 
 	statusCh := make(chan semantic.Status, 16)
 	ch := m.semanticCh
-	go m.semanticEngine.EnsureIndex(context.Background(), root, statusCh)
+	engine := m.semanticEngine
 	go func() {
+		// dirSize/start are only worth the trouble for a first-time build
+		// (refresh's own staleness check stays silent, same as elsewhere in
+		// this file) and are computed here, in this already-background
+		// goroutine, rather than in startSemanticIndex itself — a DirSize
+		// walk is stat-only (no file content read) so it's normally fast,
+		// but on a huge subtree it's still a full recursive walk, and nothing
+		// here may block the bubbletea event loop that called us.
+		var dirSize int64
+		if !refresh {
+			if sizer, ok := fs.(vfs.DirSizer); ok {
+				if sz, _, err := sizer.DirSize(root); err == nil {
+					dirSize = sz
+				}
+			}
+		}
+		// Timed from here, not from startSemanticIndex's own call: this
+		// excludes the DirSize walk above, so "indexing time" reflects the
+		// embedding work itself.
+		start := time.Now()
+		go engine.EnsureIndex(context.Background(), root, statusCh)
 		for st := range statusCh {
-			ch <- semanticMsg{kind: semanticIndexProgress, root: root, indexStatus: st, refresh: refresh}
+			msg := semanticMsg{kind: semanticIndexProgress, root: root, indexStatus: st, refresh: refresh}
+			if st.Finished && !refresh {
+				msg.elapsed = time.Since(start)
+				msg.dirSize = dirSize
+			}
+			ch <- msg
 		}
 	}()
 }
@@ -113,7 +142,9 @@ type semanticMsg struct {
 	indexStatus semantic.Status // semanticIndexProgress
 	results     []semantic.Result
 	err         error
-	refresh     bool // semanticIndexProgress: a background staleness check, not a first-time build
+	refresh     bool          // semanticIndexProgress: a background staleness check, not a first-time build
+	elapsed     time.Duration // semanticIndexProgress, finished, !refresh: total time spent indexing
+	dirSize     int64         // semanticIndexProgress, finished, !refresh: root's size (bytes) before indexing
 }
 
 func (m *Model) waitForSemanticMsg() tea.Cmd {
@@ -147,7 +178,20 @@ func (m *Model) handleSemanticMsg(msg semanticMsg) {
 			return
 		}
 		if !msg.refresh {
-			m.setStatus("Semantic search ready for %s — press Ctrl+F again to search", msg.root)
+			m.setStatus("Semantic search ready for %s (%s indexed in %s) — press Ctrl+F again to search",
+				msg.root, humanSize(msg.dirSize), formatMinutes(msg.elapsed))
+			// The status line above is only seen if/when the user happens
+			// to glance back at it; a first-time build is exactly the slow
+			// case ("keep browsing, you'll be notified" — see
+			// startSemanticIndex) they're expected to wander off during, so
+			// send an actual desktop notification too, but only if they're
+			// not already sitting right there watching this same folder
+			// (in either pane) — in which case the status line update above
+			// is enough, same reasoning as a file task's own progress
+			// dialog being on screen (see notifyTaskFinished).
+			if !m.isPathActive(msg.root) {
+				m.notifySemanticIndexDone(msg.root, msg.dirSize, msg.elapsed)
+			}
 		}
 
 	case semanticQueryDone:
@@ -187,6 +231,45 @@ func (m *Model) showSemanticResults(root string, results []semantic.Result) {
 		}
 		return
 	}
+}
+
+// isPathActive reports whether path is the folder either pane currently has
+// open — i.e. the user is right there, as opposed to having navigated
+// elsewhere while a first-time semantic index build ran in the background.
+func (m *Model) isPathActive(path string) bool {
+	for _, p := range m.panes {
+		if p.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+// formatMinutes renders a duration as minutes, the unit the user actually
+// cares about here (an index build worth waiting for runs from seconds to
+// several minutes) — one decimal, e.g. "0.2 min" for a quick folder,
+// "3.4 min" for a large one.
+func formatMinutes(d time.Duration) string {
+	return fmt.Sprintf("%.1f min", d.Minutes())
+}
+
+// notifySemanticIndexDone posts a desktop notification (see internal/notify)
+// once a first-time semantic index build finishes while the user has
+// navigated away from root — the case the in-app status line alone won't
+// reach. Mirrors notifyTaskFinished: skipped if the user opted out via
+// config, fire-and-forget otherwise so a slow/absent session bus never
+// blocks the UI, and any failure is only logged.
+func (m *Model) notifySemanticIndexDone(root string, dirSize int64, elapsed time.Duration) {
+	if m.cfg != nil && !m.cfg.Notifications {
+		return
+	}
+	summary := "shfm: semantic search index ready"
+	body := fmt.Sprintf("%s — %s indexed in %s", root, humanSize(dirSize), formatMinutes(elapsed))
+	go func() {
+		if err := notify.Send(summary, body, notify.Normal); err != nil {
+			applog.Debug("desktop notification failed", "error", err)
+		}
+	}()
 }
 
 // updateSemanticSearchDialogKey handles the (single-field) semantic
