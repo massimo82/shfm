@@ -66,11 +66,20 @@ type Config struct {
 	// (embedding/reranker scores), otherwise silent, for troubleshooting
 	// relevance without a rebuild.
 	LogLevel string `json:"log_level,omitempty"`
+
+	// Notifications enables desktop notifications (via internal/notify,
+	// i.e. the freedesktop.org D-Bus Notifications interface) when a task
+	// (copy/move/delete/format) sent to the background finishes — whether
+	// successfully, with errors, or cancelled — while the user isn't
+	// watching its progress dialog. Defaults to true; set to false to opt
+	// out, e.g. on a headless/SSH setup with no notification daemon, to
+	// skip the per-call session-bus connection attempt.
+	Notifications bool `json:"notifications"`
 }
 
 // Default returns the default configuration.
 func Default() *Config {
-	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn"}
+	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn", Notifications: true}
 }
 
 func path() (string, error) {

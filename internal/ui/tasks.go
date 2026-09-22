@@ -23,7 +23,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"shfm/internal/applog"
 	"shfm/internal/fileops"
+	"shfm/internal/notify"
 )
 
 // TaskKind identifies the kind of file operation a background Task runs.
@@ -145,6 +147,7 @@ func (m *Model) handleTaskMsg(msg taskMsg) {
 		t.ErrorCount = msg.errCount
 		m.panes[0].Load()
 		m.panes[1].Load()
+		m.notifyTaskFinished(t)
 		return
 	}
 	t.Done, t.Total, t.CurrentName, t.LastError = msg.done, msg.total, msg.name, msg.err
@@ -200,4 +203,49 @@ func (m *Model) startSimpleTask(kind TaskKind, label string, run func() error) *
 		ch <- taskMsg{id: id, finished: true, errCount: errCount}
 	}()
 	return t
+}
+
+// isTaskForegrounded reports whether t's own progress dialog is the one
+// currently on screen — i.e. the user is watching it live right now, as
+// opposed to having sent it to the background (Esc) or never having it in
+// front of them to begin with (see the Task doc comment for what
+// "foreground"/"background" mean here). m.dialog is the single active
+// dialog, so this is exactly the condition updateDialogKey's Esc case
+// undoes when it backgrounds a task.
+func (m *Model) isTaskForegrounded(t *Task) bool {
+	return m.dialog.Kind == DialogProgress && m.dialog.TaskID == t.ID
+}
+
+// notifyTaskFinished posts a desktop notification (see internal/notify) for
+// a finished task — success, error(s) or cancellation alike — but only if
+// the task isn't currently foregrounded: a task the user is already
+// watching finish needs no separate notification for the same event: it's
+// the *backgrounded* case (sent to background then left running while the
+// user moved on to something else) this exists for. Skipped entirely if
+// the user opted out via config, and fire-and-forget otherwise: the D-Bus
+// call happens in its own goroutine so a slow or absent session bus never
+// blocks the UI's event loop, and any failure (typically just "no session
+// bus", e.g. over SSH) is logged, not surfaced — a failed notification
+// about a failure shouldn't become a second failure the user has to deal
+// with.
+func (m *Model) notifyTaskFinished(t *Task) {
+	if (m.cfg != nil && !m.cfg.Notifications) || m.isTaskForegrounded(t) {
+		return
+	}
+	urgency := notify.Normal
+	status := "finished"
+	switch {
+	case t.Cancelled:
+		status = "cancelled"
+	case t.ErrorCount > 0:
+		status = "finished with errors"
+		urgency = notify.Critical
+	}
+	summary := fmt.Sprintf("shfm: %s %s", t.Kind, status)
+	body := t.Summary()
+	go func() {
+		if err := notify.Send(summary, body, urgency); err != nil {
+			applog.Debug("desktop notification failed", "error", err)
+		}
+	}()
 }

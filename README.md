@@ -59,6 +59,16 @@ to toggle between single- and dual-pane layout.
   task to the background — it keeps running. `Ctrl+B` opens the list of
   background tasks, to check on or reopen any of them. Quitting while
   tasks are still running shows a warning first.
+- **Desktop notifications for backgrounded tasks**: a task sent to the
+  background (`Esc`) that then finishes — successfully, with errors, or
+  cancelled — while you're not watching its progress dialog posts a
+  desktop notification, via the standard `org.freedesktop.Notifications`
+  D-Bus interface (works with any DE/WM's notification daemon — mako,
+  dunst, swaync, GNOME Shell, Plasma, xfce4-notifyd... — no external
+  `notify-send` binary needed). A task still open in its progress dialog
+  when it finishes doesn't also get a notification, since you're already
+  looking at it. Set `"notifications": false` in
+  `$XDG_CONFIG_HOME/shfm/config.json` to opt out entirely.
 - **Colored listing** by file type (folders, symlinks, executables,
   archives, images, media) and by permissions (read-only entries are
   shown in a fainter shade).
