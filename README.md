@@ -1,4 +1,4 @@
-# shfm — Shell File Manager v0.0.3
+# shfm — Shell File Manager v0.1.0
 
 An interactive terminal file manager written in pure Go, built on
 [bubbletea v2](https://github.com/charmbracelet/bubbletea) (Elm architecture)
@@ -817,7 +817,7 @@ vendor/                         Go module dependencies (the default build works 
 
 ## Version
 
-The current release is **0.0.3**, shown in the title bar next to "Shell File
+The current release is **0.1.0**, shown in the title bar next to "Shell File
 Manager". It lives in a single constant, `Version` in
 `internal/version/version.go`; to cut a new release change it there (and the
 README's title line) and rebuild.
