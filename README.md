@@ -170,7 +170,8 @@ to toggle between single- and dual-pane layout.
   [`gokrazy/rsync`](third_party/gokrazy-rsync), no `rsync` binary needed)
   or a generic whole-file copy; any other combination uses the generic
   one. `Ctrl+Alt+M` with an empty clipboard lists the saved mirrors (sync
-  now, pause/resume, delete).
+  now, pause/resume, delete). The source is never modified: see
+  [Automatic mirrors](#automatic-mirrors) for how that's enforced.
 - **Format a removable source**: pick exFAT, FAT32, ext4 or XFS, via a
   dedicated dialog with a red data-loss warning followed by a second,
   explicit "type YES to proceed" confirmation. Refuses to format the disk
@@ -182,6 +183,112 @@ to toggle between single- and dual-pane layout.
   system-wide (`/usr/share/applications`) if run as root, per-user
   (`~/.local/share/applications`) otherwise — but only if neither already
   exists.
+
+## Automatic mirrors
+
+A mirror makes its **destination** identical to its **source**, one way:
+files are copied from the source to the destination, and files that are
+no longer in the source are deleted from the destination. Nothing is ever
+written to or deleted from the source. The rules below exist to keep it
+that way, including when a destination turns out to be the source under
+another name.
+
+### Creating a mirror
+
+`Ctrl+C` a file or folder, go to the folder that should hold the copy and
+press `Ctrl+Alt+M`. Each copied item `name` gets a pair
+*source/name → destination folder/name*. Before anything is saved:
+
+1. A path check refuses a destination that is the source, is inside it or
+   contains it, and a destination that already belongs to another mirror.
+2. A **data check** (see [Protecting the source](#protecting-the-source))
+   makes sure the destination isn't the source's own data reached another
+   way. If it is, an error is shown and **no mirror is activated**. When it
+   can't be verified in time, the confirmation shows a `WARNING: could not
+   verify…` line and the choice is yours.
+3. The confirmation dialog lists every pair, noting destinations that
+   already exist (they'll be made identical to the source, so their extra
+   files are deleted), and, between local folders, offers the rsync or the
+   generic engine.
+
+### Pausing and deleting
+
+The list of mirrors (`Ctrl+Alt+M` with an empty clipboard) shows each
+pair's status, including the last error of a failed sync.
+
+- **`p` pause/resume**: a paused pair isn't synced. Pausing also **stops a
+  sync already in progress** instead of letting it finish.
+- **`x` delete**: stops a sync in progress too, then removes the pair and
+  its state file. What happens to the files already copied depends on the
+  destination:
+  - **nothing has been copied yet**: a plain yes/no confirmation;
+  - **it holds a copy**: the dialog shows where the copy is and asks what
+    to do with it: **Keep the copied files** (preselected, so a reflex
+    Enter never deletes anything) or **Move the copy to the trash**
+    (**Delete the copy permanently** on SMB/NFS/SFTP/MTP, which have no
+    trash). If the sync was still running, the copy is deleted only once
+    it has actually stopped, so it can't be recreated behind the deletion;
+  - **the destination or the source isn't available** (disk unmounted,
+    connection closed): the copy can't be checked, so it's **kept**, and
+    the dialog says so.
+
+  Only the destination's copy is ever deleted, and only after the data
+  check has confirmed it isn't the source; if the check finds an overlap,
+  or can't rule one out, the deletion is refused with an error.
+
+### Protecting the source
+
+Comparing paths isn't enough: the same files can be reached through a
+symlink, a bind mount, a network share of a local folder, or two
+different connections to the same server. So before creating a mirror,
+before **every** sync, and before deleting a copy, shfm checks whether
+the destination is the source, is inside it, or contains it **as actual
+data**, with one of two strategies depending on where the two sides are.
+Folders that merely hold a copy of the same content are *not* the same
+data: mirroring between them is allowed.
+
+**1. Both sides local: device and inode.** Every file on a local
+filesystem is identified by its device and inode number, whatever path
+leads to it. shfm stats the source and walks up from the destination
+(and vice versa), comparing device and inode at each level: finding the
+source among the destination's ancestors means the destination is inside
+it, and the other way round means it contains it. A copied folder has
+new inodes, so it never matches. This check is instant, writes nothing,
+and always gives a definite answer.
+
+**2. At least one network side (SMB, NFS, SFTP, MTP): a probe file.**
+Inodes can't be compared across backends, so shfm creates a hidden,
+empty file `.shfm-mirror-probe-<random>` in the destination's folder and
+looks for it from the source side, then removes it:
+
+- first in the source and each of its ancestors: found there, it tells
+  exactly where the destination's folder sits relative to the source, so
+  a destination that is the source, contains it, or is inside it is
+  recognized, while one merely next to it is not;
+- otherwise, by listing the source's subfolders: finding it there means
+  the destination is somewhere inside the source.
+
+Listing a large source over the network takes time, so this search is
+capped at **10 seconds** (and 20,000 folders). When creating a mirror it
+runs **in the background** behind a "Checking…" dialog: shfm stays
+usable, and `Esc` stops it without activating anything. If the cap is
+reached, the result is "can't verify": creating the mirror asks you with
+a warning, a sync goes ahead (you accepted the pair), and a copy deletion
+is refused. The probe file is written only in the destination's folder;
+it can end up inside the source only in the very case being detected,
+and it's removed right away.
+
+Where the check applies:
+
+| When | Overlap found | Can't verify |
+|---|---|---|
+| Creating a mirror | error, nothing activated | warning in the confirmation |
+| Every sync | the sync fails, nothing touched | the sync runs |
+| Deleting the copy | deletion refused | deletion refused |
+
+On top of that, a sync never deletes anything when the source can't be
+read: a missing or unreadable source root fails the run, and an
+unreadable subfolder's counterpart is left alone (see [Notes](#notes)).
 
 ## Keyboard shortcuts
 
