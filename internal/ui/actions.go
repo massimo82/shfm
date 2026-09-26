@@ -585,8 +585,10 @@ func (m *Model) replaceFS(idx int, fs vfs.FileSystem, path string) {
 	old := m.panes[idx].FS
 	m.panes[idx] = NewPane(fs, path, m.cfg.ShowHidden, idx, m.sizeCh)
 	if old != nil && old != fs {
-		old.Close()
+		m.closeFSWhenUnused(old)
 	}
+	// A newly opened source may complete a mirror pair.
+	m.checkMirrors()
 }
 
 func (m *Model) replaceActiveFS(fs vfs.FileSystem, path string) {
@@ -878,6 +880,12 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 			return drives.FormatDevice(wholeDisk, fsType)
 		})
 		m.dialog = Dialog{Kind: DialogProgress, Title: "Formatting", TaskID: t.ID}
+
+	case DialogMirrorConfirm:
+		m.confirmMirror()
+
+	case DialogMirrorConfirmDelete:
+		m.deleteMirror(d.MirrorPairID)
 
 	case DialogHelp, DialogMessage, DialogConnecting:
 		m.dialog = Dialog{}

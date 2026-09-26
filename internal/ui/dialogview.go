@@ -283,7 +283,11 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString("(task no longer available)")
 			return styleDialogBox.Width(60).Render(b.String())
 		}
-		b.WriteString(fmt.Sprintf("%s\n", t.Kind))
+		if t.Label != "" {
+			b.WriteString(truncate(t.Label, 56) + "\n")
+		} else {
+			b.WriteString(fmt.Sprintf("%s\n", t.Kind))
+		}
 		b.WriteString(renderProgressBar(48, t.Done, t.Total))
 		b.WriteString(fmt.Sprintf("  %d/%d\n", t.Done, t.Total))
 		b.WriteString(styleDim.Render(truncate(t.CurrentName, 56)) + "\n")
@@ -383,6 +387,48 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("Enter confirm · Esc cancel"))
 		return styleDialogBox.Width(56).Render(b.String())
+
+	case DialogMirrorConfirm:
+		b.WriteString(d.Message)
+		b.WriteString("\n\n")
+		b.WriteString(styleWarn.Render("The destination will be kept IDENTICAL to the source:\nfiles missing from the source are DELETED from it.\nSynced now, then every 5 minutes while both are available."))
+		b.WriteString("\n")
+		if len(d.Items) > 0 {
+			b.WriteString("\n")
+			for i, it := range d.Items {
+				prefix := "  "
+				s := styleFile
+				if i == d.ItemIdx {
+					prefix, s = "\u25b8 ", styleAccent
+				}
+				b.WriteString(prefix + s.Render(it) + "\n")
+			}
+			b.WriteString("\n" + styleDim.Render("\u2191/\u2193 choose method · Enter create · Esc cancel"))
+		} else {
+			b.WriteString("\n" + styleDim.Render("Enter create · Esc cancel"))
+		}
+		return styleDialogBox.Width(72).Render(b.String())
+
+	case DialogMirrorList:
+		if len(d.Items) == 0 {
+			b.WriteString(styleDim.Render("No mirrors yet: copy (Ctrl+C) a file or folder,\nthen paste it as a mirror with this same shortcut."))
+		}
+		for i, it := range d.Items {
+			prefix := "  "
+			s := styleFile
+			if i == d.ItemIdx {
+				prefix, s = "\u25b8 ", styleAccent
+			}
+			b.WriteString(prefix + s.Render(truncate(it, 70)) + "\n")
+		}
+		b.WriteString("\n" + styleDim.Render("Enter sync now · p pause/resume · x delete · Esc close"))
+		return styleDialogBox.Width(80).Render(b.String())
+
+	case DialogMirrorConfirmDelete:
+		b.WriteString(d.Message)
+		b.WriteString("\n\n")
+		b.WriteString(styleDim.Render("y / Enter confirm · n / Esc cancel"))
+		return styleDialogBox.Width(64).Render(b.String())
 
 	case DialogHelp:
 		w := m.width - 8

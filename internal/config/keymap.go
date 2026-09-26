@@ -69,6 +69,7 @@ const (
 	ActionToggleTrashView  Action = "toggle-trash-view"
 	ActionRestoreOrRefresh Action = "restore-or-refresh"
 	ActionEmptyTrash       Action = "empty-trash"
+	ActionMirror           Action = "mirror"
 )
 
 // keybindingDef is one entry in the fixed, built-in catalogue of
@@ -111,6 +112,7 @@ var keybindingDefs = []keybindingDef{
 	{ActionPasteMove, []string{"alt+ctrl+v"}, "Paste clipboard as move"},
 	{ActionTrash, []string{"ctrl+d"}, "Move selection to trash"},
 	{ActionDelete, []string{"alt+ctrl+d"}, "Permanently delete selection"},
+	{ActionMirror, []string{"alt+ctrl+s"}, "Paste as mirror, or list"},
 
 	{ActionRename, []string{"r"}, "Rename current entry"},
 	{ActionNewFolder, []string{"m"}, "Create new folder"},

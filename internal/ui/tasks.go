@@ -36,6 +36,7 @@ const (
 	TaskMove
 	TaskDelete
 	TaskFormat
+	TaskMirror
 )
 
 func (k TaskKind) String() string {
@@ -48,6 +49,8 @@ func (k TaskKind) String() string {
 		return "Delete"
 	case TaskFormat:
 		return "Format"
+	case TaskMirror:
+		return "Mirror"
 	default:
 		return "Task"
 	}
@@ -70,6 +73,16 @@ type Task struct {
 	Cancelled   bool
 	LastError   error
 
+	// Label, when set, names what the task works on in Summary (e.g. a
+	// mirror's "src → dst"), since CurrentName keeps changing.
+	Label string
+	// onFinish, when set, runs on the UI goroutine once the task finishes.
+	onFinish func(t *Task)
+	// notifyErrorsOnly limits the desktop notification to failures:
+	// recurring tasks (mirror runs every few minutes) would otherwise
+	// notify every time.
+	notifyErrorsOnly bool
+
 	cancelFlag int32 // set atomically to 1 to request cancellation
 }
 
@@ -87,6 +100,9 @@ func (t *Task) Summary() string {
 		status = fmt.Sprintf("done, %d error(s)", t.ErrorCount)
 	case t.Finished:
 		status = "done"
+	}
+	if t.Label != "" {
+		return fmt.Sprintf("%s %s — %s (%s)", t.Kind, t.Label, status, t.CurrentName)
 	}
 	return fmt.Sprintf("%s — %s (%s)", t.Kind, status, t.CurrentName)
 }
@@ -147,6 +163,9 @@ func (m *Model) handleTaskMsg(msg taskMsg) {
 		t.ErrorCount = msg.errCount
 		m.panes[0].Load()
 		m.panes[1].Load()
+		if t.onFinish != nil {
+			t.onFinish(t)
+		}
 		m.notifyTaskFinished(t)
 		return
 	}
@@ -230,6 +249,9 @@ func (m *Model) isTaskForegrounded(t *Task) bool {
 // with.
 func (m *Model) notifyTaskFinished(t *Task) {
 	if (m.cfg != nil && !m.cfg.Notifications) || m.isTaskForegrounded(t) {
+		return
+	}
+	if t.notifyErrorsOnly && t.ErrorCount == 0 {
 		return
 	}
 	urgency := notify.Normal

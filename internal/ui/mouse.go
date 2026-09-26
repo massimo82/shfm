@@ -238,6 +238,11 @@ func (m *Model) handleDialogMouse(msg tea.MouseMsg) {
 			m.dialog.ItemIdx = row
 			m.confirmDialog()
 		}
+	case DialogMirrorList:
+		// Select only: Enter syncs, p pauses, x deletes.
+		if row >= 0 && row < len(m.dialog.Items) {
+			m.dialog.ItemIdx = row
+		}
 	case DialogHelp:
 		m.dialog = Dialog{}
 	case DialogConnectSMB, DialogConnectNFS, DialogConnectSFTP, DialogProperties:

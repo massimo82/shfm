@@ -52,11 +52,38 @@ func (r RemoteSource) DecryptedPassword() (string, error) {
 	return secret.Decrypt(r.EncryptedPassword)
 }
 
+// MirrorEndpoint identifies one end of a mirror independently of where,
+// or whether, its source is mounted/connected right now.
+type MirrorEndpoint struct {
+	// Source is "uuid:<filesystem UUID>" for a local disk or removable
+	// drive, "local" for a local path on a filesystem without a UUID, and
+	// the source's label otherwise ("smb://host/share", "nfs://host/export",
+	// "sftp://user@host", "mtp://<device id>").
+	Source string `json:"source"`
+	// Path is relative to the mount point for "uuid:" sources ("" = the
+	// mount point itself), absolute within the source otherwise.
+	Path string `json:"path"`
+	// Label is how the endpoint looked when the mirror was created, shown
+	// while the source isn't available.
+	Label string `json:"label"`
+}
+
+// MirrorPair is a one-way mirror kept in sync automatically (see package
+// mirror): Dst is made identical to Src, deletions included.
+type MirrorPair struct {
+	ID       string         `json:"id"`
+	Src      MirrorEndpoint `json:"src"`
+	Dst      MirrorEndpoint `json:"dst"`
+	UseRsync bool           `json:"use_rsync,omitempty"` // only meaningful between local sources
+	Paused   bool           `json:"paused,omitempty"`
+}
+
 // Config groups all persistent preferences.
 type Config struct {
 	DualPane      bool           `json:"dual_pane"`
 	ShowHidden    bool           `json:"show_hidden"`
 	RemoteSources []RemoteSource `json:"remote_sources"`
+	MirrorPairs   []MirrorPair   `json:"mirror_pairs,omitempty"`
 
 	// LogLevel controls the verbosity of shfm's own diagnostic log (see
 	// internal/applog) — one of "debug", "info", "warn" or "error"

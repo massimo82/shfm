@@ -24,6 +24,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/opener"
 	"shfm/internal/vfs"
@@ -57,6 +58,9 @@ const (
 	DialogConnecting
 	DialogSearch
 	DialogSemanticSearch
+	DialogMirrorConfirm
+	DialogMirrorList
+	DialogMirrorConfirmDelete
 )
 
 // Dialog is the state of any currently active modal.
@@ -102,6 +106,9 @@ type Dialog struct {
 	// live filter vs. a background recursive search. See search.go.
 	SearchRegex     bool
 	SearchRecursive bool
+
+	MirrorPending []config.MirrorPair // DialogMirrorConfirm: pairs to create (Items: backend choice, rsync first, only between local sources)
+	MirrorPairID  string              // DialogMirrorConfirmDelete
 }
 
 func newSingleInputDialog(kind DialogKind, title, placeholder, value string) Dialog {
@@ -166,6 +173,11 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if d.Kind == DialogSemanticSearch {
 		return m.updateSemanticSearchDialogKey(msg)
+	}
+	if d.Kind == DialogMirrorList {
+		if cmd, handled := m.updateMirrorListKey(msg); handled {
+			return cmd, true
+		}
 	}
 	switch msg.String() {
 	case "esc":
@@ -251,7 +263,8 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 
 func hasListNav(k DialogKind) bool {
 	switch k {
-	case DialogSourceMenu, DialogHelp, DialogNewChoice, DialogTaskList, DialogFormatChoose:
+	case DialogSourceMenu, DialogHelp, DialogNewChoice, DialogTaskList, DialogFormatChoose,
+		DialogMirrorConfirm, DialogMirrorList:
 		return true
 	default:
 		return false
@@ -261,7 +274,7 @@ func hasListNav(k DialogKind) bool {
 func isYesNoDialog(k DialogKind) bool {
 	switch k {
 	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash,
-		DialogConfirmQuit, DialogFormatConfirm1:
+		DialogConfirmQuit, DialogFormatConfirm1, DialogMirrorConfirmDelete:
 		return true
 	default:
 		return false

@@ -138,6 +138,20 @@ to toggle between single- and dual-pane layout.
   unresponsive device can never freeze the UI); dismissing it (Esc) just
   stops watching — the attempt keeps running and is applied whenever it
   completes, wherever the pane that requested it ends up being.
+- **Automatic one-way mirrors**: copy a file or folder (`Ctrl+C`), then
+  paste it as a mirror with `Ctrl+Alt+S` — after a confirmation dialog
+  showing source → destination, the destination is kept **identical** to
+  the source (recursively, deletions included): synced right away, then
+  every 5 minutes while shfm runs and both ends are available. A local
+  disk or removable drive counts as available while mounted (recognized by
+  its filesystem UUID, wherever it gets mounted), a network or MTP source
+  while a pane has it open. Between local sources you can choose the
+  **rsync delta-transfer** algorithm (only changed blocks are written;
+  runs in-process via a patched copy of
+  [`gokrazy/rsync`](third_party/gokrazy-rsync), no `rsync` binary needed)
+  or a generic whole-file copy; any other combination uses the generic
+  one. `Ctrl+Alt+S` with an empty clipboard lists the saved mirrors (sync
+  now, pause/resume, delete).
 - **Format a removable source**: pick exFAT, FAT32, ext4 or XFS, via a
   dedicated dialog with a red data-loss warning followed by a second,
   explicit "type YES to proceed" confirmation. Refuses to format the disk
@@ -175,6 +189,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+Alt+V` | paste, moving instead |
 | `Ctrl+D` | move to trash |
 | `Ctrl+Alt+D` | delete permanently |
+| `Ctrl+Alt+S` | paste as an automatic mirror (empty clipboard: list mirrors) |
 | `r`, `m`, `f` | rename, new folder, new file |
 | `i` | properties (permissions, owner, group) |
 | `/` | search/filter the current folder by name |
@@ -764,6 +779,7 @@ internal/mtp/                   MTP device discovery + thin adapter over go-mtpf
 internal/opener/                default-app resolution (XDG) and launching
 internal/trash/                 Freedesktop.org Trash Specification
 internal/fileops/               copy/move/delete/rename (cross-backend, with progress)
+internal/mirror/                one-way mirrors: rsync (local) and generic engine
 internal/drives/                local disks, removable device mount/format (udisks2)
 internal/secret/                at-rest encryption for saved passwords
 internal/desktopfile/           first-run .desktop launcher installation
@@ -774,7 +790,7 @@ internal/ui/                    bubbletea interface (panes, dialogs, mouse, task
 internal/semantic/              optional semantic (content) search — see "Building" above
 internal/semantic/extract/      text extraction for it (TXT/MD/LaTeX/PDF/DOCX, archives, pandoc/LibreOffice)
 docs/                           documentation assets (the screenshot above)
-third_party/                    locally patched/vendored libraries (go-nfs-client, yaml.v3, x/tools, llama-go)
+third_party/                    locally patched/vendored libraries (go-nfs-client, yaml.v3, x/tools, llama-go, gokrazy-rsync)
 vendor/                         Go module dependencies (the default build works offline from here)
 ```
 
@@ -787,6 +803,18 @@ README's title line) and rebuild.
 
 ## Notes
 
+- Mirrors (`internal/mirror`): the generic engine can't set a file's
+  modification time on every backend, so it keeps, per mirror, a small
+  record of what it last copied (`$XDG_STATE_HOME/shfm/mirror/<id>.json`)
+  and recopies a file when either side no longer matches it — a first run
+  onto an already populated destination therefore copies every file once.
+  Nothing is ever deleted when the source can't be read: a missing or
+  unreadable source root fails the run, and an unreadable subfolder's
+  counterpart is left alone. The rsync backend uses a copy of
+  `github.com/gokrazy/rsync` patched to drop its systemd and Landlock
+  dependencies and to fix `--delete` (see
+  [`SHFM-PATCHES.md`](third_party/gokrazy-rsync/SHFM-PATCHES.md)).
+  Mirrors only run while shfm is open.
 - Password encryption for saved SMB/SFTP sources (`internal/secret`) uses
   a key derived (HKDF-SHA256) from a local seed and the machine's
   identity: it protects against accidental disclosure of the

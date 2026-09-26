@@ -257,6 +257,12 @@ func openDest(destFS vfs.FileSystem, destPath string, size int64) (io.WriteClose
 	return destFS.Create(destPath)
 }
 
+// CopyTo copies srcPath (a file, or a folder recursively) to exactly
+// destPath, overwriting what's there — no " (copy)" renaming, unlike Copy.
+func CopyTo(srcFS vfs.FileSystem, srcPath string, destFS vfs.FileSystem, destPath string) error {
+	return copyRecursive(srcFS, srcPath, destFS, destPath)
+}
+
 // copyRecursive copies a file or folder (recursively) from a source
 // FileSystem to a destination FileSystem, even across different backends
 // (local, SMB, NFS, MTP, SFTP), via Open/Create streaming.

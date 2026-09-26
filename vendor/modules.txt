@@ -1,3 +1,7 @@
+# github.com/BurntSushi/toml v1.6.0
+## explicit; go 1.18
+github.com/BurntSushi/toml
+github.com/BurntSushi/toml/internal
 # github.com/atotto/clipboard v0.1.4
 ## explicit
 github.com/atotto/clipboard
@@ -39,6 +43,32 @@ github.com/erikgeiser/coninput
 # github.com/godbus/dbus/v5 v5.2.2
 ## explicit; go 1.20
 github.com/godbus/dbus/v5
+# github.com/gokrazy/rsync v0.3.8 => ./third_party/gokrazy-rsync
+## explicit; go 1.25.0
+github.com/gokrazy/rsync
+github.com/gokrazy/rsync/internal/anonssh
+github.com/gokrazy/rsync/internal/log
+github.com/gokrazy/rsync/internal/maincmd
+github.com/gokrazy/rsync/internal/progress
+github.com/gokrazy/rsync/internal/receiver
+github.com/gokrazy/rsync/internal/restrict
+github.com/gokrazy/rsync/internal/rsyncchecksum
+github.com/gokrazy/rsync/internal/rsynccommon
+github.com/gokrazy/rsync/internal/rsyncdconfig
+github.com/gokrazy/rsync/internal/rsyncopts
+github.com/gokrazy/rsync/internal/rsyncos
+github.com/gokrazy/rsync/internal/rsyncstats
+github.com/gokrazy/rsync/internal/rsyncwire
+github.com/gokrazy/rsync/internal/sender
+github.com/gokrazy/rsync/internal/version
+github.com/gokrazy/rsync/rsyncclient
+github.com/gokrazy/rsync/rsyncd
+# github.com/google/renameio/v2 v2.0.2
+## explicit; go 1.25
+github.com/google/renameio/v2
+# github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+## explicit; go 1.13
+github.com/google/shlex
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
@@ -126,6 +156,9 @@ github.com/mattn/go-localereader
 # github.com/mattn/go-runewidth v0.0.16
 ## explicit; go 1.9
 github.com/mattn/go-runewidth
+# github.com/mmcloughlin/md4 v0.1.2
+## explicit; go 1.17
+github.com/mmcloughlin/md4
 # github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 ## explicit; go 1.17
 github.com/muesli/ansi
@@ -202,6 +235,9 @@ golang.org/x/crypto/ssh/knownhosts
 golang.org/x/net/http2/hpack
 golang.org/x/net/internal/socks
 golang.org/x/net/proxy
+# golang.org/x/sync v0.19.0 => github.com/golang/sync v0.8.0
+## explicit; go 1.18
+golang.org/x/sync/errgroup
 # golang.org/x/sys v0.47.0 => github.com/golang/sys v0.24.0
 ## explicit; go 1.18
 golang.org/x/sys/cpu
@@ -226,3 +262,4 @@ software.sslmate.com/src/go-pkcs12/internal/rc2
 # software.sslmate.com/src/go-pkcs12 => github.com/SSLMate/go-pkcs12 v0.5.0
 # golang.org/x/exp => github.com/golang/exp v0.0.0-20240719175910-8a7402abbf56
 # golang.org/x/tools => ./third_party/tools
+# github.com/gokrazy/rsync => ./third_party/gokrazy-rsync

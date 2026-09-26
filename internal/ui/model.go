@@ -115,6 +115,13 @@ type Model struct {
 	semanticCh       chan semanticMsg
 	semanticIndexing map[string]bool
 
+	// Automatic mirrors (see mirror.go): per-pair runtime state, and the
+	// non-local sources running mirrors still use (fsLeases), whose Close
+	// is deferred (fsCloseLater) if a pane switches away meanwhile.
+	mirrors      map[string]*mirrorRuntime
+	fsLeases     map[vfs.FileSystem]int
+	fsCloseLater map[vfs.FileSystem]bool
+
 	quitting bool
 }
 
@@ -178,7 +185,7 @@ func resolveStartPath(path string) string {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.waitForTaskMsg(), m.waitForSizeMsg(), m.waitForConnectMsg(), m.waitForOpenMsg(), m.waitForSearchMsg(), m.waitForSemanticMsg())
+	return tea.Batch(m.waitForTaskMsg(), m.waitForSizeMsg(), m.waitForConnectMsg(), m.waitForOpenMsg(), m.waitForSearchMsg(), m.waitForSemanticMsg(), mirrorTick(time.Second))
 }
 
 func (m *Model) activePane() *Pane   { return m.panes[m.active] }
@@ -221,6 +228,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case semanticMsg:
 		m.handleSemanticMsg(msg)
 		return m, m.waitForSemanticMsg()
+	case mirrorTickMsg:
+		return m, m.handleMirrorTick()
 	}
 	return m, nil
 }
@@ -340,6 +349,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.askDelete(true)
 	case config.ActionDelete:
 		m.askDelete(false)
+	case config.ActionMirror:
+		m.doMirrorPaste()
 
 	// --- rename / new file / new folder / properties ---
 	case config.ActionRename:

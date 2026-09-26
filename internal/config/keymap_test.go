@@ -181,3 +181,13 @@ func TestLoadKeyMapReusesExistingFile(t *testing.T) {
 		t.Errorf("LoadKeyMap should have honored the existing file, ActionFor(ctrl+x) = %v, %v", a, ok)
 	}
 }
+
+func TestMirrorDefaultKey(t *testing.T) {
+	km := DefaultKeyMap()
+	if a, ok := km.ActionFor("alt+ctrl+s"); !ok || a != ActionMirror {
+		t.Fatalf("alt+ctrl+s -> %q, %v; want %q", a, ok, ActionMirror)
+	}
+	if a, _ := km.ActionFor("ctrl+s"); a != ActionSourceMenu {
+		t.Fatalf("ctrl+s -> %q, want the source menu", a)
+	}
+}
