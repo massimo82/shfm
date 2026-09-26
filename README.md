@@ -1,6 +1,42 @@
 # shfm — Shell File Manager v0.1.0
 
-An interactive terminal file manager written in pure Go, built on
+shfm is a file manager for the terminal. It browses and manages files
+on local disks, removable drives, phones and cameras (MTP) and network
+shares (SMB, NFS, SFTP) from a single interface, driven by keyboard or
+mouse, in one pane or two side by side.
+
+![shfm in single-pane mode, browsing a home directory](docs/screenshot.png)
+
+## Features
+
+- Single or dual pane, switched with `Ctrl+L`.
+- Keyboard shortcuts without function keys, full mouse support and
+  drag&drop.
+- Multi-selection.
+- Copy, move, delete, rename, new file and new folder, even between
+  different sources.
+- Sources: local disks, removable USB/SD drives (mounted automatically),
+  MTP devices, SMB, NFS and SFTP.
+- Background tasks with progress, and desktop notifications when they
+  finish.
+- Clipboard shared with the desktop (Wayland), both ways.
+- Colored listing, a detail line with permissions, owner and dates, and
+  folder sizes.
+- Opening files with the desktop's default application.
+- Properties dialog, to view and edit permissions, owner and group.
+- Automatic elevation (`pkexec`) for operations that need it, with the
+  password asked inside shfm.
+- Search by name: live filter, regex, recursive.
+- Semantic search by content, optional and fully local.
+- Freedesktop.org trash: move to trash, restore, empty.
+- Automatic one-way mirrors (rsync or generic engine) that never touch
+  the source.
+- Formatting removable drives (exFAT, FAT32, ext4, XFS).
+- Desktop launcher entry installed on first run.
+
+## Overview
+
+shfm is written in pure Go, built on
 [bubbletea v2](https://github.com/charmbracelet/bubbletea) (Elm architecture)
 and [lipgloss v2](https://github.com/charmbracelet/lipgloss) for the UI.
 
@@ -19,8 +55,6 @@ operation (see [Notes](#notes)); and, only for the optional semantic
 content search, `pandoc`, `libreoffice`/`soffice`, `xz` and `7z` when they
 happen to be installed.
 
-![shfm in single-pane mode, browsing a home directory](docs/screenshot.png)
-
 ## Layout
 
 Each pane shows, top to bottom: the **SOURCE** field (the active source —
@@ -36,7 +70,7 @@ and, shared below both panes even in **dual-pane** mode, a single summary
 help line with the main shortcuts. Click the title bar, or press Ctrl+L,
 to toggle between single- and dual-pane layout.
 
-## Features
+## Features in detail
 
 - **Single or dual pane**, toggled with `Ctrl+L` or a click on the title
   bar (preference saved to disk).
