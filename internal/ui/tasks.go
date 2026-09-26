@@ -101,10 +101,16 @@ func (t *Task) Summary() string {
 	case t.Finished:
 		status = "done"
 	}
-	if t.Label != "" {
-		return fmt.Sprintf("%s %s — %s (%s)", t.Kind, t.Label, status, t.CurrentName)
+	// A finished task with errors shows the last error rather than the
+	// last item, which alone wouldn't say what went wrong.
+	detail := t.CurrentName
+	if t.Finished && t.ErrorCount > 0 && t.LastError != nil {
+		detail = t.LastError.Error()
 	}
-	return fmt.Sprintf("%s — %s (%s)", t.Kind, status, t.CurrentName)
+	if t.Label != "" {
+		return fmt.Sprintf("%s %s — %s (%s)", t.Kind, t.Label, status, detail)
+	}
+	return fmt.Sprintf("%s — %s (%s)", t.Kind, status, detail)
 }
 
 // taskMsg is sent on Model.taskCh from a background goroutine to report

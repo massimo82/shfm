@@ -18,6 +18,7 @@
 package ui
 
 import (
+	"errors"
 	"testing"
 
 	"shfm/internal/fileops"
@@ -96,6 +97,12 @@ func TestTaskSummaryReflectsState(t *testing.T) {
 	task2 := &Task{ID: 2, Kind: TaskDelete, Total: 2, Finished: true, ErrorCount: 1}
 	if s := task2.Summary(); !containsSubstring(s, "error") {
 		t.Errorf("summary with errors should mention them, got %q", s)
+	}
+
+	task3 := &Task{ID: 3, Kind: TaskCopy, Total: 1, Finished: true, ErrorCount: 1,
+		CurrentName: "rsync (delta transfer)", LastError: errors.New("mkdir /x: permission denied")}
+	if s := task3.Summary(); !containsSubstring(s, "permission denied") {
+		t.Errorf("summary with errors should show the last error, got %q", s)
 	}
 }
 
