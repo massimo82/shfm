@@ -69,6 +69,21 @@ to toggle between single- and dual-pane layout.
   when it finishes doesn't also get a notification, since you're already
   looking at it. Set `"notifications": false` in
   `$XDG_CONFIG_HOME/shfm/config.json` to opt out entirely.
+- **Clipboard shared with the desktop (Wayland)**, both ways: items
+  copied with `Ctrl+C` can be pasted in other applications (a graphical
+  file manager, an editor...) as file URIs — `file://` for local files,
+  `smb://`, `sftp://`, `nfs://`, `mtp://` for the other sources — and
+  files copied in another application are what `Ctrl+V` (copy) /
+  `Ctrl+Alt+V` (move) paste in shfm, until something is copied in shfm
+  again; the shfm key always decides between copy and move. Pasted
+  network/MTP URIs are read from a pane that has that source open, else
+  from a saved source (connected in the background just for the
+  transfer). Implemented natively over the compositor's data-control
+  protocol (`internal/wlclip`, no `wl-copy`/`wl-paste` needed): works on
+  wlroots compositors (labwc, sway, Hyprland...) and KDE Plasma; elsewhere
+  it quietly stays off. What shfm copies stays on the clipboard while shfm
+  runs. On by default; set `"share_clipboard": false` in
+  `$XDG_CONFIG_HOME/shfm/config.json` to keep the clipboard private.
 - **Colored listing** by file type (folders, symlinks, executables,
   archives, images, media) and by permissions (read-only entries are
   shown in a fainter shade).
@@ -781,6 +796,7 @@ internal/opener/                default-app resolution (XDG) and launching
 internal/trash/                 Freedesktop.org Trash Specification
 internal/fileops/               copy/move/delete/rename (cross-backend, with progress)
 internal/mirror/                one-way mirrors: rsync (local) and generic engine
+internal/wlclip/                Wayland clipboard client (data-control protocol)
 internal/drives/                local disks, removable device mount/format (udisks2)
 internal/secret/                at-rest encryption for saved passwords
 internal/desktopfile/           first-run .desktop launcher installation

@@ -102,11 +102,19 @@ type Config struct {
 	// out, e.g. on a headless/SSH setup with no notification daemon, to
 	// skip the per-call session-bus connection attempt.
 	Notifications bool `json:"notifications"`
+
+	// ShareClipboard shares shfm's clipboard with the desktop's (Wayland,
+	// via the data-control protocol — see internal/wlclip) both ways:
+	// items copied in shfm can be pasted in other applications as file
+	// URIs, and files copied elsewhere can be pasted in shfm. Defaults to
+	// true; without a Wayland compositor supporting data-control it
+	// simply does nothing.
+	ShareClipboard bool `json:"share_clipboard"`
 }
 
 // Default returns the default configuration.
 func Default() *Config {
-	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn", Notifications: true}
+	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn", Notifications: true, ShareClipboard: true}
 }
 
 func path() (string, error) {

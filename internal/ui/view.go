@@ -72,8 +72,8 @@ func (m *Model) titleText() string {
 		mode = "Dual-pane"
 	}
 	clip := ""
-	if !m.clipboard.Empty() {
-		clip = fmt.Sprintf("  ·  %d ready to paste", len(m.clipboard.Names))
+	if n := m.clipboardCount(); n > 0 {
+		clip = fmt.Sprintf("  ·  %d ready to paste", n)
 	}
 	bg := ""
 	if n := m.runningTaskCount(); n > 0 {

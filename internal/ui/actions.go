@@ -52,6 +52,7 @@ func (m *Model) doCopyToClipboard() {
 		return
 	}
 	m.clipboard = Clipboard{FS: p.FS, Dir: p.Path, Names: names}
+	m.publishClipboard()
 	m.setStatus("%d item(s) ready to paste (Ctrl+V copy, Ctrl+Alt+V move)", len(names))
 }
 
@@ -60,6 +61,10 @@ func (m *Model) doCopyToClipboard() {
 // (Ctrl+Alt+V). The clipboard stays available after a copy (so it can be
 // pasted again), but is cleared after a move.
 func (m *Model) doPaste(copyMode bool) {
+	if m.useExtClip {
+		m.pasteExternal(copyMode)
+		return
+	}
 	p := m.activePane()
 	if p.Mode != PaneNormal || m.clipboard.Empty() {
 		return

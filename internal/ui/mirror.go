@@ -262,7 +262,12 @@ func (m *Model) closeFSWhenUnused(fs vfs.FileSystem) {
 // pane's folder, after confirmation; with an empty clipboard it opens the
 // list of saved mirrors instead.
 func (m *Model) doMirrorPaste() {
-	if m.clipboard.Empty() {
+	cb, err := m.effectiveClipboard()
+	if err != nil {
+		m.setError("Can't mirror: %v", err)
+		return
+	}
+	if cb.Empty() {
 		m.openMirrorList()
 		return
 	}
@@ -270,7 +275,6 @@ func (m *Model) doMirrorPaste() {
 	if p.Mode != PaneNormal {
 		return
 	}
-	cb := m.clipboard
 	var pending []config.MirrorPair
 	var lines []string
 	for _, name := range cb.Names {

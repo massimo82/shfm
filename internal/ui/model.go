@@ -32,6 +32,7 @@ import (
 	"shfm/internal/config"
 	"shfm/internal/semantic"
 	"shfm/internal/vfs"
+	"shfm/internal/wlclip"
 )
 
 type dragState struct {
@@ -122,6 +123,14 @@ type Model struct {
 	fsLeases     map[vfs.FileSystem]int
 	fsCloseLater map[vfs.FileSystem]bool
 
+	// Shared system clipboard (see sysclip.go): nil when disabled or
+	// unavailable. extClip holds the file URIs another application last
+	// copied; useExtClip says they're newer than shfm's own clipboard.
+	sysclip    *wlclip.Client
+	sysclipCh  chan sysclipFilesMsg
+	extClip    []string
+	useExtClip bool
+
 	quitting bool
 }
 
@@ -147,6 +156,7 @@ func New(cfg *config.Config, keymap *config.KeyMap, startPath string) *Model {
 		connectCh: make(chan connectResultMsg, 8),
 		openCh:    make(chan openResultMsg, 8),
 		searchCh:  make(chan searchResultMsg, 8),
+		sysclipCh: make(chan sysclipFilesMsg, 8),
 
 		semanticEngine:   semantic.New(),
 		semanticCh:       make(chan semanticMsg, 8),
@@ -185,7 +195,11 @@ func resolveStartPath(path string) string {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.waitForTaskMsg(), m.waitForSizeMsg(), m.waitForConnectMsg(), m.waitForOpenMsg(), m.waitForSearchMsg(), m.waitForSemanticMsg(), mirrorTick(time.Second))
+	cmds := []tea.Cmd{m.waitForTaskMsg(), m.waitForSizeMsg(), m.waitForConnectMsg(), m.waitForOpenMsg(), m.waitForSearchMsg(), m.waitForSemanticMsg(), mirrorTick(time.Second)}
+	if m.cfg.ShareClipboard {
+		cmds = append(cmds, connectSysclip, m.waitForSysclipMsg())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) activePane() *Pane   { return m.panes[m.active] }
@@ -230,6 +244,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.waitForSemanticMsg()
 	case mirrorTickMsg:
 		return m, m.handleMirrorTick()
+	case sysclipReadyMsg:
+		m.handleSysclipReady(msg)
+		return m, nil
+	case sysclipFilesMsg:
+		m.handleSysclipFiles(msg)
+		return m, m.waitForSysclipMsg()
 	}
 	return m, nil
 }
