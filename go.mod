@@ -10,12 +10,15 @@ replace golang.org/x/tools => ./third_party/tools
 
 replace github.com/gokrazy/rsync => ./third_party/gokrazy-rsync
 
+replace github.com/jfjallid/go-smb => ./third_party/go-smb
+
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.10
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gokrazy/rsync v0.3.8
+	github.com/hanwen/go-fuse/v2 v2.11.0
 	github.com/hanwen/go-mtpfs v1.0.0
 	github.com/hanwen/usb v0.0.0-20141217151552-69aee4530ac7
 	github.com/jfjallid/go-smb v0.12.0

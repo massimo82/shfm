@@ -25,11 +25,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/config"
+	"shfm/internal/fusemount"
 	"shfm/internal/semantic"
 	"shfm/internal/vfs"
 	"shfm/internal/wlclip"
@@ -94,11 +96,15 @@ type Model struct {
 	nextConnectID int
 	mirrorCheckID int // last background mirror check started (see doMirrorPaste)
 
-	// openCh tracks background downloads of remote entries (SMB/NFS/SFTP/
-	// MTP) to a local temp copy before launching an external app on them:
-	// see openremote.go.
+	// openCh tracks the background opening of remote entries (SMB/NFS/
+	// SFTP/MTP) with an external app: see openremote.go.
 	openCh     chan openResultMsg
 	nextOpenID int
+
+	// mounts exposes network sources to external apps through FUSE (see
+	// internal/fusemount); nil (e.g. in tests) opens remote entries via a
+	// temp copy instead. Set by SetMountManager.
+	mounts *fusemount.Manager
 
 	// Background recursive search (see search.go): searchCh delivers
 	// results, searchState (indexed by pane) tracks each pane's own
@@ -459,10 +465,17 @@ func (m *Model) toggleLayout() {
 	m.cfg.Save()
 }
 
-// requestQuit quits immediately if no background task is still running;
-// otherwise opens a confirmation dialog warning that quitting now would
-// abandon them.
+// SetMountManager sets the manager of the FUSE mounts through which remote
+// entries are opened with external apps (see Model.mounts). The caller
+// owns it, and unmounts everything once the program exits.
+func (m *Model) SetMountManager(mg *fusemount.Manager) { m.mounts = mg }
+
+// requestQuit quits immediately if no background task is still running and
+// no app is still using a file opened through a FUSE mount; otherwise opens
+// a confirmation dialog warning about what quitting now would interrupt.
 func (m *Model) requestQuit() {
+	var warnings []string
+	title := "Background tasks are running"
 	if m.hasRunningTasks() {
 		n := 0
 		for _, t := range m.tasks {
@@ -470,12 +483,18 @@ func (m *Model) requestQuit() {
 				n++
 			}
 		}
-		m.dialog = Dialog{
-			Kind:  DialogConfirmQuit,
-			Title: "Background tasks are running",
-			Message: fmt.Sprintf(
-				"%d background task(s) are still running.\nQuitting now will abandon them, possibly leaving\ncopies/moves/deletions incomplete.", n),
+		warnings = append(warnings, fmt.Sprintf(
+			"%d background task(s) are still running.\nQuitting now will abandon them, possibly leaving\ncopies/moves/deletions incomplete.", n))
+	}
+	if m.mounts != nil && m.mounts.Busy() {
+		if len(warnings) == 0 {
+			title = "Remote files are still open"
 		}
+		warnings = append(warnings,
+			"An application still has files open from a network\nsource: quitting shfm will cut its access to them.")
+	}
+	if len(warnings) > 0 {
+		m.dialog = Dialog{Kind: DialogConfirmQuit, Title: title, Message: strings.Join(warnings, "\n\n")}
 		return
 	}
 	m.quitting = true

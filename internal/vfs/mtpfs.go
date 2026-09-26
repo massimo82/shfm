@@ -42,7 +42,7 @@ import (
 // intrinsic latency of the USB bus and the device itself.
 type MTPFS struct {
 	mu    sync.Mutex
-	dev   *mtp.Device
+	dev   mtpDevice // a *mtp.Device, or a fake one in tests
 	label string
 }
 
@@ -52,8 +52,11 @@ func DialMTP(info mtp.DeviceInfo) (*MTPFS, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &MTPFS{dev: dev, label: "mtp://" + info.Label()}, nil
+	return &MTPFS{dev: dev, label: MTPLabel(info)}, nil
 }
+
+// MTPLabel returns the label of the MTPFS for the device described by info.
+func MTPLabel(info mtp.DeviceInfo) string { return "mtp://" + info.Label() }
 
 func (m *MTPFS) Kind() Kind    { return KindMTP }
 func (m *MTPFS) Label() string { return m.label }
@@ -191,6 +194,9 @@ func (m *MTPFS) Remove(path string) error {
 	return m.dev.DeleteObject(handle)
 }
 
+// Rename renames an object within its folder, replacing an existing
+// destination file as rename(2) does (applications save by renaming a
+// temp file over the original).
 func (m *MTPFS) Rename(oldPath, newPath string) error {
 	if m.Dir(oldPath) != m.Dir(newPath) {
 		// MTP rename (SetObjectPropValue) only changes the name, not the
@@ -203,6 +209,21 @@ func (m *MTPFS) Rename(oldPath, newPath string) error {
 	handle, _, err := m.resolve(oldPath)
 	if err != nil {
 		return err
+	}
+	if dest, destIsDir, err := m.resolve(newPath); err == nil {
+		if dest == handle {
+			return nil
+		}
+		if destIsDir {
+			return os.ErrExist
+		}
+		// Check the device can rename at all before deleting anything.
+		if !m.dev.CanRename() {
+			return ErrNotSupported
+		}
+		if err := m.dev.DeleteObject(dest); err != nil {
+			return err
+		}
 	}
 	if err := m.dev.Rename(handle, m.Base(newPath)); err != nil {
 		if err == mtp.ErrNotSupported {
@@ -296,6 +317,17 @@ func (m *MTPFS) Base(path string) string {
 }
 
 func (m *MTPFS) SupportsTrash() bool { return false }
+
+// SingleSession implements vfs.SingleSession: a device accepts one session
+// at a time, while every MTPFS method takes m.mu, so sharing it is safe.
+func (m *MTPFS) SingleSession() {}
+
+// Space implements SpaceReporter.
+func (m *MTPFS) Space(path string) (total, free uint64, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.dev.Space()
+}
 
 func (m *MTPFS) Close() error {
 	m.mu.Lock()

@@ -204,8 +204,7 @@ func (m *Model) resolveURI(u string, local vfs.FileSystem) (extSource, string, e
 		for _, d := range devices {
 			label := "mtp://" + d.Label()
 			if path, ok := pathUnder(label, scheme, rest); ok {
-				dev := d
-				return extSource{label: label, dial: func() (vfs.FileSystem, error) { return vfs.DialMTP(dev) }}, path, nil
+				return extSource{label: label, dial: m.mtpDialer(d)}, path, nil
 			}
 		}
 	}
@@ -290,12 +289,18 @@ func (m *Model) startDialTransfer(g extGroup, destFS vfs.FileSystem, destDir str
 	if copyMode {
 		kind = TaskCopy
 	}
+	mounts := m.mounts
 	t := m.startTask(kind, len(g.names), func(prog *fileops.Progress) *fileops.Result {
 		srcFS, err := g.src.dial()
 		if err != nil {
 			return &fileops.Result{Errors: []error{fmt.Errorf("connecting to %s: %w", g.src.label, err)}}
 		}
-		defer srcFS.Close()
+		defer func() {
+			// An MTP session taken back from a FUSE mount goes back to it.
+			if mounts == nil || !mounts.Release(srcFS) {
+				srcFS.Close()
+			}
+		}()
 		items := make([]fileops.Item, len(g.names))
 		for i, n := range g.names {
 			items[i] = fileops.Item{FS: srcFS, Path: srcFS.Join(g.dir, n)}

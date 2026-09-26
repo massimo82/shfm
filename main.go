@@ -31,6 +31,7 @@ import (
 	"shfm/internal/applog"
 	"shfm/internal/config"
 	"shfm/internal/desktopfile"
+	"shfm/internal/fusemount"
 	"shfm/internal/polkitagent"
 	"shfm/internal/ui"
 	"shfm/internal/vfs"
@@ -69,6 +70,12 @@ func main() {
 	}
 	m := ui.New(cfg, keymap, startPath)
 
+	// Network sources are exposed to external apps through FUSE mounts,
+	// made on first use; they must go away with shfm, whichever way Run
+	// ends (os.Exit below skips deferred calls).
+	mounts := fusemount.NewManager(fusemount.DefaultBase())
+	m.SetMountManager(mounts)
+
 	// Alternate screen and mouse reporting are requested by the model's
 	// View (bubbletea v2 has no program options for them).
 	p := tea.NewProgram(m)
@@ -80,7 +87,9 @@ func main() {
 	} else {
 		defer agent.Close()
 	}
-	if _, err := p.Run(); err != nil {
+	_, err := p.Run()
+	mounts.UnmountAll()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

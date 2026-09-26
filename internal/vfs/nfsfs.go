@@ -20,7 +20,10 @@ package vfs
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
+	"sync"
+	"time"
 
 	nfsc "github.com/vmware/go-nfs-client/nfs"
 	"github.com/vmware/go-nfs-client/nfs/rpc"
@@ -83,20 +86,20 @@ func (n *NFSFS) List(path string) ([]Entry, error) {
 			continue
 		}
 		isSymlink := it.Attr.IsSet && it.Attr.Attr.Type == nfsc.NF3Lnk
-		isDir := it.IsDir()
-		if isSymlink {
-			if targetIsDir, err := n.symlinkTargetIsDir(path, it.Name()); err == nil {
-				isDir = targetIsDir
-			}
-		}
-		entries = append(entries, Entry{
+		e := Entry{
 			Name:      it.Name(),
-			IsDir:     isDir,
+			IsDir:     it.IsDir(),
 			IsSymlink: isSymlink,
 			Size:      it.Size(),
 			Mode:      it.Mode(),
 			ModTime:   it.ModTime(),
-		})
+		}
+		if isSymlink {
+			if target, err := n.symlinkTarget(path, it.Name()); err == nil {
+				followSymlink(&e, target)
+			}
+		}
+		entries = append(entries, e)
 	}
 	return entries, nil
 }
@@ -108,20 +111,20 @@ func (n *NFSFS) Stat(path string) (Entry, error) {
 	}
 	fattr, _ := info.(*nfsc.Fattr)
 	isSymlink := fattr != nil && fattr.Type == nfsc.NF3Lnk
-	isDir := info.IsDir()
-	if isSymlink {
-		if targetIsDir, err := n.symlinkTargetIsDir(n.Dir(path), n.Base(path)); err == nil {
-			isDir = targetIsDir
-		}
-	}
-	return Entry{
+	e := Entry{
 		Name:      n.Base(path),
-		IsDir:     isDir,
+		IsDir:     info.IsDir(),
 		IsSymlink: isSymlink,
 		Size:      info.Size(),
 		Mode:      info.Mode(),
 		ModTime:   info.ModTime(),
-	}, nil
+	}
+	if isSymlink {
+		if target, err := n.symlinkTarget(n.Dir(path), n.Base(path)); err == nil {
+			followSymlink(&e, target)
+		}
+	}
+	return e, nil
 }
 
 // symlinkTargetIsDir follows the NFS symlink at dir/name and reports
@@ -129,15 +132,17 @@ func (n *NFSFS) Stat(path string) (Entry, error) {
 // never follows symlinks on its own (it returns the symlink's own NF3Lnk
 // attributes) — resolving one needs an explicit READLINK for the target
 // text, followed by a second LOOKUP on the resolved path.
-func (n *NFSFS) symlinkTargetIsDir(dir, name string) (bool, error) {
+// symlinkTarget returns the attributes of the target of the symlink name
+// in dir.
+func (n *NFSFS) symlinkTarget(dir, name string) (os.FileInfo, error) {
 	linkPath := n.Join(dir, name)
 	f, err := n.target.Open(nfsPath(linkPath))
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	target, err := f.Readlink()
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	resolved := target
 	if !strings.HasPrefix(target, "/") {
@@ -145,9 +150,9 @@ func (n *NFSFS) symlinkTargetIsDir(dir, name string) (bool, error) {
 	}
 	info, _, err := n.target.Lookup(nfsPath(resolved))
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return info.IsDir(), nil
+	return info, nil
 }
 
 func (n *NFSFS) Mkdir(path string) error {
@@ -171,10 +176,10 @@ func (n *NFSFS) Remove(path string) error {
 	return n.target.Remove(nfsPath(path))
 }
 
+// Rename renames/moves natively on the server (NFSPROC3_RENAME, patched
+// into third_party/go-nfs-client), replacing an existing destination.
 func (n *NFSFS) Rename(oldPath, newPath string) error {
-	// go-nfs-client doesn't publicly expose NFSPROC3_RENAME: handled by
-	// fileops via copy+delete.
-	return ErrNotSupported
+	return n.target.Rename(nfsPath(oldPath), nfsPath(newPath))
 }
 
 func (n *NFSFS) Open(path string) (io.ReadCloser, error) {
@@ -190,7 +195,122 @@ func (n *NFSFS) Create(path string) (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	// OpenFile doesn't truncate an existing file: without this, overwriting
+	// a longer file would leave its old tail after the new content.
+	if err := f.Truncate(0); err != nil {
+		f.Close()
+		return nil, err
+	}
 	return f, nil
+}
+
+// nfsRandomFile adapts go-nfs-client's File, which reads and writes at a
+// current position, to RandomAccessFile; mu keeps a seek and the
+// read/write that follows it together.
+type nfsRandomFile struct {
+	mu sync.Mutex
+	f  *nfsc.File
+}
+
+func (r *nfsRandomFile) ReadAt(p []byte, off int64) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, err := r.f.Seek(off, io.SeekStart); err != nil {
+		return 0, err
+	}
+	n := 0
+	for n < len(p) {
+		// Read returns at most one server READ's worth per call.
+		c, err := r.f.Read(p[n:])
+		n += c
+		if err != nil {
+			return n, err
+		}
+		if c == 0 {
+			return n, io.EOF
+		}
+	}
+	return n, nil
+}
+
+func (r *nfsRandomFile) WriteAt(p []byte, off int64) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, err := r.f.Seek(off, io.SeekStart); err != nil {
+		return 0, err
+	}
+	return r.f.Write(p)
+}
+
+func (r *nfsRandomFile) Truncate(size int64) error { return r.f.Truncate(uint64(size)) }
+
+func (r *nfsRandomFile) Close() error { return r.f.Close() }
+
+// OpenRandom implements RandomAccessOpener.
+func (n *NFSFS) OpenRandom(path string, flag int, perm os.FileMode) (RandomAccessFile, error) {
+	p := nfsPath(path)
+	var f *nfsc.File
+	var err error
+	switch {
+	case flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0:
+		if _, _, lerr := n.target.Lookup(p); lerr == nil {
+			return nil, os.ErrExist
+		}
+		if _, err = n.target.Create(p, perm); err == nil {
+			f, err = n.target.Open(p)
+		}
+	case flag&os.O_CREATE != 0:
+		f, err = n.target.OpenFile(p, perm)
+	default:
+		f, err = n.target.Open(p)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if flag&os.O_TRUNC != 0 && flag&(os.O_WRONLY|os.O_RDWR) != 0 {
+		if err := f.Truncate(0); err != nil {
+			return nil, err
+		}
+	}
+	return &nfsRandomFile{f: f}, nil
+}
+
+// Redial implements Redialer.
+func (n *NFSFS) Redial() (FileSystem, error) { return DialNFS(n.opts) }
+
+// Chmod implements PermissionsEditor (NFSPROC3_SETATTR).
+func (n *NFSFS) Chmod(path string, mode os.FileMode) error {
+	return n.target.SetAttr(nfsPath(path), nfsc.Sattr3{Mode: nfsc.SetMode{SetIt: true, Mode: uint32(mode.Perm())}})
+}
+
+// Chown implements PermissionsEditor; a negative uid or gid is left
+// unchanged. The server applies its own rules (root_squash, ...).
+func (n *NFSFS) Chown(path string, uid, gid int) error {
+	var attr nfsc.Sattr3
+	if uid >= 0 {
+		attr.UID = nfsc.SetUID{SetIt: true, UID: uint32(uid)}
+	}
+	if gid >= 0 {
+		attr.GID = nfsc.SetUID{SetIt: true, UID: uint32(gid)}
+	}
+	return n.target.SetAttr(nfsPath(path), attr)
+}
+
+// Chtimes implements TimesSetter.
+func (n *NFSFS) Chtimes(path string, atime, mtime time.Time) error {
+	var attr nfsc.Sattr3
+	if !atime.IsZero() {
+		attr.Atime = nfsc.ClientTime(atime)
+	}
+	if !mtime.IsZero() {
+		attr.Mtime = nfsc.ClientTime(mtime)
+	}
+	return n.target.SetAttr(nfsPath(path), attr)
+}
+
+// Space implements SpaceReporter (NFSPROC3_FSSTAT).
+func (n *NFSFS) Space(path string) (total, free uint64, err error) {
+	return n.target.FSStat()
 }
 
 func (n *NFSFS) Join(elem ...string) string {

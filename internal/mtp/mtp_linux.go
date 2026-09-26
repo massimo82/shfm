@@ -101,6 +101,7 @@ func DiscoverDevices() ([]DeviceInfo, error) {
 type Device struct {
 	dev       *extmtp.Device
 	storageID uint32
+	ops       map[uint16]bool // operation codes the device declares it supports
 }
 
 // Open selects and opens the device described by info (as previously found
@@ -126,7 +127,17 @@ func Open(info DeviceInfo) (*Device, error) {
 		dev.Close()
 		return nil, fmt.Errorf("mtp: no storage available on the device (SD card not mounted / device locked?)")
 	}
-	return &Device{dev: dev, storageID: storageIDs.Values[0]}, nil
+	d := &Device{dev: dev, storageID: storageIDs.Values[0], ops: map[uint16]bool{}}
+	// Best effort: a device whose DeviceInfo can't be read is simply
+	// treated as supporting no optional operation (whole-object transfers
+	// only).
+	var devInfo extmtp.DeviceInfo
+	if err := dev.GetDeviceInfo(&devInfo); err == nil {
+		for _, op := range devInfo.OperationsSupported {
+			d.ops[op] = true
+		}
+	}
+	return d, nil
 }
 
 func (d *Device) Close() error {
@@ -138,9 +149,14 @@ func (d *Device) Close() error {
 type ObjectInfo struct {
 	Filename         string
 	ObjectFormat     uint16
-	ObjectSize       uint32
+	ObjectSize       uint64
 	ModificationDate time.Time
 }
+
+// sizeUnknown is the ObjectInfo dataset's 32-bit size field value for "4 GiB
+// or more": the real size must then be read from the 64-bit ObjectSize
+// property.
+const sizeUnknown = 0xFFFFFFFF
 
 // GetObjectHandles lists the handles of the direct child objects of parent
 // (RootHandle for the default storage's root).
@@ -168,10 +184,17 @@ func (d *Device) GetObjectInfo(handle uint32) (ObjectInfo, error) {
 	if err := d.dev.GetObjectInfo(handle, &oi); err != nil {
 		return ObjectInfo{}, err
 	}
+	size := uint64(oi.CompressedSize)
+	if oi.CompressedSize == sizeUnknown {
+		var v extmtp.Uint64Value
+		if err := d.dev.GetObjectPropValue(handle, extmtp.OPC_ObjectSize, &v); err == nil {
+			size = v.Value
+		}
+	}
 	return ObjectInfo{
 		Filename:         oi.Filename,
 		ObjectFormat:     oi.ObjectFormat,
-		ObjectSize:       oi.CompressedSize,
+		ObjectSize:       size,
 		ModificationDate: oi.ModificationDate,
 	}, nil
 }
@@ -226,13 +249,7 @@ func (d *Device) GetObjectReader(handle uint32) (io.ReadCloser, error) {
 // (required by the MTP protocol, which declares it in the ObjectInfo
 // dataset before starting the data phase) as a child of parent.
 func (d *Device) NewObjectWriter(parent uint32, name string, size int64) (io.WriteCloser, error) {
-	oi := extmtp.ObjectInfo{
-		ObjectFormat:   guessObjectFormat(name),
-		ParentObject:   parent,
-		Filename:       name,
-		CompressedSize: uint32(size),
-	}
-	if _, _, _, err := d.dev.SendObjectInfo(d.storageID, parent, &oi); err != nil {
+	if _, err := d.sendObjectInfo(parent, name, size); err != nil {
 		return nil, err
 	}
 	pr, pw := io.Pipe()

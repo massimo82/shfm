@@ -18,10 +18,12 @@
 package vfs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jfjallid/go-smb/smb"
@@ -95,7 +97,7 @@ func smbPath(p string) string {
 func (s *SMBFS) List(path string) ([]Entry, error) {
 	files, err := s.conn.ListDirectory(s.opts.Share, smbPath(path), "*")
 	if err != nil {
-		return nil, err
+		return nil, smbErr(err)
 	}
 	entries := make([]Entry, 0, len(files))
 	for _, f := range files {
@@ -117,7 +119,7 @@ func (s *SMBFS) List(path string) ([]Entry, error) {
 func (s *SMBFS) Stat(path string) (Entry, error) {
 	list, err := s.conn.ListDirectory(s.opts.Share, smbPath(s.Dir(path)), s.Base(path))
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, smbErr(err)
 	}
 	if len(list) == 0 {
 		return Entry{}, os.ErrNotExist
@@ -140,7 +142,7 @@ func filetimeToTime(ft uint64) time.Time {
 	return time.Unix(0, int64(unixNano)).UTC()
 }
 
-func (s *SMBFS) Mkdir(path string) error { return s.conn.Mkdir(s.opts.Share, smbPath(path)) }
+func (s *SMBFS) Mkdir(path string) error { return smbErr(s.conn.Mkdir(s.opts.Share, smbPath(path))) }
 
 func (s *SMBFS) CreateEmptyFile(path string) error {
 	w, err := s.Create(path)
@@ -166,16 +168,23 @@ func (s *SMBFS) Remove(path string) error {
 				return err
 			}
 		}
-		return s.conn.DeleteDir(s.opts.Share, smbPath(path))
+		return smbErr(s.conn.DeleteDir(s.opts.Share, smbPath(path)))
 	}
-	return s.conn.DeleteFile(s.opts.Share, smbPath(path))
+	return smbErr(s.conn.DeleteFile(s.opts.Share, smbPath(path)))
 }
 
+// Rename renames/moves natively on the server, overwriting an existing
+// destination file (via the SET_INFO rename patched into third_party/go-smb).
 func (s *SMBFS) Rename(oldPath, newPath string) error {
-	// go-smb doesn't expose a direct rename in this public API: we implement
-	// it via copy+delete on the caller's side (fileops), so here we signal
-	// that it's not natively supported.
-	return ErrNotSupported
+	opts := smb.NewCreateReqOpts()
+	opts.DesiredAccess = smb.FAccMaskDelete | smb.FAccMaskFileReadAttributes | smb.FAccMaskSynchronize
+	opts.ShareAccess = smb.FileShareRead | smb.FileShareWrite | smb.FileShareDelete
+	f, err := s.conn.OpenFileExt(s.opts.Share, smbPath(oldPath), opts)
+	if err != nil {
+		return smbErr(err)
+	}
+	defer f.CloseFile()
+	return smbErr(f.Rename(smbPath(newPath), true))
 }
 
 type smbReadCloser struct {
@@ -242,6 +251,140 @@ func (s *SMBFS) Create(path string) (io.WriteCloser, error) {
 		done <- err
 	}()
 	return &smbWriteCloser{pw: pw, wg: done}, nil
+}
+
+// smbRandomFile is an SMB file opened for random access: every read and
+// write carries its own offset, so no position state is kept here.
+type smbRandomFile struct {
+	f *smb.File
+}
+
+func (r *smbRandomFile) ReadAt(p []byte, off int64) (int, error) {
+	n := 0
+	for n < len(p) {
+		// ReadFile returns at most one server READ's worth per call.
+		c, err := r.f.ReadFile(p[n:], uint64(off)+uint64(n))
+		n += c
+		if err != nil {
+			return n, smbErr(err)
+		}
+		if c == 0 {
+			return n, io.EOF
+		}
+	}
+	return n, nil
+}
+
+func (r *smbRandomFile) WriteAt(p []byte, off int64) (int, error) {
+	n, err := r.f.WriteFile(p, uint64(off))
+	return n, smbErr(err)
+}
+
+func (r *smbRandomFile) Truncate(size int64) error {
+	return smbErr(r.f.SetEndOfFile(uint64(size)))
+}
+
+func (r *smbRandomFile) Close() error { return smbErr(r.f.CloseFile()) }
+
+// OpenRandom implements RandomAccessOpener. perm is ignored: SMB has no
+// POSIX permission bits to set.
+func (s *SMBFS) OpenRandom(path string, flag int, perm os.FileMode) (RandomAccessFile, error) {
+	opts := smb.NewCreateReqOpts()
+	opts.ShareAccess = smb.FileShareRead | smb.FileShareWrite | smb.FileShareDelete
+	opts.CreateOpts = smb.FileNonDirectoryFile
+	if flag&(os.O_WRONLY|os.O_RDWR) != 0 {
+		opts.DesiredAccess |= smb.FAccMaskFileWriteData | smb.FAccMaskFileAppendData | smb.FAccMaskFileWriteAttributes
+	}
+	switch {
+	case flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0:
+		opts.CreateDisp = smb.FileCreate
+	case flag&os.O_CREATE != 0 && flag&os.O_TRUNC != 0:
+		opts.CreateDisp = smb.FileOverwriteIf
+	case flag&os.O_CREATE != 0:
+		opts.CreateDisp = smb.FileOpenIf
+	case flag&os.O_TRUNC != 0:
+		opts.CreateDisp = smb.FileOverwrite
+	default:
+		opts.CreateDisp = smb.FileOpen
+	}
+	f, err := s.conn.OpenFileExt(s.opts.Share, smbPath(path), opts)
+	if err != nil {
+		return nil, smbErr(err)
+	}
+	return &smbRandomFile{f: f}, nil
+}
+
+// Redial implements Redialer.
+func (s *SMBFS) Redial() (FileSystem, error) { return DialSMB(s.opts) }
+
+// Chtimes implements TimesSetter (SET_INFO FileBasicInformation, patched
+// into third_party/go-smb).
+func (s *SMBFS) Chtimes(path string, atime, mtime time.Time) error {
+	opts := smb.NewCreateReqOpts()
+	opts.DesiredAccess = smb.FAccMaskFileReadAttributes | smb.FAccMaskFileWriteAttributes | smb.FAccMaskSynchronize
+	opts.ShareAccess = smb.FileShareRead | smb.FileShareWrite | smb.FileShareDelete
+	f, err := s.conn.OpenFileExt(s.opts.Share, smbPath(path), opts)
+	if err != nil {
+		return smbErr(err)
+	}
+	defer f.CloseFile()
+	return smbErr(f.SetTimes(atime, mtime))
+}
+
+// Space implements SpaceReporter (QUERY_INFO FileFsFullSizeInformation,
+// patched into third_party/go-smb).
+func (s *SMBFS) Space(path string) (total, free uint64, err error) {
+	opts := smb.NewCreateReqOpts()
+	opts.DesiredAccess = smb.FAccMaskFileReadAttributes | smb.FAccMaskSynchronize
+	opts.CreateOpts = smb.FileDirectoryFile
+	f, err := s.conn.OpenFileExt(s.opts.Share, "", opts)
+	if err != nil {
+		return 0, 0, smbErr(err)
+	}
+	defer f.CloseFile()
+	total, free, err = f.FsSize()
+	return total, free, smbErr(err)
+}
+
+// smbStatusErrno maps the NTSTATUS codes with a clear POSIX counterpart.
+var smbStatusErrno = map[uint32]syscall.Errno{
+	smb.StatusNoSuchFile:          syscall.ENOENT,
+	smb.StatusObjectNameNotFound:  syscall.ENOENT,
+	smb.StatusObjectPathNotFound:  syscall.ENOENT,
+	0xc0000056:                    syscall.ENOENT, // STATUS_DELETE_PENDING
+	smb.StatusAccessDenied:        syscall.EACCES,
+	smb.StatusCannotDelete:        syscall.EACCES,
+	smb.StatusObjectNameCollision: syscall.EEXIST,
+	smb.StatusObjectNameInvalid:   syscall.EINVAL,
+	smb.StatusDirectoryNotEmpty:   syscall.ENOTEMPTY,
+	smb.StatusFileIsADirectory:    syscall.EISDIR,
+	smb.StatusNotADirectory:       syscall.ENOTDIR,
+	smb.StatusNotSupported:        syscall.ENOTSUP,
+	0xc0000043:                    syscall.EBUSY,  // STATUS_SHARING_VIOLATION
+	0xc000007f:                    syscall.ENOSPC, // STATUS_DISK_FULL
+}
+
+// smbStatusError keeps go-smb's error message while also matching the
+// POSIX errno for its NTSTATUS (errors.Is(err, os.ErrNotExist), errors.As
+// into a syscall.Errno), so callers — the FUSE mount above all — can tell
+// "no such file" from an actual failure.
+type smbStatusError struct {
+	err   error
+	errno syscall.Errno
+}
+
+func (e *smbStatusError) Error() string   { return e.err.Error() }
+func (e *smbStatusError) Unwrap() []error { return []error{e.err, e.errno} }
+
+func smbErr(err error) error {
+	var st *smb.NTStatusError
+	if err == nil || !errors.As(err, &st) {
+		return err
+	}
+	if errno, ok := smbStatusErrno[st.Status]; ok {
+		return &smbStatusError{err: err, errno: errno}
+	}
+	return err
 }
 
 func (s *SMBFS) Join(elem ...string) string {

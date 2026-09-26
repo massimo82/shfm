@@ -204,6 +204,63 @@ type LocalPath interface {
 	LocalPath(path string) (string, bool)
 }
 
+// RandomAccessFile is an open file supporting reads and writes at arbitrary
+// offsets, as returned by RandomAccessOpener. Unlike the streams returned
+// by Open/Create, reading a range never transfers the rest of the file.
+type RandomAccessFile interface {
+	io.ReaderAt
+	io.WriterAt
+	// Truncate truncates or extends the file to size bytes.
+	Truncate(size int64) error
+	io.Closer
+}
+
+// RandomAccessOpener is an optional interface a network backend may
+// implement to open files for random access, which the FUSE mount
+// (internal/fusemount) needs to let external applications read and write
+// remote files in place — e.g. a video player streaming and seeking
+// through a file on an SMB share. Implemented by the SMB, NFS and SFTP
+// backends.
+type RandomAccessOpener interface {
+	// OpenRandom opens path with flag, a combination of os.O_RDONLY,
+	// os.O_WRONLY or os.O_RDWR with os.O_CREATE, os.O_EXCL and os.O_TRUNC
+	// (any other flag is ignored). perm is the mode of a newly created
+	// file, where the backend supports one.
+	OpenRandom(path string, flag int, perm os.FileMode) (RandomAccessFile, error)
+}
+
+// Redialer is an optional interface a network backend may implement to
+// open a new connection to the same source, with the same credentials,
+// fully independent of the receiver: closing either one leaves the other
+// working. The FUSE mount uses it so external applications keep their
+// access to a source whatever the UI does with its own connection, and to
+// reconnect after the network drops.
+type Redialer interface {
+	Redial() (FileSystem, error)
+}
+
+// SingleSession is an optional interface a backend implements when it can't
+// open a second connection to its source (an MTP device accepts a single
+// session at a time) but is safe for concurrent use: the FUSE mount then
+// shares the UI's connection instead of redialing.
+type SingleSession interface {
+	SingleSession()
+}
+
+// SpaceReporter is an optional interface a backend may implement to report
+// the capacity and free space of the storage holding path, in bytes (the
+// FUSE mount passes them on to statfs(2)).
+type SpaceReporter interface {
+	Space(path string) (total, free uint64, err error)
+}
+
+// TimesSetter is an optional interface a backend may implement to set a
+// file's access and modification times (a zero time is left unchanged), as
+// the FUSE mount needs for touch(1), cp -p or rsync -t.
+type TimesSetter interface {
+	Chtimes(path string, atime, mtime time.Time) error
+}
+
 // ErrNotSupported indicates the operation isn't natively supported by the backend.
 var ErrNotSupported = errNotSupported{}
 

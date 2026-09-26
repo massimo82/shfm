@@ -249,7 +249,7 @@ func (m *Model) releaseFS(fs vfs.FileSystem) {
 	delete(m.fsLeases, fs)
 	if m.fsCloseLater[fs] {
 		delete(m.fsCloseLater, fs)
-		fs.Close()
+		m.closeFS(fs)
 	}
 }
 
@@ -260,6 +260,16 @@ func (m *Model) closeFSWhenUnused(fs vfs.FileSystem) {
 			m.fsCloseLater = map[vfs.FileSystem]bool{}
 		}
 		m.fsCloseLater[fs] = true
+		return
+	}
+	m.closeFS(fs)
+}
+
+// closeFS closes a source the UI no longer uses — unless it's a
+// single-session source (MTP) a FUSE mount still relies on, which the mount
+// then takes over (see fusemount.Manager.Release).
+func (m *Model) closeFS(fs vfs.FileSystem) {
+	if m.mounts != nil && m.mounts.Release(fs) {
 		return
 	}
 	fs.Close()

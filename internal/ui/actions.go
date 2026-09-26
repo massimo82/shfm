@@ -316,9 +316,9 @@ func (m *Model) openWithDefaultApp(e vfs.Entry) {
 	mimeType := opener.MimeType(e.Name)
 
 	// The local backend has a real path an external app can open directly;
-	// every other source (SMB/NFS/SFTP/MTP) needs its content downloaded to
-	// a local temp copy first (see openremote.go) \u2014 set up here and used by
-	// both branches below.
+	// every other source (SMB/NFS/SFTP/MTP) is opened through its FUSE
+	// mount, or a local temp copy where it can't be mounted (see
+	// openremote.go) — set up here and used by both branches below.
 	var realPath string
 	var remote *remoteOpenTarget
 	if lp, ok := p.FS.(vfs.LocalPath); ok {
@@ -540,9 +540,7 @@ func (m *Model) selectSourceMenuItem() {
 		m.openFormatChoose(entry.removable)
 	case "mtp":
 		mtpDevice := entry.mtpDevice
-		m.startConnect(m.active, mtpDevice.Label(), func() (vfs.FileSystem, error) {
-			return vfs.DialMTP(mtpDevice)
-		}, nil, nil)
+		m.startConnect(m.active, mtpDevice.Label(), m.mtpDialer(mtpDevice), nil, nil)
 	case "remote":
 		m.connectSavedRemote(entry.remote)
 	case "new-smb":

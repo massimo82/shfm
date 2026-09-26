@@ -46,6 +46,7 @@ type SFTPOptions struct {
 // SFTP protocol on top) — both established, widely used pure-Go libraries,
 // no external ssh/sftp/scp commands involved.
 type SFTPFS struct {
+	opts    SFTPOptions // kept for Redial
 	sshConn *ssh.Client
 	client  *sftp.Client
 	label   string
@@ -100,7 +101,7 @@ func DialSFTP(opts SFTPOptions) (*SFTPFS, error) {
 	}
 
 	label := fmt.Sprintf("sftp://%s@%s", opts.User, opts.Host)
-	return &SFTPFS{sshConn: sshConn, client: client, label: label, root: root}, nil
+	return &SFTPFS{opts: opts, sshConn: sshConn, client: client, label: label, root: root}, nil
 }
 
 func sftpAuthMethods(opts SFTPOptions) ([]ssh.AuthMethod, error) {
@@ -208,7 +209,7 @@ func (s *SFTPFS) List(p string) ([]Entry, error) {
 			// the target so a symlink to a folder can actually be navigated
 			// into, matching Stat()'s behavior for the same entry.
 			if target, err := s.client.Stat(path.Join(p, e.Name)); err == nil {
-				e.IsDir = target.IsDir()
+				followSymlink(&e, target)
 			}
 		}
 		entries = append(entries, e)
@@ -224,10 +225,21 @@ func (s *SFTPFS) Stat(p string) (Entry, error) {
 	e := entryFromInfo(info)
 	if e.IsSymlink {
 		if target, err := s.client.Stat(p); err == nil {
-			e.IsDir = target.IsDir()
+			followSymlink(&e, target)
 		}
 	}
 	return e, nil
+}
+
+// followSymlink completes the entry of a symlink with its target's type
+// and, for a file, its size — the link's own size is only the length of
+// the target path, and an application reading the entry through the FUSE
+// mount would otherwise stop there.
+func followSymlink(e *Entry, target os.FileInfo) {
+	e.IsDir = target.IsDir()
+	if !e.IsDir {
+		e.Size = target.Size()
+	}
 }
 
 func entryFromInfo(info os.FileInfo) Entry {
@@ -285,6 +297,15 @@ func (s *SFTPFS) Rename(oldPath, newPath string) error {
 func (s *SFTPFS) Open(p string) (io.ReadCloser, error)    { return s.client.Open(p) }
 func (s *SFTPFS) Create(p string) (io.WriteCloser, error) { return s.client.Create(p) }
 
+// OpenRandom implements RandomAccessOpener: *sftp.File already reads and
+// writes at arbitrary offsets.
+func (s *SFTPFS) OpenRandom(p string, flag int, perm os.FileMode) (RandomAccessFile, error) {
+	return s.client.OpenFile(p, flag)
+}
+
+// Redial implements Redialer.
+func (s *SFTPFS) Redial() (FileSystem, error) { return DialSFTP(s.opts) }
+
 func (s *SFTPFS) Join(elem ...string) string { return path.Join(elem...) }
 func (s *SFTPFS) Dir(p string) string        { return path.Dir(p) }
 func (s *SFTPFS) Base(p string) string       { return path.Base(p) }
@@ -300,3 +321,34 @@ func (s *SFTPFS) Chmod(p string, mode os.FileMode) error { return s.client.Chmod
 
 // Chown implements vfs.PermissionsEditor.
 func (s *SFTPFS) Chown(p string, uid, gid int) error { return s.client.Chown(p, uid, gid) }
+
+// Chtimes implements TimesSetter. SFTP sets both times at once: a zero one
+// is filled in from the file's current attributes.
+func (s *SFTPFS) Chtimes(p string, atime, mtime time.Time) error {
+	if atime.IsZero() || mtime.IsZero() {
+		info, err := s.client.Stat(p)
+		if err != nil {
+			return err
+		}
+		if mtime.IsZero() {
+			mtime = info.ModTime()
+		}
+		if atime.IsZero() {
+			atime = mtime
+			if st, ok := info.Sys().(*sftp.FileStat); ok {
+				atime = time.Unix(int64(st.Atime), 0)
+			}
+		}
+	}
+	return s.client.Chtimes(p, atime, mtime)
+}
+
+// Space implements SpaceReporter, where the server supports the
+// statvfs@openssh.com extension (OpenSSH does).
+func (s *SFTPFS) Space(p string) (total, free uint64, err error) {
+	st, err := s.client.StatVFS(p)
+	if err != nil {
+		return 0, 0, err
+	}
+	return st.Frsize * st.Blocks, st.Frsize * st.Bavail, nil
+}

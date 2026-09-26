@@ -79,13 +79,25 @@ github.com/google/shlex
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
+# github.com/hanwen/go-fuse/v2 v2.11.0
+## explicit; go 1.21
+github.com/hanwen/go-fuse/v2/fs
+github.com/hanwen/go-fuse/v2/fuse
+github.com/hanwen/go-fuse/v2/internal
+github.com/hanwen/go-fuse/v2/internal/fallocate
+github.com/hanwen/go-fuse/v2/internal/ioctl
+github.com/hanwen/go-fuse/v2/internal/openat
+github.com/hanwen/go-fuse/v2/internal/renameat
+github.com/hanwen/go-fuse/v2/internal/utimens
+github.com/hanwen/go-fuse/v2/internal/xattr
+github.com/hanwen/go-fuse/v2/splice
 # github.com/hanwen/go-mtpfs v1.0.0
 ## explicit; go 1.12
 github.com/hanwen/go-mtpfs/mtp
 # github.com/hanwen/usb v0.0.0-20141217151552-69aee4530ac7
 ## explicit
 github.com/hanwen/usb
-# github.com/jfjallid/go-smb v0.12.0
+# github.com/jfjallid/go-smb v0.12.0 => ./third_party/go-smb
 ## explicit; go 1.24.0
 github.com/jfjallid/go-smb/gss
 github.com/jfjallid/go-smb/krb5ssp
@@ -251,3 +263,4 @@ software.sslmate.com/src/go-pkcs12/internal/rc2
 # github.com/vmware/go-nfs-client => ./third_party/go-nfs-client
 # golang.org/x/tools => ./third_party/tools
 # github.com/gokrazy/rsync => ./third_party/gokrazy-rsync
+# github.com/jfjallid/go-smb => ./third_party/go-smb

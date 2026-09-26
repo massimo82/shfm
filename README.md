@@ -139,11 +139,19 @@ to toggle between single- and dual-pane layout.
 - **Open with the default application**: `Enter`/double-click on a file
   opens it with the desktop's configured default app (via the XDG MIME
   Applications spec); if none is set, a chooser lists installed
-  applications and remembers the pick for next time.
+  applications and remembers the pick for next time. Files on SMB, NFS,
+  SFTP and MTP sources are opened **in place**, through a FUSE mount shfm
+  makes of the source on first use (see Notes): a video player starts
+  streaming a film on a share or a phone at once, seeking included, and an
+  editor saves straight back to the source — as when opening files from
+  gvfs's mount in other file managers, with no password asked again. Where
+  FUSE isn't available, files are opened from a downloaded temp copy
+  instead, uploaded back if the app changed it.
 - **Properties dialog** (`i`): view type, size, modification date,
   permissions, owner and group (plus any `immutable`/`append-only` `chattr`
   flag, on the local filesystem); on backends that support it (local
-  filesystem, SFTP), edit permissions (octal), owner and group directly.
+  filesystem, SFTP, NFS), edit permissions (octal), owner and group
+  directly.
 - **Automatic elevation for permission-denied operations** (Linux only):
   chmod/chown (Properties dialog), delete and move/rename on the *local*
   filesystem go straight to `pkexec` when shfm can already tell, from the
@@ -938,6 +946,7 @@ main.go                       entry point
 internal/vfs/                  filesystem abstraction (Local/SMB/NFS/SFTP/MTP)
 internal/mtp/                   MTP device discovery + thin adapter over go-mtpfs
 internal/opener/                default-app resolution (XDG) and launching
+internal/fusemount/             FUSE mounts of network sources, for opening remote files in place
 internal/trash/                 Freedesktop.org Trash Specification
 internal/fileops/               copy/move/delete/rename (cross-backend, with progress)
 internal/mirror/                one-way mirrors: rsync (local) and generic engine
@@ -952,7 +961,7 @@ internal/ui/                    bubbletea interface (panes, dialogs, mouse, task
 internal/semantic/              optional semantic (content) search — see "Building" above
 internal/semantic/extract/      text extraction for it (TXT/MD/LaTeX/PDF/DOCX, archives, pandoc/LibreOffice)
 docs/                           documentation assets (the screenshot above)
-third_party/                    locally patched/vendored libraries (go-nfs-client, yaml.v3, x/tools, llama-go, gokrazy-rsync)
+third_party/                    locally patched/vendored libraries (go-nfs-client, go-smb, yaml.v3, x/tools, llama-go, gokrazy-rsync)
 vendor/                         Go module dependencies (the default build works offline from here)
 ```
 
@@ -984,6 +993,49 @@ README's title line) and rebuild.
   machine as this user — stronger protection would need a system
   keychain (Keychain/Secret Service/Credential Manager), deliberately
   left out to avoid external dependencies or cgo.
+- **FUSE mounts** (`internal/fusemount`, Linux only): to let external
+  applications open a file on an SMB/NFS/SFTP/MTP source in place, shfm
+  mounts the source under `$XDG_RUNTIME_DIR/shfm/<pid>/` (e.g.
+  `smb-nas-video`), the first time a file on it is opened — the same idea
+  as gvfs's FUSE bridge, implemented independently: the FUSE protocol is
+  served in pure Go by
+  [`github.com/hanwen/go-fuse`](https://github.com/hanwen/go-fuse) on top
+  of shfm's own backends, with no gvfs involved. Only the `mount(2)` call
+  goes through the system's setuid `fusermount3` helper (package `fuse3`),
+  as an unprivileged process can't mount by itself. An SMB/NFS/SFTP mount
+  has its own connection to the source, independent of the UI's
+  (switching a pane to another source doesn't affect an app still reading
+  a file), and reconnects on its own if the connection drops. The mount is
+  private to your user, reads and writes go to the server as the app makes
+  them (nothing is downloaded ahead), and every file shows as owned by
+  you: the server enforces access with the credentials you connected with.
+  Timestamps (`touch`, `cp -p`, `rsync -t`) are set on the server, and
+  so are permissions and ownership where the protocol has them (SFTP,
+  NFS); `df` shows the source's real size and free space. Mounts stay
+  until shfm exits; quitting while an app still has a file open asks for
+  confirmation first, as the app loses access to it. Mounts left behind by
+  a crashed shfm are cleaned up at the next start. SMB and NFS renames,
+  truncation, timestamps and free space use requests patched into the
+  local copies of [`go-smb`](third_party/go-smb/smb/shfm_setinfo.go) and
+  [`go-nfs-client`](third_party/go-nfs-client/nfs/shfm_setattr.go); the
+  same native renames now also make moving within one SMB or NFS source
+  instant, instead of a copy and a delete.
+- **MTP through FUSE**: a device accepts a single session, so the mount
+  shares the UI's instead of opening its own; when the pane moves to
+  another source the session stays open for the mount, and reopening the
+  device from the source menu takes it back (a device unplugged meanwhile
+  is noticed, and connected afresh). Reads of a range use the device's
+  partial reads (Android's 64-bit `GetPartialObject64`, or the standard
+  `GetPartialObject` for the first 4 GiB), so a video on a phone streams
+  and seeks without being copied; files of 4 GiB and more get their real
+  size from the 64-bit `ObjectSize` property. Writes go into the file in
+  place on devices with Android's editing extensions
+  (`SendPartialObject`/`TruncateObject`); on other devices a file opened
+  for writing is held in a local temp file and uploaded when closed — as
+  a new object under a temporary name, swapped in for the original only
+  once the upload has succeeded. Renaming replaces an existing
+  destination, as applications saving a file expect; a device that can't
+  rename (or a move to another folder) falls back to a copy and a delete.
 - NFS exports are "mounted" at the application level (the NFSv3 protocol
   spoken directly in Go, via a locally patched
   [`go-nfs-client`](third_party/go-nfs-client) — see `third_party/`), not

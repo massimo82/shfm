@@ -24,31 +24,35 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"shfm/internal/applog"
+	"shfm/internal/fusemount"
 	"shfm/internal/opener"
 	"shfm/internal/vfs"
 )
 
 // remoteOpenTarget identifies an entry on a source with no real local path
-// (SMB/NFS/SFTP/MTP): opening it with an external app requires downloading
-// it to a local temp copy first.
+// (SMB/NFS/SFTP/MTP): opening it with an external app requires either the
+// source's FUSE mount (see internal/fusemount) or a local temp copy.
 type remoteOpenTarget struct {
 	fs   vfs.FileSystem
 	path string // vfs path of the entry within fs
 	name string // entry name, for the temp file's basename and status messages
 }
 
-// openResultMsg carries the progress/outcome of downloading a remote entry
-// to a local temp file, launching an app on it, and — once the app exits —
-// syncing any change back to the source. Two messages are sent per request:
-// an interim one (editing=true) once the app has launched, and a final one
-// once it's exited (with the sync outcome, if anything changed).
+// openResultMsg carries the progress/outcome of opening a remote entry
+// with an app. Through the source's FUSE mount, a single message reports
+// the launch. Through a temp copy, two are sent: an interim one
+// (editing=true) once the app has launched on the downloaded copy, and a
+// final one once it's exited (with the sync outcome, if anything changed).
 type openResultMsg struct {
-	requestID int
-	name      string
-	app       opener.App
-	editing   bool // interim: app launched, waiting for it to exit
-	changed   bool // final: the temp copy was modified before the app exited
-	err       error
+	requestID   int
+	name        string
+	app         opener.App
+	mounted     bool  // opened in place through the source's FUSE mount
+	downloading error // interim: the mount failed with this, downloading a temp copy instead
+	editing     bool  // interim: app launched, waiting for it to exit
+	changed     bool  // final: the temp copy was modified before the app exited
+	err         error
 }
 
 func (m *Model) waitForOpenMsg() tea.Cmd {
@@ -57,10 +61,44 @@ func (m *Model) waitForOpenMsg() tea.Cmd {
 	}
 }
 
-// startOpenRemote downloads target to a local temp file, launches app on
+// startOpenRemote launches app on target, entirely in the background: even
+// a slow network source, or a long editing session, must never freeze the
+// UI.
+//
+// A remote source (SMB/NFS/SFTP/MTP) is opened in place, through its FUSE
+// mount (mounted on first use): the app reads and writes the remote file
+// directly, so a video player starts streaming at once and saves go
+// straight to the source — the same as opening a file from gvfs's mount in
+// other file managers. Where the mount isn't possible (FUSE unavailable),
+// it falls back to a temp copy: see openViaTempCopy.
+func (m *Model) startOpenRemote(target *remoteOpenTarget, app opener.App) {
+	id := m.nextOpenID
+	m.nextOpenID++
+	ch := m.openCh
+	if m.mounts == nil || !fusemount.Supported(target.fs) {
+		m.setStatus("Downloading %s to open with %s…", target.name, app.Name)
+		go openViaTempCopy(ch, id, target, app)
+		return
+	}
+	mounts := m.mounts
+	m.setStatus("Opening %s with %s…", target.name, app.Name)
+	go func() {
+		local, err := mounts.LocalPath(target.fs, target.path)
+		if err != nil {
+			applog.Warn("could not mount source, opening a temp copy instead",
+				"source", target.fs.Label(), "error", err)
+			ch <- openResultMsg{requestID: id, name: target.name, app: app, downloading: err}
+			openViaTempCopy(ch, id, target, app)
+			return
+		}
+		err = opener.Launch(app, local)
+		ch <- openResultMsg{requestID: id, name: target.name, app: app, mounted: true, err: err}
+	}()
+}
+
+// openViaTempCopy downloads target to a local temp file, launches app on
 // it, and — once the app exits — re-uploads the temp file to target if it
-// was modified, entirely in the background: even a slow network source, or
-// a long editing session, must never freeze the UI.
+// was modified. Runs in its own goroutine, reporting on ch.
 //
 // "The app exited" is a best-effort proxy for "the user is done editing":
 // an app that hands off to an already-running instance (common for
@@ -69,37 +107,31 @@ func (m *Model) waitForOpenMsg() tea.Cmd {
 // closes the document in that other instance — in which case the edit
 // won't be synced back until shfm is asked to open the same file again
 // (or the user copies it back manually). This is an inherent limit of a
-// temp-copy round trip without a live filesystem mount (FUSE), which shfm
-// deliberately doesn't set up.
-func (m *Model) startOpenRemote(target *remoteOpenTarget, app opener.App) {
-	id := m.nextOpenID
-	m.nextOpenID++
-	ch := m.openCh
-	m.setStatus("Downloading %s to open with %s…", target.name, app.Name)
-	go func() {
-		tempPath, err := downloadToTemp(target.fs, target.path, target.name)
-		if err != nil {
-			ch <- openResultMsg{requestID: id, name: target.name, app: app, err: err}
-			return
-		}
-		ch <- openResultMsg{requestID: id, name: target.name, app: app, editing: true}
+// temp-copy round trip, which is why network sources are opened through
+// their FUSE mount instead whenever possible.
+func openViaTempCopy(ch chan<- openResultMsg, id int, target *remoteOpenTarget, app opener.App) {
+	tempPath, err := downloadToTemp(target.fs, target.path, target.name)
+	if err != nil {
+		ch <- openResultMsg{requestID: id, name: target.name, app: app, err: err}
+		return
+	}
+	ch <- openResultMsg{requestID: id, name: target.name, app: app, editing: true}
 
-		before, _ := os.Stat(tempPath)
-		waitErr := opener.LaunchAndWait(app, tempPath)
-		changed := fileChanged(before, tempPath)
+	before, _ := os.Stat(tempPath)
+	waitErr := opener.LaunchAndWait(app, tempPath)
+	changed := fileChanged(before, tempPath)
 
-		var finalErr error
-		if changed {
-			// Prioritize not losing the edit over reporting how the app
-			// exited: some apps report a nonzero exit status on an
-			// otherwise perfectly normal quit.
-			finalErr = uploadFromTemp(target.fs, target.path, tempPath)
-		} else {
-			finalErr = waitErr
-		}
-		os.RemoveAll(filepath.Dir(tempPath))
-		ch <- openResultMsg{requestID: id, name: target.name, app: app, changed: changed, err: finalErr}
-	}()
+	var finalErr error
+	if changed {
+		// Prioritize not losing the edit over reporting how the app
+		// exited: some apps report a nonzero exit status on an
+		// otherwise perfectly normal quit.
+		finalErr = uploadFromTemp(target.fs, target.path, tempPath)
+	} else {
+		finalErr = waitErr
+	}
+	os.RemoveAll(filepath.Dir(tempPath))
+	ch <- openResultMsg{requestID: id, name: target.name, app: app, changed: changed, err: finalErr}
 }
 
 // fileChanged reports whether the file at path differs from its state
@@ -177,6 +209,10 @@ func (m *Model) handleOpenResult(msg openResultMsg) {
 		return
 	}
 	switch {
+	case msg.downloading != nil:
+		m.setStatus("Could not mount the source (%v): downloading %s to open with %s…", msg.downloading, msg.name, msg.app.Name)
+	case msg.mounted:
+		m.setStatus("Opened %s with %s", msg.name, msg.app.Name)
 	case msg.editing:
 		m.setStatus("Editing %s with %s…", msg.name, msg.app.Name)
 	case msg.changed:

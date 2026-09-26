@@ -95,7 +95,8 @@ type Dialog struct {
 
 	// ChooseAppRemote is set instead of ChooseAppTarget when the entry isn't
 	// on a source with a real local path (SMB/NFS/SFTP/MTP): picking an app
-	// downloads the entry to a local temp copy first, then launches it.
+	// opens the entry through the source's FUSE mount, or a local temp copy
+	// (see startOpenRemote).
 	ChooseAppRemote *remoteOpenTarget
 
 	PropsFS    vfs.FileSystem // DialogProperties

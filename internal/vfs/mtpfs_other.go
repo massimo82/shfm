@@ -38,6 +38,9 @@ var errMTPUnsupported = fmt.Errorf("MTP support is not available on this platfor
 // DialMTP is not supported on this platform.
 func DialMTP(info mtp.DeviceInfo) (*MTPFS, error) { return nil, errMTPUnsupported }
 
+// MTPLabel returns the label of the MTPFS for the device described by info.
+func MTPLabel(info mtp.DeviceInfo) string { return "mtp://" + info.Label() }
+
 func (m *MTPFS) Kind() Kind                                 { return KindMTP }
 func (m *MTPFS) Label() string                              { return "" }
 func (m *MTPFS) Root() string                               { return "/" }
