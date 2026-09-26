@@ -154,7 +154,7 @@ to toggle between single- and dual-pane layout.
   stops watching — the attempt keeps running and is applied whenever it
   completes, wherever the pane that requested it ends up being.
 - **Automatic one-way mirrors**: copy a file or folder (`Ctrl+C`), then
-  paste it as a mirror with `Ctrl+Alt+S` — after a confirmation dialog
+  paste it as a mirror with `Ctrl+Alt+M` — after a confirmation dialog
   showing source → destination, the destination is kept **identical** to
   the source (recursively, deletions included): synced right away, then
   every 5 minutes while shfm runs and both ends are available. A local
@@ -165,7 +165,7 @@ to toggle between single- and dual-pane layout.
   runs in-process via a patched copy of
   [`gokrazy/rsync`](third_party/gokrazy-rsync), no `rsync` binary needed)
   or a generic whole-file copy; any other combination uses the generic
-  one. `Ctrl+Alt+S` with an empty clipboard lists the saved mirrors (sync
+  one. `Ctrl+Alt+M` with an empty clipboard lists the saved mirrors (sync
   now, pause/resume, delete).
 - **Format a removable source**: pick exFAT, FAT32, ext4 or XFS, via a
   dedicated dialog with a red data-loss warning followed by a second,
@@ -204,7 +204,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+Alt+V` | paste, moving instead |
 | `Ctrl+D` | move to trash |
 | `Ctrl+Alt+D` | delete permanently |
-| `Ctrl+Alt+S` | paste as an automatic mirror (empty clipboard: list mirrors) |
+| `Ctrl+Alt+M` | paste as an automatic mirror (empty clipboard: list mirrors) |
 | `r`, `m`, `f` | rename, new folder, new file |
 | `i` | properties (permissions, owner, group) |
 | `/` | search/filter the current folder by name |

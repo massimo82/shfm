@@ -309,7 +309,7 @@ func (m *Model) startDialTransfer(g extGroup, destFS vfs.FileSystem, destDir str
 	m.dialog = Dialog{Kind: DialogProgress, Title: t.Kind.String(), TaskID: t.ID}
 }
 
-// effectiveClipboard is what a mirror paste (Ctrl+Alt+S) uses: the
+// effectiveClipboard is what a mirror paste (Ctrl+Alt+M) uses: the
 // system clipboard's files when they're the latest copy — as long as
 // they're in one folder of a source that's open (a mirror needs to
 // identify both ends) — otherwise shfm's own clipboard.

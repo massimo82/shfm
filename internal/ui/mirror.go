@@ -35,7 +35,7 @@ import (
 	"shfm/internal/vfs"
 )
 
-// Automatic one-way mirrors (see package mirror): Ctrl+Alt+S pastes the
+// Automatic one-way mirrors (see package mirror): Ctrl+Alt+M pastes the
 // clipboard as a mirror — after confirmation the pair is saved in the
 // config and synced right away, then again every mirrorInterval for as
 // long as shfm is running and both ends are available. A local disk or
@@ -256,7 +256,7 @@ func (m *Model) closeFSWhenUnused(fs vfs.FileSystem) {
 	fs.Close()
 }
 
-// --- creating a mirror (Ctrl+Alt+S) ------------------------------------------
+// --- creating a mirror (Ctrl+Alt+M) ------------------------------------------
 
 // doMirrorPaste turns the clipboard into mirror pairs targeting the active
 // pane's folder, after confirmation; with an empty clipboard it opens the

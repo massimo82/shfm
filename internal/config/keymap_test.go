@@ -184,8 +184,8 @@ func TestLoadKeyMapReusesExistingFile(t *testing.T) {
 
 func TestMirrorDefaultKey(t *testing.T) {
 	km := DefaultKeyMap()
-	if a, ok := km.ActionFor("alt+ctrl+s"); !ok || a != ActionMirror {
-		t.Fatalf("alt+ctrl+s -> %q, %v; want %q", a, ok, ActionMirror)
+	if a, ok := km.ActionFor("alt+ctrl+m"); !ok || a != ActionMirror {
+		t.Fatalf("alt+ctrl+m -> %q, %v; want %q", a, ok, ActionMirror)
 	}
 	if a, _ := km.ActionFor("ctrl+s"); a != ActionSourceMenu {
 		t.Fatalf("ctrl+s -> %q, want the source menu", a)

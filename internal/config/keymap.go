@@ -112,7 +112,7 @@ var keybindingDefs = []keybindingDef{
 	{ActionPasteMove, []string{"ctrl+alt+v"}, "Paste as move"},
 	{ActionTrash, []string{"ctrl+d"}, "Move to trash"},
 	{ActionDelete, []string{"ctrl+alt+d"}, "Delete permanently"},
-	{ActionMirror, []string{"ctrl+alt+s"}, "Paste as mirror / list"},
+	{ActionMirror, []string{"ctrl+alt+m"}, "Paste as mirror / list"},
 
 	{ActionRename, []string{"r"}, "Rename current entry"},
 	{ActionNewFolder, []string{"m"}, "Create new folder"},
