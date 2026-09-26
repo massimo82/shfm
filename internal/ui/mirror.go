@@ -20,10 +20,12 @@ package ui
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -55,6 +57,9 @@ type mirrorRuntime struct {
 	lastErr   string
 	taskID    int
 	hasTask   bool
+	// afterStop, when set, runs once the running sync has stopped: a
+	// deleted pair's copy can only be removed after its sync let go of it.
+	afterStop func()
 }
 
 type mirrorTickMsg struct{}
@@ -198,6 +203,10 @@ func (m *Model) startMirror(pair config.MirrorPair, src, dst mirror.Side, foregr
 		}
 		m.releaseFS(src.FS)
 		m.releaseFS(dst.FS)
+		if f := rt.afterStop; f != nil {
+			rt.afterStop = nil
+			f()
+		}
 	}
 	rt.taskID, rt.hasTask = t.ID, true
 	if foreground {
@@ -260,51 +269,112 @@ func (m *Model) closeFSWhenUnused(fs vfs.FileSystem) {
 
 // doMirrorPaste turns the clipboard into mirror pairs targeting the active
 // pane's folder, after confirmation; with an empty clipboard it opens the
-// list of saved mirrors instead.
-func (m *Model) doMirrorPaste() {
+// list of saved mirrors instead. Checking that no destination already
+// holds its source's data (mirror.Overlap) is instant between local
+// folders; with a network side it can take a while (up to a limit), so it
+// runs in the background behind a cancellable "Checking" dialog, and the
+// returned command delivers its outcome.
+func (m *Model) doMirrorPaste() tea.Cmd {
 	cb, err := m.effectiveClipboard()
 	if err != nil {
 		m.setError("Can't mirror: %v", err)
-		return
+		return nil
 	}
 	if cb.Empty() {
 		m.openMirrorList()
-		return
+		return nil
 	}
 	p := m.activePane()
 	if p.Mode != PaneNormal {
-		return
+		return nil
 	}
-	var pending []config.MirrorPair
-	var lines []string
+	c := mirrorCheckMsg{rsync: mirror.CanUseRsync(cb.FS, p.FS)}
 	for _, name := range cb.Names {
 		srcPath := cb.FS.Join(cb.Dir, name)
 		dstPath := p.FS.Join(p.Path, name)
 		src, dst := endpointFor(cb.FS, srcPath), endpointFor(p.FS, dstPath)
 		if src.Source == dst.Source && (pathWithin(src.Path, dst.Path) || pathWithin(dst.Path, src.Path)) {
 			m.setError("Can't mirror %s into itself: pick a destination outside it", name)
-			return
+			return nil
 		}
 		for _, existing := range m.cfg.MirrorPairs {
 			if existing.Dst.Source == dst.Source && existing.Dst.Path == dst.Path {
 				m.setError("%s is already the destination of a mirror", dstPath)
-				return
+				return nil
 			}
 		}
-		pending = append(pending, config.MirrorPair{ID: newMirrorID(), Src: src, Dst: dst})
+		c.pending = append(c.pending, config.MirrorPair{ID: newMirrorID(), Src: src, Dst: dst})
+		c.srcs = append(c.srcs, mirror.Side{FS: cb.FS, Path: srcPath})
+		c.dsts = append(c.dsts, mirror.Side{FS: p.FS, Path: dstPath})
 		line := srcPath + "\n  → " + dstPath
 		if _, err := p.FS.Stat(dstPath); err == nil {
 			line += "  (exists: will be overwritten)"
 		}
-		lines = append(lines, line)
+		c.lines = append(c.lines, line)
 	}
 
+	check := func(cancelled func() bool) mirrorCheckMsg {
+		c.results = make([]error, len(c.srcs))
+		for i := range c.srcs {
+			c.results[i] = mirror.Overlap(c.srcs[i], c.dsts[i], cancelled)
+		}
+		return c
+	}
+	if cb.FS.Kind() == vfs.KindLocal && p.FS.Kind() == vfs.KindLocal {
+		m.finishMirrorPaste(check(nil))
+		return nil
+	}
+	m.mirrorCheckID++
+	c.id = m.mirrorCheckID
+	stop := &atomic.Bool{}
+	m.dialog = Dialog{
+		Kind: DialogMirrorChecking, Title: "Automatic mirror",
+		Message:       "Checking that the destination doesn't already hold the source's data…",
+		MirrorCheckID: c.id, MirrorCheckStop: stop,
+	}
+	return func() tea.Msg { return check(stop.Load) }
+}
+
+// mirrorCheckMsg carries the pairs doMirrorPaste is about to offer and,
+// once checked, each one's mirror.Overlap outcome.
+type mirrorCheckMsg struct {
+	id         int
+	pending    []config.MirrorPair
+	srcs, dsts []mirror.Side
+	lines      []string
+	rsync      bool
+	results    []error
+}
+
+// handleMirrorCheck applies a background check, unless its "Checking"
+// dialog was closed (or replaced) meanwhile.
+func (m *Model) handleMirrorCheck(msg mirrorCheckMsg) {
+	if m.dialog.Kind != DialogMirrorChecking || m.dialog.MirrorCheckID != msg.id {
+		return
+	}
+	m.dialog = Dialog{}
+	m.finishMirrorPaste(msg)
+}
+
+// finishMirrorPaste refuses the whole paste if any destination already
+// holds its source's data, and otherwise asks to confirm the pairs, with
+// a warning on those that couldn't be verified.
+func (m *Model) finishMirrorPaste(c mirrorCheckMsg) {
+	for i, err := range c.results {
+		if errors.Is(err, mirror.ErrOverlap) {
+			m.setError("Can't mirror %s: %s already holds its data (%v)", c.srcs[i].Path, c.dsts[i].Path, err)
+			return
+		}
+		if err != nil {
+			c.lines[i] += "\n  WARNING: " + err.Error()
+		}
+	}
 	d := Dialog{
 		Kind: DialogMirrorConfirm, Title: "Automatic mirror",
-		Message:       strings.Join(lines, "\n"),
-		MirrorPending: pending,
+		Message:       strings.Join(c.lines, "\n"),
+		MirrorPending: c.pending,
 	}
-	if mirror.CanUseRsync(cb.FS, p.FS) {
+	if c.rsync {
 		d.Items = []string{"rsync — delta transfer (only changed blocks)", "Generic — copy changed files whole"}
 	}
 	m.dialog = d
@@ -407,27 +477,75 @@ func (m *Model) updateMirrorListKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 	case "p":
 		pair.Paused = !pair.Paused
+		if pair.Paused {
+			m.cancelMirrorRun(pair.ID)
+		}
 		m.cfg.Save()
 		m.openMirrorList()
 		return nil, true
 	case "x", "delete":
-		m.dialog = Dialog{
-			Kind: DialogMirrorConfirmDelete, Title: "Delete mirror",
-			Message:      fmt.Sprintf("Stop mirroring %s?\nNo files are deleted.", m.mirrorLabel(*pair)),
-			MirrorPairID: pair.ID,
-		}
+		m.askDeleteMirror(*pair)
 		return nil, true
 	}
 	return nil, false
 }
 
-// deleteMirror removes a saved pair and its state file (the mirrored
-// files themselves stay where they are).
-func (m *Model) deleteMirror(id string) {
+// askDeleteMirror asks to confirm deleting pair. When its destination
+// holds a copy, it also asks what to do with it: keep it (the default) or
+// delete it too.
+func (m *Model) askDeleteMirror(pair config.MirrorPair) {
+	label := m.mirrorLabel(pair)
+	d := Dialog{Kind: DialogMirrorConfirmDelete, Title: "Delete mirror", MirrorPairID: pair.ID}
+	dst, ok := m.resolveEndpoint(pair.Dst)
+	if !ok {
+		d.Message = fmt.Sprintf("Stop mirroring %s?\n\nThe destination isn't available now, so any files already\ncopied there are kept.", label)
+		m.dialog = d
+		return
+	}
+	if _, err := dst.FS.Stat(dst.Path); err != nil {
+		d.Message = fmt.Sprintf("Stop mirroring %s?\nNothing has been copied to the destination yet.", label)
+		m.dialog = d
+		return
+	}
+	if _, ok := m.resolveEndpoint(pair.Src); !ok {
+		d.Message = fmt.Sprintf("Stop mirroring %s?\n\nThe source isn't available now, so the copy at\n  %s\ncan't be checked against it and is kept.", label, dst.Path)
+		m.dialog = d
+		return
+	}
+	remove := "Delete the copy permanently"
+	if dst.FS.SupportsTrash() {
+		remove = "Move the copy to the trash"
+	}
+	d.Kind = DialogMirrorDeleteCopy
+	d.Message = fmt.Sprintf("Stop mirroring %s?\n\nThe destination already holds the copied files:\n  %s\nWhat should happen to them?", label, dst.Path)
+	d.Items = []string{"Keep the copied files", remove}
+	m.dialog = d
+}
+
+// cancelMirrorRun stops the pair's sync if one is running, so pausing or
+// deleting a pair doesn't let an in-progress run keep copying.
+func (m *Model) cancelMirrorRun(id string) {
+	rt := m.mirrors[id]
+	if rt == nil || !rt.running || !rt.hasTask {
+		return
+	}
+	if t := m.taskByID(rt.taskID); t != nil && !t.Finished {
+		t.requestCancel()
+	}
+}
+
+// deleteMirror stops the pair's running sync, if any, and removes the pair
+// and its state file. The copy at its destination is kept unless
+// deleteCopy, in which case it's removed (to the trash where the
+// destination has one) once the sync has stopped.
+func (m *Model) deleteMirror(id string, deleteCopy bool) {
+	var pair config.MirrorPair
 	pairs := m.cfg.MirrorPairs[:0]
 	for _, p := range m.cfg.MirrorPairs {
 		if p.ID != id {
 			pairs = append(pairs, p)
+		} else {
+			pair = p
 		}
 	}
 	m.cfg.MirrorPairs = pairs
@@ -435,8 +553,51 @@ func (m *Model) deleteMirror(id string) {
 		m.setError("Could not save the configuration: %v", err)
 	}
 	os.Remove(filepath.Join(mirror.StateDir(), id+".json"))
-	if rt := m.mirrors[id]; rt == nil || !rt.running {
+	m.cancelMirrorRun(id)
+	rt := m.mirrors[id]
+	running := rt != nil && rt.running
+	if !running {
 		delete(m.mirrors, id)
 	}
 	m.openMirrorList()
+	if !deleteCopy {
+		return
+	}
+	dst, ok := m.resolveEndpoint(pair.Dst)
+	if !ok {
+		m.setError("Could not delete the copy: its destination isn't available")
+		return
+	}
+	src, ok := m.resolveEndpoint(pair.Src)
+	if !ok {
+		m.setError("Not deleting the copy: open or mount the mirror's source first, to check the copy isn't the source itself")
+		return
+	}
+	if running {
+		rt.afterStop = func() { m.deleteMirrorCopy(src, dst) }
+		m.setStatus("Stopping the sync, then deleting the copy")
+		return
+	}
+	m.deleteMirrorCopy(src, dst)
+}
+
+// deleteMirrorCopy removes a deleted pair's copy as a background task,
+// only after making sure it isn't the source's own data: anything
+// Overlap can't rule out leaves it untouched.
+func (m *Model) deleteMirrorCopy(src, dst mirror.Side) {
+	m.leaseFS(src.FS)
+	m.leaseFS(dst.FS)
+	t := m.startTask(TaskDelete, 1, func(prog *fileops.Progress) *fileops.Result {
+		if err := mirror.Overlap(src, dst, nil); err != nil {
+			err = fmt.Errorf("not deleting %s: %w", dst.Path, err)
+			prog.OnItem(0, 1, dst.Path, err)
+			return &fileops.Result{Errors: []error{err}}
+		}
+		return fileops.Delete([]fileops.Item{{FS: dst.FS, Path: dst.Path}}, true, prog)
+	})
+	t.Label = dst.Path
+	t.onFinish = func(*Task) {
+		m.releaseFS(src.FS)
+		m.releaseFS(dst.FS)
+	}
 }

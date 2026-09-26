@@ -914,7 +914,10 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		m.confirmMirror()
 
 	case DialogMirrorConfirmDelete:
-		m.deleteMirror(d.MirrorPairID)
+		m.deleteMirror(d.MirrorPairID, false)
+
+	case DialogMirrorDeleteCopy:
+		m.deleteMirror(d.MirrorPairID, d.ItemIdx == 1)
 
 	case DialogHelp, DialogMessage, DialogConnecting:
 		m.dialog = Dialog{}

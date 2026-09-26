@@ -92,6 +92,7 @@ type Model struct {
 	sizeCh        chan dirSizeMsg
 	connectCh     chan connectResultMsg
 	nextConnectID int
+	mirrorCheckID int // last background mirror check started (see doMirrorPaste)
 
 	// openCh tracks background downloads of remote entries (SMB/NFS/SFTP/
 	// MTP) to a local temp copy before launching an external app on them:
@@ -263,6 +264,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.waitForSysclipMsg()
 	case terminalHandoffMsg:
 		return m.handleTerminalHandoff(msg)
+	case mirrorCheckMsg:
+		m.handleMirrorCheck(msg)
+		return nil
 	case elevatedDoneMsg:
 		m.handleElevatedDone(msg)
 		return nil
@@ -392,7 +396,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case config.ActionDelete:
 		m.askDelete(false)
 	case config.ActionMirror:
-		m.doMirrorPaste()
+		return m, m.doMirrorPaste()
 
 	// --- rename / new file / new folder / properties ---
 	case config.ActionRename:

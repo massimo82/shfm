@@ -63,10 +63,14 @@ func CanUseRsync(src, dst vfs.FileSystem) bool {
 // Run mirrors src onto dst. It never deletes anything when the source
 // can't be read: a missing or unreadable source root fails the run
 // untouched, and entries under a source folder that couldn't be listed
-// are left alone. prog reports progress and is polled for cancellation.
+// are left alone. A destination holding the source's own data (see
+// Overlap) fails the run untouched too. prog reports progress and is
+// polled for cancellation.
 func Run(src, dst Side, opts Options, prog *fileops.Progress) *fileops.Result {
 	var res *fileops.Result
-	if opts.UseRsync && CanUseRsync(src.FS, dst.FS) {
+	if err := Overlap(src, dst, func() bool { return cancelled(prog) }); errors.Is(err, ErrOverlap) {
+		res = fail(&fileops.Result{}, prog, err)
+	} else if opts.UseRsync && CanUseRsync(src.FS, dst.FS) {
 		res = runRsyncBackend(src, dst, prog)
 	} else {
 		res = runGeneric(src, dst, opts.StateFile, prog)

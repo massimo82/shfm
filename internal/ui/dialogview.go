@@ -222,6 +222,26 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(styleDim.Render("y / Enter confirm · n / Esc cancel"))
 		return dialogBox(64).Render(b.String())
 
+	case DialogMirrorChecking:
+		b.WriteString(d.Message)
+		b.WriteString("\n\n")
+		b.WriteString(styleDim.Render("Takes at most 10 seconds. Esc cancel"))
+		return dialogBox(64).Render(b.String())
+
+	case DialogMirrorDeleteCopy:
+		b.WriteString(d.Message)
+		b.WriteString("\n\n")
+		for i, it := range d.Items {
+			prefix := "  "
+			s := styleFile
+			if i == d.ItemIdx {
+				prefix, s = "\u25b8 ", styleAccent
+			}
+			b.WriteString(prefix + s.Render(it) + "\n")
+		}
+		b.WriteString("\n" + styleDim.Render("Enter confirm · Esc cancel (the mirror is kept)"))
+		return dialogBox(72).Render(b.String())
+
 	case DialogAuth:
 		a := d.Auth
 		if a.Message != "" {

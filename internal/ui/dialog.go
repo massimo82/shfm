@@ -20,6 +20,7 @@ package ui
 import (
 	"os"
 	"strconv"
+	"sync/atomic"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -62,6 +63,8 @@ const (
 	DialogMirrorConfirm
 	DialogMirrorList
 	DialogMirrorConfirmDelete
+	DialogMirrorDeleteCopy
+	DialogMirrorChecking
 	DialogAuth
 )
 
@@ -109,8 +112,10 @@ type Dialog struct {
 	SearchRegex     bool
 	SearchRecursive bool
 
-	MirrorPending []config.MirrorPair // DialogMirrorConfirm: pairs to create (Items: backend choice, rsync first, only between local sources)
-	MirrorPairID  string              // DialogMirrorConfirmDelete
+	MirrorPending   []config.MirrorPair // DialogMirrorConfirm: pairs to create (Items: backend choice, rsync first, only between local sources)
+	MirrorCheckID   int                 // DialogMirrorChecking
+	MirrorCheckStop *atomic.Bool        // DialogMirrorChecking: set to stop the check
+	MirrorPairID    string              // DialogMirrorConfirmDelete, DialogMirrorDeleteCopy (Items: keep the copy, delete it)
 
 	Auth polkitagent.Prompt // DialogAuth: Inputs[0] is the answer
 }
@@ -194,6 +199,9 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			m.dialog = Dialog{}
 			return nil, true
 		}
+		if d.Kind == DialogMirrorChecking {
+			d.MirrorCheckStop.Store(true)
+		}
 		m.dialog = Dialog{}
 		return nil, true
 
@@ -271,7 +279,7 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 func hasListNav(k DialogKind) bool {
 	switch k {
 	case DialogSourceMenu, DialogHelp, DialogNewChoice, DialogTaskList, DialogFormatChoose,
-		DialogMirrorConfirm, DialogMirrorList:
+		DialogMirrorConfirm, DialogMirrorList, DialogMirrorDeleteCopy:
 		return true
 	default:
 		return false
