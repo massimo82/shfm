@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -102,7 +103,9 @@ func readLoggedArgs(t *testing.T, logPath string) []string {
 	if last == "" {
 		return nil
 	}
-	return strings.Split(last, "\n")
+	// Every first attempt turns off pkexec's text prompt (see runElevated);
+	// the tests care about the command it wraps.
+	return strings.Split(strings.TrimPrefix(last, "--disable-internal-agent\n"), "\n")
 }
 
 func TestElevateIfPermissionErrorPassesThroughOtherErrors(t *testing.T) {
@@ -375,5 +378,107 @@ func TestLocalFSOperationsSucceedNormallyWithoutElevation(t *testing.T) {
 	}
 	if got := readLoggedArgs(t, logPath); got != nil {
 		t.Errorf("pkexec must not be invoked when there's no permission error, but got args %v", got)
+	}
+}
+
+// noAgentPkexec installs a fake pkexec that behaves like the real one in a
+// session without a PolicyKit agent: with --disable-internal-agent it
+// fails with 127 and "No authentication agent found."; without it, it
+// logs its argv (as fakePkexec does) and succeeds.
+func noAgentPkexec(t *testing.T, logPath string) {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "fake-pkexec.sh")
+	content := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "--disable-internal-agent" ]; then
+  echo "Error executing command as another user: No authentication agent found." >&2
+  exit 127
+fi
+{
+  for a in "$@"; do printf '%%s\n' "$a"; done
+  echo "---"
+} >> %s
+exit 0
+`, shellQuote(logPath))
+	if err := os.WriteFile(script, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setPkexecPathForTest(t, script)
+}
+
+func setTerminalHandoffForTest(t *testing.T, f func(*exec.Cmd) error) {
+	t.Helper()
+	saved := TerminalHandoff
+	TerminalHandoff = f
+	t.Cleanup(func() { TerminalHandoff = saved })
+}
+
+func TestRunElevatedNoAgentHandsTerminalOver(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "log.txt")
+	noAgentPkexec(t, logPath)
+	var handed []string
+	setTerminalHandoffForTest(t, func(cmd *exec.Cmd) error {
+		handed = cmd.Args[1:]
+		return cmd.Run()
+	})
+
+	if err := runElevated("chown", "1000:1000", "--", "/some/path"); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	want := []string{"chown", "1000:1000", "--", "/some/path"}
+	if strings.Join(handed, " ") != strings.Join(want, " ") {
+		t.Errorf("handed-over command = %v, want %v (without --disable-internal-agent)", handed, want)
+	}
+	if got := readLoggedArgs(t, logPath); strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("logged args = %v, want %v", got, want)
+	}
+}
+
+func TestRunElevatedNoAgentWithoutHandoffRunsDirectly(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "log.txt")
+	noAgentPkexec(t, logPath)
+	setTerminalHandoffForTest(t, nil)
+
+	if err := runElevated("chmod", "755", "--", "/some/path"); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if got := readLoggedArgs(t, logPath); len(got) == 0 || got[0] != "chmod" {
+		t.Errorf("logged args = %v, want the chmod run", got)
+	}
+}
+
+func TestRunElevatedWithAgentNeverHandsOver(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "log.txt")
+	fakePkexec(t, logPath, 0)
+	setTerminalHandoffForTest(t, func(*exec.Cmd) error {
+		t.Error("the terminal must not be handed over when an agent prompts")
+		return nil
+	})
+	if err := runElevated("rm", "-rf", "--", "/some/path"); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+}
+
+func TestSetOwnerAndModeElevatesOnce(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root never needs elevation")
+	}
+	logPath := filepath.Join(t.TempDir(), "log.txt")
+	fakePkexec(t, logPath, 0)
+	f := filepath.Join(t.TempDir(), "target")
+	if err := os.WriteFile(f, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewLocalFS("local", "/").SetOwnerAndMode(f, 0, 0, 0o600); err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	data, _ := os.ReadFile(logPath)
+	if n := strings.Count(string(data), "---\n"); n != 1 {
+		t.Errorf("pkexec ran %d times, want once", n)
+	}
+	got := readLoggedArgs(t, logPath)
+	want := []string{"sh", "-c", `chown "$1" -- "$3" && chmod "$2" -- "$3"`, "sh", "0:0", "600", f}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Errorf("logged args = %q, want %q", got, want)
 	}
 }

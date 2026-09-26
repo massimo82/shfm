@@ -32,6 +32,7 @@ import (
 	"shfm/internal/config"
 	"shfm/internal/desktopfile"
 	"shfm/internal/ui"
+	"shfm/internal/vfs"
 )
 
 func main() {
@@ -70,6 +71,7 @@ func main() {
 	// Alternate screen and mouse reporting are requested by the model's
 	// View (bubbletea v2 has no program options for them).
 	p := tea.NewProgram(m)
+	vfs.TerminalHandoff = ui.TerminalHandoff(p)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

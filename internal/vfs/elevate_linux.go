@@ -68,9 +68,13 @@ func locatePkexec() {
 const elevateTimeout = 5 * time.Minute
 
 // runElevated runs name with args as root via pkexec. pkexec handles its
-// own authentication (a native GUI prompt via PolicyKit, or a text prompt
-// if no graphical agent is running) — shfm never sees or touches the
-// password, and never shows a prompt of its own over the TUI.
+// own authentication — shfm never sees or touches the password. A
+// graphical PolicyKit agent, when the session has one, prompts in its own
+// window. Without one, pkexec would fall back to a text prompt written
+// straight onto the terminal, over the TUI: so the first attempt disables
+// that fallback, and only if no agent is found is pkexec run again with
+// the terminal handed over to it (TerminalHandoff), the TUI stepping aside
+// until it exits.
 func runElevated(name string, args ...string) error {
 	locatePkexec()
 	if pkexecPath == "" {
@@ -78,19 +82,33 @@ func runElevated(name string, args ...string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), elevateTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, pkexecPath, append([]string{name}, args...)...)
+	argv := append([]string{name}, args...)
+
 	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, pkexecPath, append([]string{"--disable-internal-agent"}, argv...)...)
 	cmd.Stdout = io.Discard
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+	if isNoAgent(err, stderr.String()) {
+		stderr.Reset()
+		cmd = exec.CommandContext(ctx, pkexecPath, argv...)
+		cmd.Stdout = io.Discard
+		if TerminalHandoff != nil {
+			cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+			err = TerminalHandoff(cmd)
+		} else {
+			cmd.Stderr = &stderr
+			err = cmd.Run()
+		}
+	}
 	if err == nil {
 		return nil
 	}
 	if ctx.Err() == context.DeadlineExceeded {
 		return fmt.Errorf("elevated %s timed out", name)
 	}
-	// pkexec itself exits 126 (auth dismissed/not authorized) or 127
-	// (couldn't even run the command) — distinguish those from the wrapped
+	// pkexec itself exits 126 (auth dismissed) or 127 (not authorized,
+	// or couldn't even run the command) — distinguish those from the wrapped
 	// command's own failure, since stderr for the former is pkexec's own
 	// (often unhelpful) message, not the underlying tool's.
 	var exitErr *exec.ExitError
@@ -99,7 +117,13 @@ func runElevated(name string, args ...string) error {
 		case 126:
 			return errors.New("authentication dismissed or not authorized")
 		case 127:
-			return errors.New("pkexec: command not found or failed to execute")
+			// 127 covers every failure of pkexec's own (not authorized,
+			// wrong password, agent registration, missing command): its
+			// message is the only way to tell them apart.
+			if msg := strings.Join(strings.Fields(stderr.String()), " "); msg != "" {
+				return errors.New("pkexec: " + msg)
+			}
+			return errors.New("pkexec: not authorized, or the command couldn't be run")
 		}
 	}
 	msg := strings.TrimSpace(stderr.String())
@@ -107,6 +131,14 @@ func runElevated(name string, args ...string) error {
 		msg = err.Error()
 	}
 	return fmt.Errorf("%s: %s", name, msg)
+}
+
+// isNoAgent reports whether a pkexec run with --disable-internal-agent
+// failed only because the session has no PolicyKit authentication agent.
+func isNoAgent(err error, stderr string) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 127 &&
+		strings.Contains(stderr, "No authentication agent")
 }
 
 // elevateIfPermissionError retries via elevated (an operation that redoes

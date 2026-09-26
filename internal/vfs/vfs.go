@@ -167,6 +167,14 @@ type PermissionsEditor interface {
 	Chown(path string, uid, gid int) error
 }
 
+// OwnerModeSetter is an optional interface a PermissionsEditor may also
+// implement to change a file's owner/group and mode in one go — for the
+// local backend, with at most one elevation (so one password prompt) when
+// either change needs root.
+type OwnerModeSetter interface {
+	SetOwnerAndMode(path string, uid, gid int, mode os.FileMode) error
+}
+
 // AttrReader is an optional interface a backend may implement to report the
 // attribute flags (Linux chattr/lsattr: immutable, append-only) that make an
 // entry unchangeable even by root. Implemented by the local backend only.

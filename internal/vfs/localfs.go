@@ -265,6 +265,25 @@ func (l *LocalFS) Chown(path string, uid, gid int) error {
 	})
 }
 
+// SetOwnerAndMode implements OwnerModeSetter: chown first, since it clears
+// the setuid/setgid bits, then chmod. When either needs root, both run in a
+// single elevated shell, so pkexec asks for the password once — the path
+// and values are passed as positional arguments, never spliced into the
+// script.
+func (l *LocalFS) SetOwnerAndMode(path string, uid, gid int, mode os.FileMode) error {
+	if err := checkChangeable(path); err != nil {
+		return err
+	}
+	if chownNeedsElevation(path, uid, gid) || chmodNeedsElevation(path) {
+		return runElevated("sh", "-c", `chown "$1" -- "$3" && chmod "$2" -- "$3"`, "sh",
+			fmt.Sprintf("%d:%d", uid, gid), fmt.Sprintf("%o", mode.Perm()), path)
+	}
+	if err := l.Chown(path, uid, gid); err != nil {
+		return err
+	}
+	return l.Chmod(path, mode)
+}
+
 // Attributes implements AttrReader: the restricting chattr flags currently
 // set on path ("immutable", "append-only"), nil if none or if they can't be
 // read on this platform/filesystem.

@@ -249,41 +249,63 @@ func (m *Model) openProperties() {
 	m.dialog = d
 }
 
-func (m *Model) applyProperties() {
+// applyProperties runs chmod/chown off the event loop (see
+// runElevatable): either may need root, and pkexec's prompt with it. Only
+// what was actually changed is applied, and a backend that can do both at
+// once (vfs.OwnerModeSetter) asks for the password once.
+func (m *Model) applyProperties() tea.Cmd {
 	d := m.dialog
 	m.dialog = Dialog{}
 	pe, ok := d.PropsFS.(vfs.PermissionsEditor)
 	if !ok || len(d.Inputs) < 3 {
-		return
+		return nil
 	}
 	modeStr := strings.TrimSpace(d.Inputs[0].Value())
 	ownerStr := strings.TrimSpace(d.Inputs[1].Value())
 	groupStr := strings.TrimSpace(d.Inputs[2].Value())
 
-	var errs []string
-	if modeVal, err := strconv.ParseUint(modeStr, 8, 32); err == nil {
-		if err := pe.Chmod(d.PropsPath, os.FileMode(modeVal)); err != nil {
-			errs = append(errs, fmt.Sprintf("chmod: %v", err))
-		}
-	} else {
-		errs = append(errs, "invalid mode (expected octal, e.g. 644)")
+	modeVal, err := strconv.ParseUint(modeStr, 8, 32)
+	if err != nil {
+		m.setError("Invalid mode (expected octal, e.g. 644)")
+		return nil
 	}
-	uid, uerr := vfs.ResolveUser(ownerStr)
-	gid, gerr := vfs.ResolveGroup(groupStr)
-	if uerr == nil && gerr == nil {
-		if err := pe.Chown(d.PropsPath, uid, gid); err != nil {
-			errs = append(errs, fmt.Sprintf("chown: %v", err))
+	mode := os.FileMode(modeVal)
+	modeChanged := mode.Perm() != d.PropsEntry.Mode.Perm()
+	ownerChanged := ownerStr != d.PropsEntry.Owner || groupStr != d.PropsEntry.Group
+	uid, gid := -1, -1
+	if ownerChanged {
+		var uerr, gerr error
+		uid, uerr = vfs.ResolveUser(ownerStr)
+		gid, gerr = vfs.ResolveGroup(groupStr)
+		if uerr != nil || gerr != nil {
+			m.setError("Unknown owner or group")
+			return nil
 		}
-	} else {
-		errs = append(errs, "unknown owner or group")
 	}
+	if !modeChanged && !ownerChanged {
+		m.setStatus("Nothing changed")
+		return nil
+	}
+	path := d.PropsPath
 
-	m.activePane().Load()
-	if len(errs) > 0 {
-		m.setError("Properties partially applied: %s", strings.Join(errs, "; "))
-	} else {
-		m.setStatus("Properties updated")
-	}
+	return runElevatable(func() elevatedDoneMsg {
+		var err error
+		switch oms, both := pe.(vfs.OwnerModeSetter); {
+		case modeChanged && ownerChanged && both:
+			err = oms.SetOwnerAndMode(path, uid, gid, mode)
+		case ownerChanged:
+			err = pe.Chown(path, uid, gid)
+			if err == nil && modeChanged {
+				err = pe.Chmod(path, mode)
+			}
+		default:
+			err = pe.Chmod(path, mode)
+		}
+		if err != nil {
+			return elevatedDoneMsg{err: fmt.Sprintf("Properties not applied: %v", err)}
+		}
+		return elevatedDoneMsg{status: "Properties updated"}
+	})
 }
 
 // --- open with default application ------------------------------------------------
@@ -742,12 +764,14 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		if newName != "" {
 			p := m.activePane()
 			if e, ok := p.CurrentEntry(); ok {
-				if err := fileops.Rename(p.FS, p.FS.Join(p.Path, e.Name), newName); err != nil {
-					m.setError("Rename failed: %v", err)
-				} else {
-					m.setStatus("Renamed to %s", newName)
-				}
-				p.Load()
+				m.dialog = Dialog{}
+				fs, path := p.FS, p.FS.Join(p.Path, e.Name)
+				return runElevatable(func() elevatedDoneMsg {
+					if err := fileops.Rename(fs, path, newName); err != nil {
+						return elevatedDoneMsg{err: fmt.Sprintf("Rename failed: %v", err)}
+					}
+					return elevatedDoneMsg{status: "Renamed to " + newName}
+				}), true
 			}
 		}
 		m.dialog = Dialog{}
@@ -846,7 +870,7 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		}
 
 	case DialogProperties:
-		m.applyProperties()
+		return m.applyProperties(), true
 
 	case DialogFormatChoose:
 		if d.ItemIdx < 0 || d.ItemIdx >= len(drives.FormatChoices) {

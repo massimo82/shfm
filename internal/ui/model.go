@@ -250,6 +250,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sysclipFilesMsg:
 		m.handleSysclipFiles(msg)
 		return m, m.waitForSysclipMsg()
+	case terminalHandoffMsg:
+		return m, m.handleTerminalHandoff(msg)
+	case elevatedDoneMsg:
+		m.handleElevatedDone(msg)
+		return m, nil
 	}
 	return m, nil
 }
