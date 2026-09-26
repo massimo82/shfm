@@ -22,7 +22,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"charm.land/bubbles/v2/textinput"
 
 	"shfm/internal/trash"
 	"shfm/internal/vfs"
@@ -489,7 +489,7 @@ func (p *Pane) BeginPathEdit() {
 	ti := textinput.New()
 	ti.SetValue(p.Path)
 	ti.CursorEnd()
-	ti.Width = 60
+	ti.SetWidth(60)
 	ti.Focus()
 	p.PathInput = ti
 	p.PathEditing = true

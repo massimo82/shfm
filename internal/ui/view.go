@@ -22,13 +22,25 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"shfm/internal/version"
 	"shfm/internal/vfs"
 )
 
-func (m *Model) View() string {
+// View renders the whole screen. The alternate screen and mouse reporting
+// (cell motion: clicks, drags and the wheel) are requested here, on every
+// frame, as bubbletea v2 wants — rather than as program options.
+func (m *Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+// render builds the screen's content.
+func (m *Model) render() string {
 	if m.quitting {
 		return ""
 	}
@@ -142,7 +154,9 @@ func (m *Model) renderPane(idx, width, height int) string {
 	if active {
 		style = stylePaneActive
 	}
-	return style.Width(g.innerW).Height(g.innerH).Render(content)
+	// lipgloss v2 sizes include the border.
+	return style.Width(g.innerW + style.GetHorizontalBorderSize()).
+		Height(g.innerH + style.GetVerticalBorderSize()).Render(content)
 }
 
 func (m *Model) renderSourceRow(p *Pane, g paneGeom) string {
@@ -161,7 +175,7 @@ func (m *Model) renderPathRow(p *Pane, g paneGeom) string {
 	label := styleFieldLabel.Render(padRight("PATH", g.labelW))
 	var box string
 	if p.PathEditing {
-		p.PathInput.Width = maxInt(g.pathBoxW-3, 1)
+		p.PathInput.SetWidth(maxInt(g.pathBoxW-3, 1))
 		box = styleFieldBoxEdit.Render(padRight(" "+p.PathInput.View(), g.pathBoxW))
 	} else {
 		box = styleFieldBox.Render(padRight(" "+p.Path, g.pathBoxW))

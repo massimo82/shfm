@@ -21,8 +21,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/config"
 	"shfm/internal/drives"
@@ -116,7 +116,7 @@ func newSingleInputDialog(kind DialogKind, title, placeholder, value string) Dia
 	ti.Placeholder = placeholder
 	ti.SetValue(value)
 	ti.CharLimit = 255
-	ti.Width = 40
+	ti.SetWidth(40)
 	ti.Focus()
 	ti.CursorEnd()
 	return Dialog{Kind: kind, Title: title, Inputs: []textinput.Model{ti}}
@@ -136,7 +136,7 @@ func newConnectDialog(kind DialogKind) Dialog {
 	for i, l := range labels {
 		ti := textinput.New()
 		ti.Placeholder = l
-		ti.Width = 32
+		ti.SetWidth(32)
 		ti.CharLimit = 255
 		if (kind == DialogConnectSMB && l == "Password") || (kind == DialogConnectSFTP && l == "Password") {
 			ti.EchoMode = textinput.EchoPassword

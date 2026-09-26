@@ -17,7 +17,7 @@
 
 package ui
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // SizePending is the sentinel Entry.Size value meaning "this folder's
 // recursive size is being computed in the background, not shown yet".

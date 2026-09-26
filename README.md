@@ -1,8 +1,8 @@
 # shfm — Shell File Manager v0.0.3
 
 An interactive terminal file manager written in pure Go, built on
-[bubbletea](https://github.com/charmbracelet/bubbletea) (Elm architecture)
-and [lipgloss](https://github.com/charmbracelet/lipgloss) for the UI.
+[bubbletea v2](https://github.com/charmbracelet/bubbletea) (Elm architecture)
+and [lipgloss v2](https://github.com/charmbracelet/lipgloss) for the UI.
 
 It talks **directly to the hardware and to remote protocols** — removable
 media (mounted via udisks2 D-Bus, no root needed), **MTP** devices
@@ -216,7 +216,8 @@ cursor-up            = ctrl+up, up, k         # Move cursor up
 
 One shortcut per line: `<action> = <key>[, <key>...]`. Remove the keys
 after `=` (leave it blank) to disable a shortcut entirely; the space bar
-is written as `space`; lines starting with `#`, and any line naming an
+is written as `space`; modifiers can be given in any order (`ctrl+alt+v`
+and `alt+ctrl+v`, as older shfm versions wrote it, are the same key); lines starting with `#`, and any line naming an
 action shfm doesn't recognize, are ignored rather than treated as errors.
 Restart shfm after editing. The in-app help (`Ctrl+Alt+H` / `?`) always
 reflects the current file, since both read from the same configuration.

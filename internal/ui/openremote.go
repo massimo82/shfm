@@ -22,7 +22,7 @@ import (
 	"os"
 	"path/filepath"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/opener"
 	"shfm/internal/vfs"

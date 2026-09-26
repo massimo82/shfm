@@ -20,49 +20,61 @@ package ui
 import (
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 const doubleClickWindow = 400 * time.Millisecond
 
+// mouseEvent is what the handlers below need from a bubbletea mouse
+// message (v2 splits them into click/release/wheel/motion types).
+type mouseEvent struct {
+	X, Y        int
+	Button      tea.MouseButton
+	Ctrl, Shift bool
+}
+
+func toMouseEvent(msg tea.MouseMsg) mouseEvent {
+	mm := msg.Mouse()
+	return mouseEvent{
+		X: mm.X, Y: mm.Y, Button: mm.Button,
+		Ctrl: mm.Mod.Contains(tea.ModCtrl), Shift: mm.Mod.Contains(tea.ModShift),
+	}
+}
+
 func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	ev := toMouseEvent(msg)
 	if m.dialog.Kind != DialogNone {
-		m.handleDialogMouse(msg)
-		return m, nil
-	}
-
-	switch msg.Button {
-	case tea.MouseButtonWheelUp:
-		if msg.Action == tea.MouseActionPress {
-			if hit := m.hitTest(msg.X, msg.Y); hit.pane >= 0 {
-				m.active = hit.pane
-			}
-			m.activePane().MoveCursor(-3, m.listHeight())
-		}
-		return m, nil
-	case tea.MouseButtonWheelDown:
-		if msg.Action == tea.MouseActionPress {
-			if hit := m.hitTest(msg.X, msg.Y); hit.pane >= 0 {
-				m.active = hit.pane
-			}
-			m.activePane().MoveCursor(3, m.listHeight())
+		if _, click := msg.(tea.MouseClickMsg); click && ev.Button == tea.MouseLeft {
+			m.handleDialogMouse(ev)
 		}
 		return m, nil
 	}
 
-	if msg.Button != tea.MouseButtonLeft && msg.Action != tea.MouseActionRelease {
-		return m, nil
-	}
-
-	switch msg.Action {
-	case tea.MouseActionPress:
-		m.handleMousePress(msg)
-	case tea.MouseActionMotion:
+	switch msg.(type) {
+	case tea.MouseWheelMsg:
+		delta := 0
+		switch ev.Button {
+		case tea.MouseWheelUp:
+			delta = -3
+		case tea.MouseWheelDown:
+			delta = 3
+		}
+		if delta != 0 {
+			if hit := m.hitTest(ev.X, ev.Y); hit.pane >= 0 {
+				m.active = hit.pane
+			}
+			m.activePane().MoveCursor(delta, m.listHeight())
+		}
+	case tea.MouseClickMsg:
+		if ev.Button == tea.MouseLeft {
+			m.handleMousePress(ev)
+		}
+	case tea.MouseMotionMsg:
 		if m.drag.active {
-			if msg.X != m.drag.startX || msg.Y != m.drag.startY {
+			if ev.X != m.drag.startX || ev.Y != m.drag.startY {
 				m.drag.moved = true
 			}
-			hit := m.hitTest(msg.X, msg.Y)
+			hit := m.hitTest(ev.X, ev.Y)
 			if hit.pane >= 0 {
 				m.drag.hoverPane = hit.pane
 				if hit.zone == zoneListRow {
@@ -72,12 +84,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-	case tea.MouseActionRelease:
+	case tea.MouseReleaseMsg:
 		if m.drag.active {
 			if m.drag.moved {
-				m.performDrop(msg)
+				m.performDrop(ev)
 			} else {
-				m.handleSimpleClick(msg)
+				m.handleSimpleClick(ev)
 			}
 		}
 		m.drag = dragState{}
@@ -85,7 +97,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleMousePress(msg tea.MouseMsg) {
+func (m *Model) handleMousePress(msg mouseEvent) {
 	hit := m.hitTest(msg.X, msg.Y)
 
 	if hit.zone == zoneTitleBar {
@@ -151,7 +163,7 @@ func (m *Model) handleMousePress(msg tea.MouseMsg) {
 // handleSimpleClick handles a "plain" click (no drag) on a list row,
 // recognizing a double click to enter a folder, go up via "..", restore a
 // trash item, or open a file with its default application.
-func (m *Model) handleSimpleClick(msg tea.MouseMsg) {
+func (m *Model) handleSimpleClick(msg mouseEvent) {
 	hit := m.hitTest(msg.X, msg.Y)
 	if hit.zone != zoneListRow {
 		return
@@ -169,7 +181,7 @@ func (m *Model) handleSimpleClick(msg tea.MouseMsg) {
 // release) the dragged items into the destination folder, which can be in
 // the same pane or the other one, even on a different source (local/
 // removable/MTP/SMB/NFS/SFTP).
-func (m *Model) performDrop(msg tea.MouseMsg) {
+func (m *Model) performDrop(msg mouseEvent) {
 	hit := m.hitTest(msg.X, msg.Y)
 	if hit.pane < 0 || hit.zone == zoneSourceBox || hit.zone == zoneSourceButton ||
 		hit.zone == zoneSourceTrashButton || hit.zone == zonePathBox ||
@@ -201,10 +213,7 @@ func (m *Model) performDrop(msg tea.MouseMsg) {
 // field (SMB/NFS/SFTP connect, properties) focuses it. The coordinate math
 // mirrors renderDialogBox's construction exactly (title + blank line, then
 // the body line by line).
-func (m *Model) handleDialogMouse(msg tea.MouseMsg) {
-	if msg.Action != tea.MouseActionPress || msg.Button != tea.MouseButtonLeft {
-		return
-	}
+func (m *Model) handleDialogMouse(msg mouseEvent) {
 	r := m.dialogRect
 	if r.w == 0 {
 		return

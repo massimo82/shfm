@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"shfm/internal/config"
 	"shfm/internal/drives"
@@ -78,19 +78,12 @@ func (m *Model) buildHelpEntries() []helpEntry {
 	return entries
 }
 
-// prettyKey renders an internal key string (as tea.KeyMsg.String() and
-// keybindings.conf both spell it, e.g. "ctrl+up", "alt+ctrl+h", " ") the
+// prettyKey renders a key string (as tea.KeyMsg.String() and
+// keybindings.conf spell it, e.g. "ctrl+up", "ctrl+alt+h", "space") the
 // way the rest of shfm's UI capitalizes shortcuts, e.g. "Ctrl+Up",
-// "Ctrl+Alt+H", "Space" — swapping "alt+ctrl" to display as "Ctrl+Alt"
-// matches this project's existing convention for those combos.
+// "Ctrl+Alt+H", "Space".
 func prettyKey(k string) string {
-	if k == " " {
-		return "Space"
-	}
-	parts := strings.Split(k, "+")
-	if len(parts) >= 2 && parts[0] == "alt" && parts[1] == "ctrl" {
-		parts[0], parts[1] = parts[1], parts[0]
-	}
+	parts := strings.Split(config.NormalizeKey(k), "+")
 	for i, p := range parts {
 		parts[i] = prettyKeySegment(p)
 	}
@@ -159,7 +152,7 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(d.Inputs[0].View())
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("Enter confirm · Esc cancel"))
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 
 	case DialogSearch:
 		b.WriteString(d.Inputs[0].View())
@@ -179,13 +172,13 @@ func (m *Model) renderDialogBox() string {
 		} else {
 			b.WriteString(styleDim.Render("live filter — Enter/Esc close"))
 		}
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 
 	case DialogSemanticSearch:
 		b.WriteString(d.Inputs[0].View())
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("Semantic search: TXT/MD/TEX/PDF/DOCX/archives (+DOC/RTF/ODT with pandoc/LibreOffice) · Enter search · Esc cancel"))
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 
 	case DialogNewChoice:
 		for i, it := range d.Items {
@@ -197,19 +190,19 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(prefix + s.Render(it) + "\n")
 		}
 		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click select · Esc cancel"))
-		return styleDialogBox.Width(40).Render(b.String())
+		return dialogBox(40).Render(b.String())
 
 	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash:
 		b.WriteString(d.Message)
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("y / Enter confirm · n / Esc cancel"))
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 
 	case DialogConfirmQuit:
 		b.WriteString(styleWarn.Render(d.Message))
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("y / Enter quit anyway · n / Esc stay"))
-		return styleDialogBox.Width(60).Render(b.String())
+		return dialogBox(60).Render(b.String())
 
 	case DialogConnectSMB, DialogConnectNFS, DialogConnectSFTP:
 		var labels []string
@@ -240,7 +233,7 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString("\n" + styleErr.Render(truncate(d.Message, 56)) + "\n")
 		}
 		b.WriteString(styleDim.Render("Tab or click field · Enter connect · Esc cancel"))
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 
 	case DialogSourceMenu:
 		for i, it := range d.Items {
@@ -255,7 +248,7 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(prefix + s.Render(it) + "\n")
 		}
 		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click select · Esc cancel"))
-		return styleDialogBox.Width(72).Render(b.String())
+		return dialogBox(72).Render(b.String())
 
 	case DialogChooseApp:
 		b.WriteString(styleDim.Render("No default application is set for " + d.ChooseAppMime + "."))
@@ -269,19 +262,19 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(prefix + s.Render(it) + "\n")
 		}
 		b.WriteString("\n" + styleDim.Render("The choice is remembered for next time. Esc cancel"))
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 
 	case DialogConnecting:
 		b.WriteString(d.Message)
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("This can take a moment (USB/network I/O) —\nthe rest of shfm stays fully usable meanwhile.\nEsc: keep working, apply the connection when it's ready."))
-		return styleDialogBox.Width(56).Render(b.String())
+		return dialogBox(56).Render(b.String())
 
 	case DialogProgress:
 		t := m.taskByID(d.TaskID)
 		if t == nil {
 			b.WriteString("(task no longer available)")
-			return styleDialogBox.Width(60).Render(b.String())
+			return dialogBox(60).Render(b.String())
 		}
 		if t.Label != "" {
 			b.WriteString(truncate(t.Label, 56) + "\n")
@@ -303,7 +296,7 @@ func (m *Model) renderDialogBox() string {
 		} else {
 			b.WriteString("\n" + styleDim.Render("Esc: send to background · c: cancel"))
 		}
-		return styleDialogBox.Width(60).Render(b.String())
+		return dialogBox(60).Render(b.String())
 
 	case DialogTaskList:
 		if len(d.Items) == 0 {
@@ -318,7 +311,7 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(prefix + s.Render(it) + "\n")
 		}
 		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click open · Esc close"))
-		return styleDialogBox.Width(72).Render(b.String())
+		return dialogBox(72).Render(b.String())
 
 	case DialogProperties:
 		b.WriteString(styleDim.Render(d.PropsPath) + "\n\n")
@@ -355,7 +348,7 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(fmt.Sprintf("Group:     %s\n", firstNonEmpty(e.Group, "?")))
 			b.WriteString("\n" + styleDim.Render("(editing permissions isn't supported on this source)\nEsc close"))
 		}
-		return styleDialogBox.Width(56).Render(b.String())
+		return dialogBox(56).Render(b.String())
 
 	case DialogFormatChoose:
 		b.WriteString(styleDim.Render(d.FormatDevice.Path) + "\n\n")
@@ -368,7 +361,7 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(prefix + s.Render(it) + "\n")
 		}
 		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click select · Esc cancel"))
-		return styleDialogBox.Width(48).Render(b.String())
+		return dialogBox(48).Render(b.String())
 
 	case DialogFormatConfirm1:
 		b.WriteString(styleErr.Render(fmt.Sprintf(
@@ -376,7 +369,7 @@ func (m *Model) renderDialogBox() string {
 			d.FormatDevice.Path, formatFSLabel(d.FormatFSType))))
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("y / Enter continue · n / Esc cancel"))
-		return styleDialogBox.Width(56).Render(b.String())
+		return dialogBox(56).Render(b.String())
 
 	case DialogFormatConfirm2:
 		b.WriteString(styleErr.Render(fmt.Sprintf(
@@ -386,7 +379,7 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(d.Inputs[0].View())
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("Enter confirm · Esc cancel"))
-		return styleDialogBox.Width(56).Render(b.String())
+		return dialogBox(56).Render(b.String())
 
 	case DialogMirrorConfirm:
 		b.WriteString(d.Message)
@@ -407,7 +400,7 @@ func (m *Model) renderDialogBox() string {
 		} else {
 			b.WriteString("\n" + styleDim.Render("Enter create · Esc cancel"))
 		}
-		return styleDialogBox.Width(72).Render(b.String())
+		return dialogBox(72).Render(b.String())
 
 	case DialogMirrorList:
 		if len(d.Items) == 0 {
@@ -422,13 +415,13 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(prefix + s.Render(truncate(it, 70)) + "\n")
 		}
 		b.WriteString("\n" + styleDim.Render("Enter sync now · p pause/resume · x delete · Esc close"))
-		return styleDialogBox.Width(80).Render(b.String())
+		return dialogBox(80).Render(b.String())
 
 	case DialogMirrorConfirmDelete:
 		b.WriteString(d.Message)
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("y / Enter confirm · n / Esc cancel"))
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 
 	case DialogHelp:
 		w := m.width - 8
@@ -438,7 +431,7 @@ func (m *Model) renderDialogBox() string {
 		if w < 50 {
 			w = 50
 		}
-		// styleDialogBox wraps content at width minus its own left+right
+		// dialogBox wraps content at width minus its own left+right
 		// padding (2+2, see lipgloss's Style.Render) before the border goes
 		// on — so laying out columns to the full w, same as the box's own
 		// Width(w) below, leaves every row exactly 4 columns too wide and
@@ -446,15 +439,21 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(renderHelpColumns(m.buildHelpEntries(), w-4))
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("press any key to close"))
-		return styleDialogBox.Width(w).Render(b.String())
+		return dialogBox(w).Render(b.String())
 
 	case DialogMessage:
 		b.WriteString(d.Message)
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("press any key to close"))
-		return styleDialogBox.Width(64).Render(b.String())
+		return dialogBox(64).Render(b.String())
 	}
-	return styleDialogBox.Width(64).Render(b.String())
+	return dialogBox(64).Render(b.String())
+}
+
+// dialogBox is styleDialogBox for a box whose content area plus padding is
+// w cells wide: lipgloss v2 widths include the border, v1's didn't.
+func dialogBox(w int) lipgloss.Style {
+	return styleDialogBox.Width(w + styleDialogBox.GetHorizontalBorderSize())
 }
 
 func formatFSLabel(t drives.FSType) string {

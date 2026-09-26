@@ -17,7 +17,7 @@
 
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 var (
 	colBorder    = lipgloss.Color("240")

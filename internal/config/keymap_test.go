@@ -191,3 +191,31 @@ func TestMirrorDefaultKey(t *testing.T) {
 		t.Fatalf("ctrl+s -> %q, want the source menu", a)
 	}
 }
+
+func TestNormalizeKey(t *testing.T) {
+	for in, want := range map[string]string{
+		" ":            "space",
+		"space":        "space",
+		"alt+ctrl+v":   "ctrl+alt+v",
+		"ctrl+alt+v":   "ctrl+alt+v",
+		"shift+ctrl+a": "ctrl+shift+a",
+		"ctrl+up":      "ctrl+up",
+		"G":            "G",
+		"+":            "+",
+		"ctrl++":       "ctrl++",
+	} {
+		if got := NormalizeKey(in); got != want {
+			t.Errorf("NormalizeKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestOldSpellingsInKeybindingsFile(t *testing.T) {
+	km := parseKeyMap([]byte("paste-move = alt+ctrl+x\ntoggle-select = space\n"))
+	if a, _ := km.ActionFor("ctrl+alt+x"); a != ActionPasteMove {
+		t.Fatalf("ctrl+alt+x -> %q, want paste-move", a)
+	}
+	if a, _ := km.ActionFor("space"); a != ActionToggleSelect {
+		t.Fatalf("space -> %q, want toggle-select", a)
+	}
+}

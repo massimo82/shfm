@@ -22,7 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/vfs"
 )

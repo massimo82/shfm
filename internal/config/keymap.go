@@ -87,7 +87,7 @@ type keybindingDef struct {
 // also what the Help dialog and a freshly written keybindings file use).
 var keybindingDefs = []keybindingDef{
 	{ActionQuit, []string{"q", "ctrl+q"}, "Quit the application"},
-	{ActionHelp, []string{"alt+ctrl+h", "?"}, "Show keyboard shortcuts help"},
+	{ActionHelp, []string{"ctrl+alt+h", "?"}, "Show keyboard shortcuts help"},
 	{ActionToggleLayout, []string{"ctrl+l"}, "Toggle single or dual pane"},
 	{ActionTaskList, []string{"ctrl+b"}, "Show background tasks list"},
 
@@ -103,16 +103,16 @@ var keybindingDefs = []keybindingDef{
 	{ActionActivate, []string{"enter"}, "Open folder or file"},
 	{ActionGoUp, []string{"backspace", "h"}, "Go up one folder"},
 
-	{ActionToggleSelect, []string{" "}, "Toggle selection of entry"},
+	{ActionToggleSelect, []string{"space"}, "Toggle selection of entry"},
 	{ActionSelectAll, []string{"a"}, "Select all entries"},
 	{ActionDeselectAll, []string{"A"}, "Deselect all entries"},
 
 	{ActionCopy, []string{"ctrl+c"}, "Copy selection to clipboard"},
 	{ActionPaste, []string{"ctrl+v"}, "Paste clipboard as copy"},
-	{ActionPasteMove, []string{"alt+ctrl+v"}, "Paste clipboard as move"},
+	{ActionPasteMove, []string{"ctrl+alt+v"}, "Paste clipboard as move"},
 	{ActionTrash, []string{"ctrl+d"}, "Move selection to trash"},
-	{ActionDelete, []string{"alt+ctrl+d"}, "Permanently delete selection"},
-	{ActionMirror, []string{"alt+ctrl+s"}, "Paste as mirror, or list"},
+	{ActionDelete, []string{"ctrl+alt+d"}, "Permanently delete selection"},
+	{ActionMirror, []string{"ctrl+alt+s"}, "Paste as mirror, or list"},
 
 	{ActionRename, []string{"r"}, "Rename current entry"},
 	{ActionNewFolder, []string{"m"}, "Create new folder"},
@@ -132,8 +132,9 @@ var keybindingDefs = []keybindingDef{
 }
 
 // KeyMap maps each Action to the keys that trigger it (as bubbletea's
-// tea.KeyMsg.String() would spell them, e.g. "ctrl+up", "a", "alt+ctrl+h"),
-// plus the reverse lookup handleKey actually uses on every keypress.
+// tea.KeyMsg.String() spells them, e.g. "ctrl+up", "a", "ctrl+alt+h",
+// "space" — see NormalizeKey), plus the reverse lookup handleKey actually
+// uses on every keypress.
 type KeyMap struct {
 	bindings map[Action][]string
 	reverse  map[string]Action
@@ -143,7 +144,9 @@ type KeyMap struct {
 func DefaultKeyMap() *KeyMap {
 	km := &KeyMap{bindings: map[Action][]string{}}
 	for _, d := range keybindingDefs {
-		km.bindings[d.action] = append([]string(nil), d.defaultKeys...)
+		for _, k := range d.defaultKeys {
+			km.bindings[d.action] = append(km.bindings[d.action], NormalizeKey(k))
+		}
 	}
 	km.rebuildReverse()
 	return km
@@ -159,9 +162,9 @@ func (km *KeyMap) rebuildReverse() {
 }
 
 // ActionFor returns the action bound to key (as tea.KeyMsg.String() would
-// spell it), if any.
+// spell it, though any spelling NormalizeKey accepts works), if any.
 func (km *KeyMap) ActionFor(key string) (Action, bool) {
-	a, ok := km.reverse[key]
+	a, ok := km.reverse[NormalizeKey(key)]
 	return a, ok
 }
 
@@ -199,21 +202,43 @@ func isKnownAction(a Action) bool {
 	return false
 }
 
-// displayKeyName/internalKeyName translate the space bar's key to/from a
-// readable name for the keybindings file — tea.KeyMsg.String() for it is
-// literally " ", invisible and error-prone to hand-edit.
-func displayKeyName(k string) string {
+// modifierOrder is the order bubbletea v2 writes modifiers in a key's
+// String() ("ctrl+alt+s", never "alt+ctrl+s").
+var modifierOrder = []string{"ctrl", "alt", "shift", "meta", "hyper", "super"}
+
+// NormalizeKey rewrites a key the way bubbletea v2's tea.KeyMsg.String()
+// spells it, so bindings match whatever order the user (or an older shfm,
+// written for bubbletea v1) put the modifiers in: modifiers are sorted
+// into modifierOrder ("alt+ctrl+v" → "ctrl+alt+v") and the space bar is
+// "space" (v1 spelled it " ").
+func NormalizeKey(k string) string {
 	if k == " " {
 		return "space"
 	}
-	return k
-}
-
-func internalKeyName(k string) string {
-	if k == "space" {
-		return " "
+	if len(k) <= 1 || !strings.Contains(k, "+") || strings.HasSuffix(k, "++") {
+		return k
 	}
-	return k
+	parts := strings.Split(k, "+")
+	key, mods := parts[len(parts)-1], parts[:len(parts)-1]
+	var sorted []string
+	for _, want := range modifierOrder {
+		for _, m := range mods {
+			if m == want {
+				sorted = append(sorted, m)
+				break
+			}
+		}
+	}
+	for _, m := range mods {
+		known := false
+		for _, want := range modifierOrder {
+			known = known || m == want
+		}
+		if !known {
+			sorted = append(sorted, m)
+		}
+	}
+	return strings.Join(append(sorted, key), "+")
 }
 
 func keymapPath() (string, error) {
@@ -283,7 +308,7 @@ func parseKeyMap(data []byte) *KeyMap {
 		var keys []string
 		for _, part := range strings.Split(rest, ",") {
 			if k := strings.TrimSpace(part); k != "" {
-				keys = append(keys, internalKeyName(k))
+				keys = append(keys, NormalizeKey(k))
 			}
 		}
 		km.bindings[action] = keys
@@ -306,11 +331,7 @@ func writeDefaultKeymapFile(p string) error {
 
 	const actionWidth = 20
 	for _, d := range keybindingDefs {
-		keys := make([]string, len(d.defaultKeys))
-		for i, k := range d.defaultKeys {
-			keys[i] = displayKeyName(k)
-		}
-		assignment := fmt.Sprintf("%-*s = %s", actionWidth, d.action, strings.Join(keys, ", "))
+		assignment := fmt.Sprintf("%-*s = %s", actionWidth, d.action, strings.Join(d.defaultKeys, ", "))
 		fmt.Fprintf(&b, "%-45s # %s\n", assignment, d.description)
 	}
 	return os.WriteFile(p, []byte(b.String()), 0o644)

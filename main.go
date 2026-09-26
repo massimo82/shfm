@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/applog"
 	"shfm/internal/config"
@@ -38,7 +38,7 @@ func main() {
 	cfg := config.Load()
 
 	// Best-effort, same reasoning as the desktop-launcher check below: shfm's
-	// own stdout/stderr belong to the TUI (see tea.WithAltScreen below), so
+	// own stdout/stderr belong to the TUI (see ui.Model.View), so
 	// diagnostics worth keeping go to their own log file instead — see
 	// internal/applog's doc comment. A failure here just means Debug/Info/...
 	// calls elsewhere silently do nothing, not a reason to abort startup.
@@ -67,11 +67,9 @@ func main() {
 	}
 	m := ui.New(cfg, keymap, startPath)
 
-	p := tea.NewProgram(
-		m,
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
+	// Alternate screen and mouse reporting are requested by the model's
+	// View (bubbletea v2 has no program options for them).
+	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

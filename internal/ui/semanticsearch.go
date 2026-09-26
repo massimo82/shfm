@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/applog"
 	"shfm/internal/notify"

@@ -23,8 +23,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/config"
 	"shfm/internal/drives"
@@ -230,14 +230,14 @@ func (m *Model) openProperties() {
 		modeInput := textinput.New()
 		modeInput.SetValue(fmt.Sprintf("%o", e.Mode.Perm()))
 		modeInput.CharLimit = 4
-		modeInput.Width = 10
+		modeInput.SetWidth(10)
 		modeInput.Focus()
 		ownerInput := textinput.New()
 		ownerInput.SetValue(e.Owner)
-		ownerInput.Width = 20
+		ownerInput.SetWidth(20)
 		groupInput := textinput.New()
 		groupInput.SetValue(e.Group)
-		groupInput.Width = 20
+		groupInput.SetWidth(20)
 		d.Inputs = []textinput.Model{modeInput, ownerInput, groupInput}
 		d.FocusIdx = 0
 	}
@@ -857,7 +857,7 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 	case DialogFormatConfirm1:
 		ti := textinput.New()
 		ti.Placeholder = "YES"
-		ti.Width = 10
+		ti.SetWidth(10)
 		ti.Focus()
 		m.dialog = Dialog{
 			Kind: DialogFormatConfirm2, Title: "Final confirmation",

@@ -20,7 +20,7 @@ package ui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/fileops"
 )
@@ -49,7 +49,7 @@ func TestPressingQActuallyQuits(t *testing.T) {
 		t.Fatal("test setup: a freshly created model shouldn't have running tasks")
 	}
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if !isQuitCmd(cmd) {
 		t.Fatal("pressing q with no background tasks must return tea.Quit; got a command that does not produce tea.QuitMsg (or a nil command) — this is exactly the freeze bug")
 	}
@@ -61,7 +61,7 @@ func TestPressingQActuallyQuits(t *testing.T) {
 // TestCtrlQActuallyQuits mirrors the above for the Ctrl+Q alias.
 func TestCtrlQActuallyQuits(t *testing.T) {
 	m := newTestModel()
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Mod: tea.ModCtrl})
 	if !isQuitCmd(cmd) {
 		t.Fatal("Ctrl+Q with no background tasks must return tea.Quit")
 	}
@@ -77,7 +77,7 @@ func TestQWithRunningTaskAsksFirst(t *testing.T) {
 		return &fileops.Result{}
 	})
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if isQuitCmd(cmd) {
 		t.Fatal("q should NOT quit immediately while a background task is running")
 	}
@@ -99,12 +99,12 @@ func TestConfirmingQuitDialogActuallyQuits(t *testing.T) {
 		<-make(chan struct{})
 		return &fileops.Result{}
 	})
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if m.dialog.Kind != DialogConfirmQuit {
 		t.Fatalf("test setup: expected DialogConfirmQuit, got %v", m.dialog.Kind)
 	}
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !isQuitCmd(cmd) {
 		t.Fatal("confirming the quit-anyway dialog must return tea.Quit — this is the exact same freeze bug on a second path")
 	}
@@ -121,9 +121,9 @@ func TestDecliningQuitDialogDoesNotQuit(t *testing.T) {
 		<-make(chan struct{})
 		return &fileops.Result{}
 	})
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	if isQuitCmd(cmd) {
 		t.Fatal("declining the quit-anyway dialog must not quit")
 	}

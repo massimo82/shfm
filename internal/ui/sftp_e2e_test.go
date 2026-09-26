@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // TestSFTPConnectEndToEnd exercises the exact same doConnectSFTP business
@@ -111,5 +111,5 @@ func entryNames(p *Pane) []string {
 }
 
 func teaEnterMsg() tea.KeyMsg {
-	return tea.KeyMsg{Type: tea.KeyEnter}
+	return tea.KeyPressMsg{Code: tea.KeyEnter}
 }
