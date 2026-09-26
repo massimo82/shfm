@@ -45,7 +45,7 @@ var mouseHints = map[config.Action]string{
 // they're not part of the configurable catalogue (internal/config's
 // KeyMap) and are always shown as-is.
 var mouseOnlyHelpEntries = []helpEntry{
-	{"[+] by PATH", "new file/folder (picker)"},
+	{"[+] by PATH", "new file/folder picker"},
 	{"Click+Ctrl", "select one"},
 	{"Click+Shift", "select range"},
 	{"Drag & drop", "move (Ctrl: copy)"},
@@ -117,11 +117,35 @@ func prettyKeySegment(s string) string {
 // wrapping paragraph. Every row is padded/truncated to an exact cell width
 // (with a safety margin) so lipgloss never has to word-wrap a row itself,
 // which would otherwise stagger the two columns out of alignment.
+// helpKeyWidth is the help's key column width: the longest key label,
+// within limits.
+func helpKeyWidth(entries []helpEntry) int {
+	w := 8
+	for _, e := range entries {
+		w = maxInt(w, lipgloss.Width(e.key))
+	}
+	return min(w, 26)
+}
+
+// helpFullWidth is the Help dialog width (see dialogBox) at which no key
+// or description gets truncated — the inverse of renderHelpColumns'
+// column math, plus the box's padding.
+func helpFullWidth(entries []helpEntry) int {
+	desc := 0
+	for _, e := range entries {
+		desc = maxInt(desc, lipgloss.Width(e.desc))
+	}
+	col := helpKeyWidth(entries) + 1 + desc
+	return 2*(col+2) + 4
+}
+
 func renderHelpColumns(entries []helpEntry, maxWidth int) string {
 	half := (len(entries) + 1) / 2
 	left, right := entries[:half], entries[half:]
 
-	const keyWidth = 24
+	// The key column is as wide as the longest key label (within limits),
+	// leaving the rest of each column to the descriptions.
+	keyWidth := helpKeyWidth(entries)
 	colWidth := maxWidth/2 - 2 // safety margin against rounding/join spacing
 	descWidth := maxInt(colWidth-keyWidth-1, 4)
 
@@ -131,7 +155,7 @@ func renderHelpColumns(entries []helpEntry, maxWidth int) string {
 			if i > 0 {
 				b.WriteString("\n")
 			}
-			key := styleHelpKey.Render(padRight(e.key, keyWidth))
+			key := styleHelpKey.Render(padRight(truncate(e.key, keyWidth), keyWidth))
 			desc := styleHelpDesc.Render(padRight(truncate(e.desc, descWidth), descWidth))
 			b.WriteString(key + " " + desc)
 		}
@@ -424,10 +448,9 @@ func (m *Model) renderDialogBox() string {
 		return dialogBox(64).Render(b.String())
 
 	case DialogHelp:
-		w := m.width - 8
-		if w > 100 {
-			w = 100
-		}
+		// As wide as needed to show every row in full, within the screen.
+		entries := m.buildHelpEntries()
+		w := min(m.width-8, helpFullWidth(entries))
 		if w < 50 {
 			w = 50
 		}
@@ -436,7 +459,7 @@ func (m *Model) renderDialogBox() string {
 		// on — so laying out columns to the full w, same as the box's own
 		// Width(w) below, leaves every row exactly 4 columns too wide and
 		// wrapping onto a second line, staggering the two-column grid.
-		b.WriteString(renderHelpColumns(m.buildHelpEntries(), w-4))
+		b.WriteString(renderHelpColumns(entries, w-4))
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("press any key to close"))
 		return dialogBox(w).Render(b.String())
