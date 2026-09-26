@@ -31,6 +31,7 @@ import (
 	"shfm/internal/applog"
 	"shfm/internal/config"
 	"shfm/internal/desktopfile"
+	"shfm/internal/polkitagent"
 	"shfm/internal/ui"
 	"shfm/internal/vfs"
 )
@@ -72,6 +73,13 @@ func main() {
 	// View (bubbletea v2 has no program options for them).
 	p := tea.NewProgram(m)
 	vfs.TerminalHandoff = ui.TerminalHandoff(p)
+	// pkexec asks shfm itself for the password, in a dialog; without the
+	// agent (no polkit, no system bus) it falls back to the terminal.
+	if agent, err := polkitagent.Start(ui.AuthPrompter(p)); err != nil {
+		applog.Warn("polkit agent not available", "error", err)
+	} else {
+		defer agent.Close()
+	}
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

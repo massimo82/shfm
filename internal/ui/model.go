@@ -82,6 +82,9 @@ type Model struct {
 	// clicks to source-menu items or form fields.
 	dialogRect rect
 
+	// auth is the pending polkit password request, if any: see auth.go.
+	auth *authState
+
 	// Background task tracking (copy/move/delete): see tasks.go.
 	tasks         []*Task
 	nextTaskID    int
@@ -216,47 +219,61 @@ func (m *Model) setError(format string, args ...interface{}) {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	cmd := m.update(msg)
+	m.keepAuthOnTop()
+	return m, cmd
+}
+
+func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		return m, nil
+		return nil
 	case tea.KeyPressMsg:
-		return m.handleKey(msg)
+		_, cmd := m.handleKey(msg)
+		return cmd
 	case tea.MouseMsg:
-		return m.handleMouse(msg)
+		_, cmd := m.handleMouse(msg)
+		return cmd
 	case taskMsg:
 		m.handleTaskMsg(msg)
-		return m, m.waitForTaskMsg()
+		return m.waitForTaskMsg()
 	case dirSizeMsg:
 		m.handleDirSizeMsg(msg)
-		return m, m.waitForSizeMsg()
+		return m.waitForSizeMsg()
 	case connectResultMsg:
 		m.handleConnectResult(msg)
-		return m, m.waitForConnectMsg()
+		return m.waitForConnectMsg()
 	case openResultMsg:
 		m.handleOpenResult(msg)
-		return m, m.waitForOpenMsg()
+		return m.waitForOpenMsg()
 	case searchResultMsg:
 		m.handleSearchResultMsg(msg)
-		return m, m.waitForSearchMsg()
+		return m.waitForSearchMsg()
 	case semanticMsg:
 		m.handleSemanticMsg(msg)
-		return m, m.waitForSemanticMsg()
+		return m.waitForSemanticMsg()
 	case mirrorTickMsg:
-		return m, m.handleMirrorTick()
+		return m.handleMirrorTick()
 	case sysclipReadyMsg:
 		m.handleSysclipReady(msg)
-		return m, nil
+		return nil
 	case sysclipFilesMsg:
 		m.handleSysclipFiles(msg)
-		return m, m.waitForSysclipMsg()
+		return m.waitForSysclipMsg()
 	case terminalHandoffMsg:
-		return m, m.handleTerminalHandoff(msg)
+		return m.handleTerminalHandoff(msg)
 	case elevatedDoneMsg:
 		m.handleElevatedDone(msg)
-		return m, nil
+		return nil
+	case authPromptMsg:
+		m.handleAuthPrompt(msg)
+		return nil
+	case authWithdrawnMsg:
+		m.handleAuthWithdrawn(msg)
+		return nil
 	}
-	return m, nil
+	return nil
 }
 
 // handleKey routes a keyboard event: to the active dialog's fields if one

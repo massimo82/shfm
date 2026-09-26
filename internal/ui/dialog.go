@@ -27,6 +27,7 @@ import (
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/opener"
+	"shfm/internal/polkitagent"
 	"shfm/internal/vfs"
 )
 
@@ -61,6 +62,7 @@ const (
 	DialogMirrorConfirm
 	DialogMirrorList
 	DialogMirrorConfirmDelete
+	DialogAuth
 )
 
 // Dialog is the state of any currently active modal.
@@ -109,6 +111,8 @@ type Dialog struct {
 
 	MirrorPending []config.MirrorPair // DialogMirrorConfirm: pairs to create (Items: backend choice, rsync first, only between local sources)
 	MirrorPairID  string              // DialogMirrorConfirmDelete
+
+	Auth polkitagent.Prompt // DialogAuth: Inputs[0] is the answer
 }
 
 func newSingleInputDialog(kind DialogKind, title, placeholder, value string) Dialog {
@@ -173,6 +177,9 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if d.Kind == DialogSemanticSearch {
 		return m.updateSemanticSearchDialogKey(msg)
+	}
+	if d.Kind == DialogAuth {
+		return m.updateAuthDialogKey(msg), true
 	}
 	if d.Kind == DialogMirrorList {
 		if cmd, handled := m.updateMirrorListKey(msg); handled {

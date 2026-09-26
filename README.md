@@ -116,9 +116,13 @@ to toggle between single- and dual-pane layout.
   standard Unix owner/group/other permission model, that the plain attempt
   would fail — e.g. editing, deleting or moving something owned by root —
   and fall back to it reactively (as before) if a permission error still
-  turns up unexpectedly. No extra dialog of shfm's own: `pkexec`'s native
-  authentication prompt is the only interruption, and only appears when
-  actually needed. See [Notes](#notes) for exactly how this is scoped.
+  turns up unexpectedly. The password is asked in a dialog of shfm's own:
+  shfm is its own PolicyKit authentication agent (for its own process
+  only), so no graphical agent is needed and pkexec's text prompt never
+  draws over the TUI; it only appears when actually needed. Should the
+  agent fail to register (no system bus), pkexec gets the terminal to
+  itself for its text prompt. See [Notes](#notes) for exactly how this
+  is scoped.
 - **Search/filter by name** (`/`): live substring match (case-insensitive)
   in the current folder as you type; `Tab` switches to full regex
   matching, `Ctrl+R` switches from filtering the current folder to a

@@ -222,6 +222,20 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(styleDim.Render("y / Enter confirm · n / Esc cancel"))
 		return dialogBox(64).Render(b.String())
 
+	case DialogAuth:
+		a := d.Auth
+		if a.Message != "" {
+			b.WriteString(a.Message + "\n\n")
+		}
+		b.WriteString(styleDim.Render("Authenticating as ") + a.User + "\n")
+		if a.Notice != "" {
+			b.WriteString(styleErr.Render(a.Notice) + "\n")
+		}
+		b.WriteString("\n" + strings.TrimSpace(a.Text) + " " + d.Inputs[0].View())
+		b.WriteString("\n\n")
+		b.WriteString(styleDim.Render("Enter confirm · Esc cancel"))
+		return dialogBox(64).Render(b.String())
+
 	case DialogConfirmQuit:
 		b.WriteString(styleWarn.Render(d.Message))
 		b.WriteString("\n\n")
