@@ -43,6 +43,10 @@ var FormatChoices = []struct {
 func SystemDiskName() (string, error)              { return "", fmt.Errorf("not supported on this platform") }
 func IsSystemDisk(devicePath string) bool          { return true }
 func WholeDiskDevicePath(devicePath string) string { return devicePath }
-func FormatDevice(wholeDiskPath string, fsType FSType) error {
-	return fmt.Errorf("formatting devices is not supported on this platform")
+func FormatDevice(wholeDiskPath string, fsType FSType) (string, error) {
+	return "", fmt.Errorf("formatting devices is not supported on this platform")
+}
+
+func MountFormatted(partition string) (string, error) {
+	return "", fmt.Errorf("formatting devices is not supported on this platform")
 }

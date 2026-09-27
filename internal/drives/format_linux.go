@@ -23,8 +23,10 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 )
@@ -130,20 +132,22 @@ func WholeDiskDevicePath(devicePath string) string {
 // GNOME Disks uses — so, like mounting, it works for the logged-in local
 // user without root, via udisks2's default polkit rules, and without
 // shelling out to mkfs.* or parted/sfdisk directly.
-func FormatDevice(wholeDiskPath string, fsType FSType) error {
+//
+// It returns the device path of the new partition (e.g. "/dev/sdb1").
+func FormatDevice(wholeDiskPath string, fsType FSType) (string, error) {
 	if IsSystemDisk(wholeDiskPath) {
-		return fmt.Errorf("refusing to format %s: it holds the system disk", wholeDiskPath)
+		return "", fmt.Errorf("refusing to format %s: it holds the system disk", wholeDiskPath)
 	}
 
 	// udisks2 refuses to repartition a disk while any of its filesystems
 	// is mounted, so release them all first (as GNOME Disks does).
 	if err := unmountDisk(wholeDiskPath); err != nil {
-		return err
+		return "", err
 	}
 
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		return fmt.Errorf("cannot reach the system D-Bus (is udisks2 running?): %w", err)
+		return "", fmt.Errorf("cannot reach the system D-Bus (is udisks2 running?): %w", err)
 	}
 	defer conn.Close()
 
@@ -153,7 +157,7 @@ func FormatDevice(wholeDiskPath string, fsType FSType) error {
 	// the kind of small removable media this feature targets).
 	call := diskObj.Call(udisksService+".Block.Format", 0, "dos", map[string]dbus.Variant{})
 	if call.Err != nil {
-		return fmt.Errorf("creating partition table on %s: %w", wholeDiskPath, call.Err)
+		return "", fmt.Errorf("creating partition table on %s: %w", wholeDiskPath, call.Err)
 	}
 
 	// 2. A single primary partition spanning the whole disk (offset=0,
@@ -162,10 +166,10 @@ func FormatDevice(wholeDiskPath string, fsType FSType) error {
 	call = diskObj.Call(udisksService+".PartitionTable.CreatePartition", 0,
 		uint64(0), uint64(0), "", "", map[string]dbus.Variant{})
 	if call.Err != nil {
-		return fmt.Errorf("creating partition on %s: %w", wholeDiskPath, call.Err)
+		return "", fmt.Errorf("creating partition on %s: %w", wholeDiskPath, call.Err)
 	}
 	if err := call.Store(&partPath); err != nil {
-		return fmt.Errorf("unexpected reply while creating the partition: %w", err)
+		return "", fmt.Errorf("unexpected reply while creating the partition: %w", err)
 	}
 
 	// 3. Format that partition with the requested filesystem.
@@ -181,9 +185,9 @@ func FormatDevice(wholeDiskPath string, fsType FSType) error {
 	partObj := conn.Object(udisksService, partPath)
 	call = partObj.Call(udisksService+".Block.Format", 0, string(fsType), opts)
 	if call.Err != nil {
-		return fmt.Errorf("formatting the new partition as %s: %w", fsType, call.Err)
+		return "", fmt.Errorf("formatting the new partition as %s: %w", fsType, call.Err)
 	}
-	return nil
+	return "/dev/" + path.Base(string(partPath)), nil
 }
 
 // unmountDisk unmounts every filesystem that lives on wholeDiskPath — the
@@ -208,4 +212,25 @@ func unmountDisk(wholeDiskPath string) error {
 		}
 	}
 	return fmt.Errorf("%s is still mounted after repeated unmount attempts", wholeDiskPath)
+}
+
+// MountFormatted mounts partition, freshly created by FormatDevice, and
+// returns its mount point. The desktop's automounter may race us to it,
+// and udisks2 may briefly not be ready to mount a just-formatted
+// filesystem, so an existing mount is adopted and the mount retried for a
+// few seconds before giving up.
+func MountFormatted(partition string) (string, error) {
+	var lastErr error
+	for attempt := 0; attempt < 20; attempt++ {
+		if mi, ok := mountsByDevice()[partition]; ok {
+			return mi.mountPoint, nil
+		}
+		mp, err := MountViaUDisks2(partition)
+		if err == nil {
+			return mp, nil
+		}
+		lastErr = err
+		time.Sleep(250 * time.Millisecond)
+	}
+	return "", lastErr
 }

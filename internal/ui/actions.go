@@ -26,6 +26,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"shfm/internal/applog"
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/fileops"
@@ -752,6 +753,30 @@ func (m *Model) openFormatChoose(dev drives.RemovableDevice) {
 	m.dialog = Dialog{Kind: DialogFormatChoose, Title: "Format " + dev.Path, Items: items, FormatDevice: dev}
 }
 
+// panesOnDisk returns the indexes of the panes whose current folder lives
+// on a filesystem of wholeDiskPath (the disk itself or one of its
+// partitions).
+func (m *Model) panesOnDisk(wholeDiskPath string) []int {
+	var out []int
+	for i, p := range m.panes {
+		if p == nil || p.FS == nil || p.Mode != PaneNormal {
+			continue
+		}
+		lp, ok := p.FS.(vfs.LocalPath)
+		if !ok {
+			continue
+		}
+		local, ok := lp.LocalPath(p.Path)
+		if !ok {
+			continue
+		}
+		if mt, ok := drives.MountOf(local); ok && drives.WholeDiskDevicePath(mt.Device) == wholeDiskPath {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 // --- confirm dialog handling ---------------------------------------------------------
 
 func (m *Model) confirmDialog() (tea.Cmd, bool) {
@@ -903,9 +928,34 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		fsType := d.FormatFSType
 		label := fmt.Sprintf("%s as %s", wholeDisk, fsType)
 		m.dialog = Dialog{}
+		// Panes browsing the disk lose their folder with the old
+		// filesystem: mount the new one and take them back into it.
+		inside := m.panesOnDisk(wholeDisk)
+		var newMount string
 		t := m.startSimpleTask(TaskFormat, label, func() error {
-			return drives.FormatDevice(wholeDisk, fsType)
+			part, err := drives.FormatDevice(wholeDisk, fsType)
+			applog.Debug("format finished", "disk", wholeDisk, "partition", part, "panesInside", inside, "error", err)
+			if err != nil || len(inside) == 0 {
+				return err
+			}
+			mp, err := drives.MountFormatted(part)
+			if err != nil {
+				applog.Warn("mounting the formatted partition failed", "partition", part, "error", err)
+				return fmt.Errorf("formatted, but could not mount %s: %w", part, err)
+			}
+			applog.Debug("formatted partition mounted", "partition", part, "mountPoint", mp)
+			newMount = mp
+			return nil
 		})
+		t.onFinish = func(*Task) {
+			if newMount == "" {
+				return
+			}
+			for _, idx := range inside {
+				fs := vfs.NewLocalFS(newMount, newMount)
+				m.replaceFS(idx, fs, fs.Root())
+			}
+		}
 		m.dialog = Dialog{Kind: DialogProgress, Title: "Formatting", TaskID: t.ID}
 
 	case DialogMirrorConfirm:
