@@ -102,6 +102,7 @@ func (m *Model) handleConnectResult(msg connectResultMsg) {
 	}
 
 	m.replaceFS(msg.paneIndex, msg.fs, msg.fs.Root())
+	m.exposeSource(msg.fs)
 	if showingThis {
 		m.dialog = Dialog{}
 	}

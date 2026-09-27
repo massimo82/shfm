@@ -27,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -415,9 +416,13 @@ func TestCleanupStaleRemovesDeadProcessFolders(t *testing.T) {
 
 func TestDirName(t *testing.T) {
 	for label, want := range map[string]string{
-		"smb://nas/video":         "smb-nas-video",
-		"sftp://max@host":         "sftp-max@host",
-		"nfs://10.0.0.2/srv/nfs/": "nfs-10.0.0.2-srv-nfs",
+		"smb://nas/video":         "video on nas",
+		"sftp://max@host":         "max@host",
+		"nfs://10.0.0.2/srv/nfs/": "nfs on 10.0.0.2",
+		"mtp://Pixel 7":           "Pixel 7",
+		"smb://nas/.hidden":       "hidden on nas",
+		"mtp://..":                "source",
+		"mtp://a\nb":              "a-b",
 		"://":                     "source",
 	} {
 		if got := dirName(label); got != want {
@@ -616,5 +621,115 @@ func TestStatfsTimesAndRenameFallback(t *testing.T) {
 	}
 	if err := syscall.Rename(filepath.Join(mnt, "dir"), filepath.Join(mnt, "dir2")); err != syscall.EXDEV {
 		t.Fatalf("renaming a folder without native rename = %v, want EXDEV", err)
+	}
+}
+
+// mountFSType returns the filesystem type of the mount at dir, as listed in
+// /proc/self/mountinfo.
+func mountFSType(t *testing.T, dir string) string {
+	t.Helper()
+	data, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		t.Skipf("no mountinfo: %v", err)
+	}
+	unescape := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 5 || unescape.Replace(fields[4]) != dir {
+			continue
+		}
+		for i, f := range fields {
+			if f == "-" && i+1 < len(fields) {
+				return fields[i+1]
+			}
+		}
+	}
+	t.Fatalf("%s is not mounted", dir)
+	return ""
+}
+
+func TestExposeMountsNetworkSourceForOtherApps(t *testing.T) {
+	if _, err := os.Stat("/dev/fuse"); err != nil {
+		t.Skip("no /dev/fuse")
+	}
+	src := newDirFS(t.TempDir())
+	mg := NewManager(t.TempDir())
+	defer mg.UnmountAll()
+
+	if err := mg.Expose(src); err != nil {
+		t.Skipf("FUSE mount not available here: %v", err)
+	}
+	root, err := mg.LocalPath(src, "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := src.shared.dials.Load(); n != 1 {
+		t.Fatalf("dials = %d, want 1 (LocalPath reuses the exposed mount)", n)
+	}
+	if got := filepath.Base(root); got != "share on fake" {
+		t.Fatalf("mount point named %q, want %q", got, "share on fake")
+	}
+	if got := mountFSType(t, root); got != "fuse."+networkSubtype {
+		t.Fatalf("filesystem type = %q, want fuse.%s", got, networkSubtype)
+	}
+}
+
+func TestExposeLeavesSingleSessionSourcesAlone(t *testing.T) {
+	src, _ := newSessionFS(t)
+	mg := NewManager(t.TempDir())
+	defer mg.UnmountAll()
+
+	if err := mg.Expose(src); !errors.Is(err, vfs.ErrNotSupported) {
+		t.Fatalf("Expose = %v, want ErrNotSupported", err)
+	}
+	if _, err := os.Stat(mg.dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Expose mounted a single-session source: %v", err)
+	}
+	root, err := mg.LocalPath(src, "/")
+	if err != nil {
+		t.Skipf("FUSE mount not available here: %v", err)
+	}
+	if got := mountFSType(t, root); got != "fuse.shfm" {
+		t.Fatalf("filesystem type = %q, want fuse.shfm", got)
+	}
+}
+
+func TestNoMountAfterClose(t *testing.T) {
+	src := newDirFS(t.TempDir())
+	mg := NewManager(t.TempDir())
+	mg.Close() // shfm quit while a source was still connecting
+
+	if err := mg.Expose(src); err == nil {
+		t.Fatal("Expose mounted a source after Close")
+	}
+	if _, err := os.Stat(mg.dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("mount folder created after Close: %v", err)
+	}
+}
+
+func TestExternalUnmountFreesTheName(t *testing.T) {
+	_, src, mg, mnt := mountForTest(t)
+
+	// Ejected from another application's file dialog.
+	if out, err := exec.Command("fusermount3", "-u", mnt).CombinedOutput(); err != nil {
+		t.Skipf("fusermount3 -u: %v %s", err, out)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(mnt); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("mount point left behind after an external unmount")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	again, err := mg.LocalPath(src, "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != mnt {
+		t.Fatalf("remounted on %q, want the same name %q", again, mnt)
 	}
 }

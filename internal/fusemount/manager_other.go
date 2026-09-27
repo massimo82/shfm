@@ -41,6 +41,8 @@ func (mg *Manager) LocalPath(src vfs.FileSystem, vfsPath string) (string, error)
 	return "", vfs.ErrNotSupported
 }
 
+func (mg *Manager) Expose(src vfs.FileSystem) error { return vfs.ErrNotSupported }
+
 func (mg *Manager) Busy() bool { return false }
 
 func (mg *Manager) Release(src vfs.FileSystem) bool { return false }
@@ -48,3 +50,5 @@ func (mg *Manager) Release(src vfs.FileSystem) bool { return false }
 func (mg *Manager) Session(kind vfs.Kind, label string) vfs.FileSystem { return nil }
 
 func (mg *Manager) UnmountAll() {}
+
+func (mg *Manager) Close() {}

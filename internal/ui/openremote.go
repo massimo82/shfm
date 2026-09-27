@@ -18,6 +18,7 @@
 package ui
 
 import (
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -93,6 +94,24 @@ func (m *Model) startOpenRemote(target *remoteOpenTarget, app opener.App) {
 		}
 		err = opener.Launch(app, local)
 		ch <- openResultMsg{requestID: id, name: target.name, app: app, mounted: true, err: err}
+	}()
+}
+
+// exposeSource mounts a newly opened network source in the background, so
+// that other applications' file dialogs list it for as long as shfm runs
+// (see fusemount.Manager.Expose). Nothing in shfm depends on it: if the
+// mount fails, it's only logged, and opening a file with an app mounts
+// the source then (or falls back to a temp copy) as usual.
+func (m *Model) exposeSource(fs vfs.FileSystem) {
+	if m.mounts == nil {
+		return
+	}
+	mounts := m.mounts
+	go func() {
+		if err := mounts.Expose(fs); err != nil && !errors.Is(err, vfs.ErrNotSupported) {
+			applog.Warn("could not mount source for other applications",
+				"source", fs.Label(), "error", err)
+		}
 	}()
 }
 

@@ -23,6 +23,8 @@ mouse, in one pane or two side by side.
 - Colored listing, a detail line with permissions, owner and dates, and
   folder sizes.
 - Opening files with the desktop's default application.
+- Open network sources listed in other applications' file dialogs, in
+  KDE.
 - Properties dialog, to view and edit permissions, owner and group.
 - Automatic elevation (`pkexec`) for operations that need it, with the
   password asked inside shfm.
@@ -141,7 +143,7 @@ to toggle between single- and dual-pane layout.
   Applications spec); if none is set, a chooser lists installed
   applications and remembers the pick for next time. Files on SMB, NFS,
   SFTP and MTP sources are opened **in place**, through a FUSE mount shfm
-  makes of the source on first use (see Notes): a video player starts
+  makes of the source (see Notes): a video player starts
   streaming a film on a share or a phone at once, seeking included, and an
   editor saves straight back to the source — as when opening files from
   gvfs's mount in other file managers, with no password asked again. Where
@@ -331,6 +333,28 @@ Where the check applies:
 On top of that, a sync never deletes anything when the source can't be
 read: a missing or unreadable source root fails the run, and an
 unreadable subfolder's counterpart is left alone (see [Notes](#notes)).
+
+## Network sources in other applications
+
+While shfm has an SMB, NFS or SFTP source open, other applications can
+browse it too, from their own file dialogs — to attach a file on the NAS
+in a mail client, for instance — as they can with a share opened in
+Nautilus, Thunar or Dolphin. shfm mounts the source as soon as it's
+opened (see the FUSE mounts in [Notes](#notes)), and the mount stays until
+shfm exits, or until it's ejected from a file dialog. It's named after the
+source, e.g. `video on nas` for `smb://nas/video`. No daemon is involved,
+and nothing in shfm depends on it: if the mount fails, shfm works as
+before.
+
+- **KDE** (Dolphin's and KDE applications' file dialogs, and GTK
+  applications' under Plasma, through the file chooser portal): works
+  out of the box. The source is listed under **Remote**.
+
+Applications get plain local paths (the mount lives under
+`$XDG_RUNTIME_DIR/shfm/`), so what they open or save goes through shfm's
+connection. Qt applications that don't use KDE's file dialogs don't list
+the source, as they don't list gvfs's or KDE's either. MTP devices aren't
+listed this way: desktops list phones themselves.
 
 ## Keyboard shortcuts
 
@@ -996,7 +1020,10 @@ README's title line) and rebuild.
 - **FUSE mounts** (`internal/fusemount`, Linux only): to let external
   applications open a file on an SMB/NFS/SFTP/MTP source in place, shfm
   mounts the source under `$XDG_RUNTIME_DIR/shfm/<pid>/` (e.g.
-  `smb-nas-video`), the first time a file on it is opened — the same idea
+  `video on nas`): an SMB/NFS/SFTP source as soon as it's opened, so that
+  other applications' file dialogs list it (see
+  [Network sources in other applications](#network-sources-in-other-applications)),
+  an MTP device the first time a file on it is opened — the same idea
   as gvfs's FUSE bridge, implemented independently: the FUSE protocol is
   served in pure Go by
   [`github.com/hanwen/go-fuse`](https://github.com/hanwen/go-fuse) on top
@@ -1014,7 +1041,12 @@ README's title line) and rebuild.
   NFS); `df` shows the source's real size and free space. Mounts stay
   until shfm exits; quitting while an app still has a file open asks for
   confirmation first, as the app loses access to it. Mounts left behind by
-  a crashed shfm are cleaned up at the next start. SMB and NFS renames,
+  a crashed shfm are cleaned up at the next start. The mount of an
+  SMB/NFS/SFTP source has the filesystem type `fuse.rclone`, as `findmnt`
+  and `df -T` show, rather than `fuse.shfm`: KDE's Solid only lists FUSE
+  mounts of a few known types as network shares, and that of rclone —
+  another FUSE client for network storage, SMB included — is one of them.
+  SMB and NFS renames,
   truncation, timestamps and free space use requests patched into the
   local copies of [`go-smb`](third_party/go-smb/smb/shfm_setinfo.go) and
   [`go-nfs-client`](third_party/go-nfs-client/nfs/shfm_setattr.go); the

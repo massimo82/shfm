@@ -70,9 +70,10 @@ func main() {
 	}
 	m := ui.New(cfg, keymap, startPath)
 
-	// Network sources are exposed to external apps through FUSE mounts,
-	// made on first use; they must go away with shfm, whichever way Run
-	// ends (os.Exit below skips deferred calls).
+	// Sources are exposed to external apps through FUSE mounts, made as
+	// soon as a network source is opened (other sources: on first use);
+	// they must go away with shfm, whichever way Run ends (os.Exit below
+	// skips deferred calls).
 	mounts := fusemount.NewManager(fusemount.DefaultBase())
 	m.SetMountManager(mounts)
 
@@ -88,7 +89,7 @@ func main() {
 		defer agent.Close()
 	}
 	_, err := p.Run()
-	mounts.UnmountAll()
+	mounts.Close()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

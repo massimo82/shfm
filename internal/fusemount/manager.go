@@ -48,8 +48,9 @@ import (
 	"shfm/internal/vfs"
 )
 
-// Manager owns the FUSE mounts of one shfm process. Each network source is
-// mounted once, on first use, under <base>/<pid>/<source name>, and stays
+// Manager owns the FUSE mounts of one shfm process. Each source is mounted
+// once — a network source as soon as it's opened (Expose), any other on
+// first use — under <base>/<pid>/<source name>, and stays
 // mounted until UnmountAll — whatever the UI later does with its own
 // connection to that source, since an application may still be using the
 // file it opened. Safe for concurrent use.
@@ -58,6 +59,7 @@ type Manager struct {
 
 	mu     sync.Mutex
 	mounts map[string]*mount // by sourceKey
+	closed bool              // see Close
 }
 
 type mount struct {
@@ -124,6 +126,23 @@ func (mg *Manager) LocalPath(src vfs.FileSystem, vfsPath string) (string, error)
 	return filepath.Join(mnt.dir, filepath.FromSlash(vfsPath)), nil
 }
 
+// Expose mounts src right away, rather than on first use, so that other
+// applications can browse it too for as long as shfm runs: its mount is
+// listed in their file dialogs, next to the network places of the desktop's
+// own file manager (in KDE's, see networkSubtype). Like LocalPath, it blocks
+// while connecting: never call it from the UI's event loop.
+//
+// Only network sources are exposed. A single-session source (an MTP
+// device) would lend the mount the UI's own connection, and desktops
+// already list such devices themselves; it's still mounted on first use.
+func (mg *Manager) Expose(src vfs.FileSystem) error {
+	if !Supported(src) || isSingleSession(src) {
+		return vfs.ErrNotSupported
+	}
+	_, err := mg.ensure(src)
+	return err
+}
+
 func (mg *Manager) ensure(src vfs.FileSystem) (*mount, error) {
 	key := sourceKey(src)
 	shared := isSingleSession(src)
@@ -155,6 +174,10 @@ func (mg *Manager) ensure(src vfs.FileSystem) (*mount, error) {
 
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
+	if mg.closed {
+		closeBe()
+		return nil, vfs.ErrNotSupported
+	}
 	if mnt, ok := mg.mounts[key]; ok && mnt.alive() {
 		if !shared || mnt.mfs.be == src {
 			// Mounted by a concurrent call in the meantime.
@@ -170,7 +193,7 @@ func (mg *Manager) ensure(src vfs.FileSystem) (*mount, error) {
 		closeBe()
 		return nil, err
 	}
-	mnt, err := mountAt(dir, src.Label(), mfs)
+	mnt, err := mountAt(dir, src.Label(), mfs, !shared)
 	if err != nil {
 		closeBe()
 		os.Remove(dir)
@@ -237,7 +260,7 @@ func (mg *Manager) mountDirLocked(src vfs.FileSystem) (string, error) {
 	for i := 1; ; i++ {
 		candidate := name
 		if i > 1 {
-			candidate = fmt.Sprintf("%s-%d", name, i)
+			candidate = fmt.Sprintf("%s (%d)", name, i)
 		}
 		dir := filepath.Join(mg.dir, candidate)
 		if err := os.Mkdir(dir, 0o700); err == nil {
@@ -250,28 +273,50 @@ func (mg *Manager) mountDirLocked(src vfs.FileSystem) (string, error) {
 	}
 }
 
-// dirName turns a source label ("smb://nas/video") into a readable,
-// filesystem-safe folder name ("smb-nas-video").
+// dirName turns a source label into the name of its mount point, which is
+// also the name other applications' file dialogs show for the mount (KDE's
+// shows nothing else): "smb://nas/video" → "video on nas",
+// "nfs://10.0.0.2/srv/nfs/" → "nfs on 10.0.0.2", "sftp://max@host" →
+// "max@host", "mtp://Pixel 7" → "Pixel 7".
 func dirName(label string) string {
-	label = strings.Replace(label, "://", "-", 1)
-	var b strings.Builder
-	for _, r := range label {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
-			r == '.', r == '_', r == '@', r == '-':
-			b.WriteRune(r)
-		default:
-			b.WriteRune('-')
-		}
+	rest := label
+	if i := strings.Index(rest, "://"); i >= 0 {
+		rest = rest[i+len("://"):]
 	}
-	name := strings.Trim(b.String(), "-.")
+	host, path, _ := strings.Cut(strings.Trim(rest, "/"), "/")
+	name := host
+	if path != "" {
+		name = path[strings.LastIndex(path, "/")+1:] + " on " + host
+	}
+	name = strings.Map(func(r rune) rune {
+		if r == '/' || r < 0x20 || r == 0x7f {
+			return '-'
+		}
+		return r
+	}, name)
+	// Never a hidden name (file dialogs skip those), nor "." or "..".
+	name = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(name), "."))
 	if name == "" {
 		name = "source"
 	}
 	return name
 }
 
-func mountAt(dir, label string, mfs *mountFS) (*mount, error) {
+// networkSubtype is the FUSE subtype of a network source's mount (its
+// filesystem type is then fuse.rclone), and the whole of shfm's
+// integration with KDE: Solid, which lists the mounts KDE's file dialogs
+// show, only recognizes FUSE mounts of a few known types, and lists
+// fuse.sshfs and fuse.rclone ones as network shares, under "Remote",
+// named after their mount point. rclone is, like shfm, a FUSE client for
+// network storage (SMB included). The mount of a single-session source (an
+// MTP device), which isn't meant to be listed, keeps the "shfm" subtype.
+const networkSubtype = "rclone"
+
+func mountAt(dir, label string, mfs *mountFS, network bool) (*mount, error) {
+	subtype := "shfm"
+	if network {
+		subtype = networkSubtype
+	}
 	timeout := time.Second
 	opts := &fs.Options{
 		EntryTimeout:    &timeout,
@@ -281,7 +326,7 @@ func mountAt(dir, label string, mfs *mountFS) (*mount, error) {
 		GID:             mfs.gid,
 		MountOptions: fuse.MountOptions{
 			FsName: label,
-			Name:   "shfm",
+			Name:   subtype,
 			// Every xattr request would otherwise be a round trip for
 			// nothing (the kernel asks for security.capability before
 			// every write).
@@ -294,9 +339,13 @@ func mountAt(dir, label string, mfs *mountFS) (*mount, error) {
 	}
 	mnt := &mount{dir: dir, server: server, mfs: mfs, done: make(chan struct{})}
 	go func() {
-		// Returns once unmounted, including by an external fusermount -u.
+		// Returns once unmounted, including by an external fusermount -u
+		// (ejected from another application's file dialog): the mount
+		// point goes too, so that mounting the source again reuses its
+		// name. Removing it fails harmlessly if it's in use again.
 		server.Wait()
 		mfs.close()
+		os.Remove(dir)
 		close(mnt.done)
 	}()
 	return mnt, nil
@@ -330,6 +379,20 @@ func (mg *Manager) Busy() bool {
 func (mg *Manager) UnmountAll() {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()
+	mg.unmountAllLocked()
+}
+
+// Close is UnmountAll for good, when shfm exits: a source still connecting
+// in the background (see Expose) is then no longer mounted, as its mount
+// would be left behind, stale, once the process is gone.
+func (mg *Manager) Close() {
+	mg.mu.Lock()
+	defer mg.mu.Unlock()
+	mg.closed = true
+	mg.unmountAllLocked()
+}
+
+func (mg *Manager) unmountAllLocked() {
 	for key, mnt := range mg.mounts {
 		mg.unmountLocked(key, mnt)
 	}
