@@ -37,6 +37,7 @@ const (
 	ActionQuit             Action = "quit"
 	ActionHelp             Action = "help"
 	ActionToggleLayout     Action = "toggle-layout"
+	ActionToggleHidden     Action = "toggle-hidden"
 	ActionTaskList         Action = "task-list"
 	ActionCursorUp         Action = "cursor-up"
 	ActionCursorDown       Action = "cursor-down"
@@ -89,6 +90,7 @@ var keybindingDefs = []keybindingDef{
 	{ActionQuit, []string{"q", "ctrl+q"}, "Quit the application"},
 	{ActionHelp, []string{"ctrl+alt+h", "?"}, "Show shortcuts help"},
 	{ActionToggleLayout, []string{"ctrl+l"}, "Single or dual pane"},
+	{ActionToggleHidden, []string{"ctrl+h", "."}, "Show or hide hidden files"},
 	{ActionTaskList, []string{"ctrl+b"}, "Background tasks"},
 
 	{ActionCursorUp, []string{"ctrl+up", "up", "k"}, "Move cursor up"},

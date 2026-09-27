@@ -10,6 +10,7 @@ mouse, in one pane or two side by side.
 ## Features
 
 - Single or dual pane, switched with `Ctrl+L`.
+- Hidden files shown or hidden with `Ctrl+H` (or `.`).
 - Keyboard shortcuts without function keys, full mouse support and
   drag&drop.
 - Multi-selection.
@@ -391,6 +392,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+P` / click PATH | edit the path directly |
 | `Ctrl+S` / click SOURCE | open the source picker |
 | `Ctrl+L` / click title | toggle single/dual pane |
+| `Ctrl+H` / `.` | show/hide hidden files (dotfiles, and `lost+found` at a drive's root); remembered as `show_hidden` in `config.json` |
 | `Space`, `a`, `A` | multi-selection |
 | `Ctrl+C` | copy to clipboard |
 | `Ctrl+V` | paste (as a copy) |

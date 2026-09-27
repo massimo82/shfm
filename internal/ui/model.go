@@ -344,6 +344,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openHelp()
 	case config.ActionToggleLayout:
 		m.toggleLayout()
+	case config.ActionToggleHidden:
+		m.toggleHidden(listHeight)
 	case config.ActionTaskList:
 		m.openTaskList()
 
@@ -463,6 +465,23 @@ func (m *Model) toggleLayout() {
 	m.dualPane = !m.dualPane
 	m.cfg.DualPane = m.dualPane
 	m.cfg.Save()
+}
+
+// toggleHidden shows or hides hidden entries (dotfiles, and lost+found at a
+// filesystem's root) in both panes, remembering the choice in the config.
+func (m *Model) toggleHidden(listHeight int) {
+	m.cfg.ShowHidden = !m.cfg.ShowHidden
+	m.cfg.Save()
+	for _, p := range m.panes {
+		if p != nil {
+			p.SetShowHidden(m.cfg.ShowHidden, listHeight)
+		}
+	}
+	if m.cfg.ShowHidden {
+		m.setStatus("Showing hidden files")
+	} else {
+		m.setStatus("Hiding hidden files")
+	}
 }
 
 // SetMountManager sets the manager of the FUSE mounts through which remote

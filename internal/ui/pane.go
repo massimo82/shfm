@@ -19,11 +19,13 @@ package ui
 
 import (
 	"errors"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
 
+	"shfm/internal/drives"
 	"shfm/internal/trash"
 	"shfm/internal/vfs"
 )
@@ -174,7 +176,7 @@ func (p *Pane) Load() {
 	}
 	filtered := entries[:0:0]
 	for _, e := range entries {
-		if !p.ShowHidden && strings.HasPrefix(e.Name, ".") {
+		if !p.ShowHidden && (strings.HasPrefix(e.Name, ".") || isLostAndFound(p.FS, p.Path, e)) {
 			continue
 		}
 		if !match(e.Name) {
@@ -313,6 +315,28 @@ func (p *Pane) ExitSearchResults() {
 	}
 	p.Cursor, p.Offset = 0, 0
 	p.Load()
+}
+
+// SetShowHidden shows or hides hidden entries, reloading the listing and
+// keeping the cursor on the same entry when it's still listed. Search
+// results and the trash view keep their contents: the new setting applies
+// from the next folder listing.
+func (p *Pane) SetShowHidden(show bool, visibleHeight int) {
+	p.ShowHidden = show
+	if p.Mode != PaneNormal || p.ShowingSearchResults {
+		return
+	}
+	cur, hadCur := p.CurrentEntry()
+	p.Load()
+	if hadCur {
+		for i, e := range p.Entries {
+			if e.Name == cur.Name {
+				p.Cursor = i
+				break
+			}
+		}
+	}
+	p.fixOffset(visibleHeight)
 }
 
 func (p *Pane) Len() int {
@@ -529,4 +553,23 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// isLostAndFound reports whether e is the "lost+found" folder mkfs.ext*
+// creates at a filesystem's root for fsck: owned by root with mode 0700, so
+// it can't even be opened by the user, and treated like a hidden entry.
+func isLostAndFound(fs vfs.FileSystem, dir string, e vfs.Entry) bool {
+	if e.Name != "lost+found" || !e.IsDir {
+		return false
+	}
+	lp, ok := fs.(vfs.LocalPath)
+	if !ok {
+		return false
+	}
+	local, ok := lp.LocalPath(dir)
+	if !ok {
+		return false
+	}
+	mt, ok := drives.MountOf(local)
+	return ok && mt.MountPoint == filepath.Clean(local)
 }

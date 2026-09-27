@@ -18,10 +18,13 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"shfm/internal/config"
 	"shfm/internal/drives"
+	"shfm/internal/vfs"
 )
 
 func newTestModel() *Model {
@@ -120,5 +123,78 @@ func TestFormatMenuHidesSystemDisk(t *testing.T) {
 	}
 	if drives.IsSystemDisk("/dev/sdz1") {
 		t.Errorf("IsSystemDisk should report false for an unrelated device")
+	}
+}
+
+// A "lost+found" folder away from a filesystem's root is an ordinary
+// folder: only the fsck one at a mount point is hidden.
+func TestLostAndFoundShownOutsideMountRoot(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(filepath.Join(sub, "lost+found"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fs := vfs.NewLocalFS(dir, dir)
+	p := NewPane(fs, sub, false, 0, nil)
+	p.Load()
+	found := false
+	for _, e := range p.Entries {
+		if e.Name == "lost+found" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("lost+found outside a mount root should be listed, got %v", p.Entries)
+	}
+}
+
+// Toggling hidden files updates both panes, keeps the cursor on its entry
+// and remembers the choice in the config.
+func TestToggleHidden(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	for _, name := range []string{".dot", "b"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := newTestModel()
+	for i := range m.panes {
+		fs := vfs.NewLocalFS(dir, dir)
+		m.replaceFS(i, fs, dir)
+		m.panes[i].Load()
+	}
+	names := func(p *Pane) []string {
+		var out []string
+		for _, e := range p.Entries {
+			if !IsParentEntry(e) {
+				out = append(out, e.Name)
+			}
+		}
+		return out
+	}
+	if got := names(m.panes[0]); len(got) != 1 || got[0] != "b" {
+		t.Fatalf("hidden files should start hidden, got %v", got)
+	}
+	for _, p := range m.panes {
+		p.Cursor = len(p.Entries) - 1 // on "b"
+	}
+
+	m.toggleHidden(10)
+	if !m.cfg.ShowHidden {
+		t.Fatal("config ShowHidden should be true after toggling")
+	}
+	for i, p := range m.panes {
+		if len(names(p)) != 2 {
+			t.Fatalf("pane %d should list the dotfile too, got %v", i, names(p))
+		}
+		if e, _ := p.CurrentEntry(); e.Name != "b" {
+			t.Fatalf("pane %d cursor should stay on b, is on %q", i, e.Name)
+		}
+	}
+
+	m.toggleHidden(10)
+	if got := names(m.panes[1]); len(got) != 1 || got[0] != "b" {
+		t.Fatalf("hidden files should be hidden again, got %v", got)
 	}
 }
