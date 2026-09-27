@@ -135,6 +135,12 @@ func FormatDevice(wholeDiskPath string, fsType FSType) error {
 		return fmt.Errorf("refusing to format %s: it holds the system disk", wholeDiskPath)
 	}
 
+	// udisks2 refuses to repartition a disk while any of its filesystems
+	// is mounted, so release them all first (as GNOME Disks does).
+	if err := unmountDisk(wholeDiskPath); err != nil {
+		return err
+	}
+
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
 		return fmt.Errorf("cannot reach the system D-Bus (is udisks2 running?): %w", err)
@@ -163,10 +169,43 @@ func FormatDevice(wholeDiskPath string, fsType FSType) error {
 	}
 
 	// 3. Format that partition with the requested filesystem.
+	// On filesystems with Unix ownership (ext4, XFS) mkfs leaves the root
+	// directory owned by root, so the user couldn't write to the freshly
+	// formatted drive; udisks2's "take-ownership" hands it to the calling
+	// user instead. FAT/exFAT have no ownership: udisks2 mounts them with
+	// the user's uid already.
+	opts := map[string]dbus.Variant{}
+	if fsType == FSExt4 || fsType == FSXFS {
+		opts["take-ownership"] = dbus.MakeVariant(true)
+	}
 	partObj := conn.Object(udisksService, partPath)
-	call = partObj.Call(udisksService+".Block.Format", 0, string(fsType), map[string]dbus.Variant{})
+	call = partObj.Call(udisksService+".Block.Format", 0, string(fsType), opts)
 	if call.Err != nil {
 		return fmt.Errorf("formatting the new partition as %s: %w", fsType, call.Err)
 	}
 	return nil
+}
+
+// unmountDisk unmounts every filesystem that lives on wholeDiskPath — the
+// disk itself (a partitionless "superfloppy") or any of its partitions.
+// /proc/mounts is re-read after each pass because a device may be mounted
+// at more than one place, and each unmount only releases one of them.
+func unmountDisk(wholeDiskPath string) error {
+	const maxPasses = 8
+	for pass := 0; pass < maxPasses; pass++ {
+		mounted := false
+		for dev, mi := range mountsByDevice() {
+			if WholeDiskDevicePath(dev) != wholeDiskPath {
+				continue
+			}
+			mounted = true
+			if err := Unmount(dev, mi.mountPoint); err != nil {
+				return fmt.Errorf("cannot unmount %s (%s) before formatting: %w — close any program using it and retry", dev, mi.mountPoint, err)
+			}
+		}
+		if !mounted {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s is still mounted after repeated unmount attempts", wholeDiskPath)
 }
