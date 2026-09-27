@@ -129,7 +129,8 @@ func (mg *Manager) LocalPath(src vfs.FileSystem, vfsPath string) (string, error)
 // Expose mounts src right away, rather than on first use, so that other
 // applications can browse it too for as long as shfm runs: its mount is
 // listed in their file dialogs, next to the network places of the desktop's
-// own file manager (in KDE's, see networkSubtype). Like LocalPath, it blocks
+// own file manager (in KDE's, see networkSubtype; in GTK's, through the
+// optional GIO module in contrib/gio-module). Like LocalPath, it blocks
 // while connecting: never call it from the UI's event loop.
 //
 // Only network sources are exposed. A single-session source (an MTP

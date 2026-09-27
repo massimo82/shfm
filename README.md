@@ -24,7 +24,7 @@ mouse, in one pane or two side by side.
   folder sizes.
 - Opening files with the desktop's default application.
 - Open network sources listed in other applications' file dialogs, in
-  KDE.
+  GNOME/GTK and KDE.
 - Properties dialog, to view and edit permissions, owner and group.
 - Automatic elevation (`pkexec`) for operations that need it, with the
   password asked inside shfm.
@@ -349,6 +349,22 @@ before.
 - **KDE** (Dolphin's and KDE applications' file dialogs, and GTK
   applications' under Plasma, through the file chooser portal): works
   out of the box. The source is listed under **Remote**.
+- **GNOME and other GTK/GIO desktops** (GTK applications' file dialogs,
+  the file chooser portal's included): needs a small optional GIO module,
+  which lists the source under **Other Locations → Networks**:
+
+  ```sh
+  make -C contrib/gio-module
+  sudo make -C contrib/gio-module install     # uninstall: sudo make -C contrib/gio-module uninstall
+  ```
+
+  It only needs GLib's development files (`glib2` on Arch, `libglib2.0-dev`
+  on Debian/Ubuntu) and works with or without gvfs. Applications started
+  before it was installed see it once restarted — and so does the file
+  chooser portal, which many applications (Thunderbird and Firefox
+  included) show their file dialog through, and which runs for the whole
+  session: `systemctl --user restart xdg-desktop-portal-gtk`, or log out
+  and back in.
 
 Applications get plain local paths (the mount lives under
 `$XDG_RUNTIME_DIR/shfm/`), so what they open or save goes through shfm's
@@ -971,6 +987,7 @@ internal/vfs/                  filesystem abstraction (Local/SMB/NFS/SFTP/MTP)
 internal/mtp/                   MTP device discovery + thin adapter over go-mtpfs
 internal/opener/                default-app resolution (XDG) and launching
 internal/fusemount/             FUSE mounts of network sources, for opening remote files in place
+contrib/gio-module/             optional GIO module listing those mounts in GTK file dialogs
 internal/trash/                 Freedesktop.org Trash Specification
 internal/fileops/               copy/move/delete/rename (cross-backend, with progress)
 internal/mirror/                one-way mirrors: rsync (local) and generic engine
