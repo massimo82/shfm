@@ -21,4 +21,4 @@
 package version
 
 // Version is the current release, in semantic-versioning form (no "v" prefix).
-const Version = "0.2.8"
+const Version = "0.2.9"
