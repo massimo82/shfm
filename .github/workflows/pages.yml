@@ -1,0 +1,53 @@
+name: Website
+
+# shfm's website on GitHub Pages (https://massimo82.github.io/shfm/), made
+# from README.md by contrib/site/build.py, at every change of what it's made
+# of. Needs Settings → Pages → Source set to "GitHub Actions".
+on:
+  push:
+    branches: [main]
+    paths:
+      - README.md
+      - docs/**
+      - contrib/site/**
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # --strict: a link to a missing page or anchor fails the build
+      - name: Build
+        run: |
+          pip install -r contrib/site/requirements.txt
+          python3 contrib/site/build.py _site-src
+          mkdocs build --strict -f _site-src/mkdocs.yml -d "$GITHUB_WORKSPACE/_site"
+
+      - uses: actions/upload-pages-artifact@v4
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

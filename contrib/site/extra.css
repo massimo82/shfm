@@ -1,0 +1,2 @@
+/* Wide tables (keyboard shortcuts) scroll inside themselves on narrow screens */
+.md-typeset table:not([class]) { display: block; overflow-x: auto; }

@@ -34,13 +34,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
 	chromem "github.com/philippgille/chromem-go"
 	llama "github.com/tcpipuk/llama-go"
 	"github.com/tmc/langchaingo/textsplitter"
+	"golang.org/x/sys/unix"
 
 	"shfm/internal/applog"
 	"shfm/internal/semantic/extract"
@@ -293,7 +293,7 @@ func redirectLlamaLogging() error {
 	if err != nil {
 		return err
 	}
-	return syscall.Dup2(int(f.Fd()), int(os.Stderr.Fd()))
+	return unix.Dup2(int(f.Fd()), int(os.Stderr.Fd()))
 }
 
 // indexDir returns the persistent on-disk location of root's index,

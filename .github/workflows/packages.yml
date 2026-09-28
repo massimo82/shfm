@@ -145,7 +145,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debhelper dpkg-dev \
+          sudo apt-get install -y --no-install-recommends build-essential debhelper dpkg-dev \
             g++ cmake curl pkgconf libusb-1.0-0-dev libglib2.0-dev \
             libvulkan-dev glslc spirv-headers
 
@@ -182,7 +182,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debhelper dpkg-dev curl ca-certificates
+          sudo apt-get install -y --no-install-recommends build-essential debhelper dpkg-dev curl ca-certificates
 
       - name: Build
         run: |

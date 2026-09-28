@@ -5,6 +5,12 @@ on local disks, removable drives, phones and cameras (MTP) and network
 shares (SMB, NFS, SFTP) from a single interface, driven by keyboard or
 mouse, in one pane or two side by side.
 
+<!-- site:skip -->
+Website: **<https://massimo82.github.io/shfm/>** — this README, page by
+page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/latest)
+(see [Packages](#packages)).
+<!-- /site:skip -->
+
 ![shfm in single-pane mode, browsing a home directory](docs/screenshot.png)
 
 ## Features
@@ -1382,6 +1388,7 @@ contrib/desktop-integration/    optional desktop entry, D-Bus and portal files r
 contrib/arch/, contrib/debian/  packages with every feature (PKGBUILD, Debian packaging), built for each release
 contrib/arch/shfm-models*/, contrib/debian-models/  the models packages for semantic search
 contrib/fetch-llama-go.sh       fetches the pinned llama-go and llama.cpp sources for the semantic search build
+contrib/site/                   the website: this README split into pages (MkDocs), published on GitHub Pages
 internal/filemanager1/          org.freedesktop.FileManager1 service ("Show in folder")
 internal/portal/                xdg-desktop-portal file chooser backend
 internal/pick/                  the portal backend's conversation with shfm as a file dialog

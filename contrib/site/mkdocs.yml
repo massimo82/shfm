@@ -1,0 +1,60 @@
+# shfm's website, made from README.md by build.py (which adds the nav), and
+# published on GitHub Pages by .github/workflows/pages.yml.
+site_name: shfm — Shell File Manager
+site_description: A file manager for the terminal, for local disks, removable drives, phones (MTP) and SMB, NFS and SFTP shares.
+site_url: https://massimo82.github.io/shfm/
+repo_url: https://github.com/massimo82/shfm
+repo_name: massimo82/shfm
+edit_uri: ""
+copyright: shfm is free software, released under the GNU GPL v3 or later.
+
+theme:
+  name: material
+  icon:
+    logo: material/folder-multiple-outline
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Dark theme
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Light theme
+  features:
+    - navigation.instant
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+# With --strict, a link to a missing page or anchor fails the build
+validation:
+  omitted_files: warn
+  unrecognized_links: warn
+  anchors: warn
+
+extra_css:
+  - extra.css
+
+markdown_extensions:
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - tables
+  - attr_list
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
