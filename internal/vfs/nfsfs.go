@@ -18,6 +18,7 @@
 package vfs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -79,10 +80,28 @@ func dialNFSConn(opts NFSOptions) (*nfsConn, error) {
 	auth := rpc.NewAuthUnix("shfm", opts.UID, opts.GID)
 	target, err := mount.Mount(opts.Export, auth.Auth())
 	if err != nil {
+		reserved := mount.ReservedPort()
 		mount.Unmount()
-		return nil, fmt.Errorf("mounting export %q failed: %w", opts.Export, err)
+		err = fmt.Errorf("mounting export %q failed: %w", opts.Export, err)
+		if errors.Is(err, nfsc.ErrMountAccess) && !reserved {
+			err = fmt.Errorf("%w (%s)", err, reservedPortHint())
+		}
+		return nil, err
 	}
 	return &nfsConn{mount: mount, target: target}, nil
+}
+
+// reservedPortHint explains the likely cause of MNT3ERR_ACCES when the
+// mount call came from an unprivileged port: the export is "secure" (the
+// default) and this binary lacks CAP_NET_BIND_SERVICE.
+func reservedPortHint() string {
+	exe, err := os.Executable()
+	if err != nil {
+		exe = "shfm"
+	}
+	return fmt.Sprintf("the server may require a privileged source port: "+
+		"sudo setcap cap_net_bind_service=+ep %s, "+
+		"or add \"insecure\" to the export", exe)
 }
 
 // withTarget runs op on the mounted export, reconnecting if the

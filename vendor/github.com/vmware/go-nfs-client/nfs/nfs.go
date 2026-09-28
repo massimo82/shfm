@@ -256,7 +256,7 @@ func dialService(addr string, port int) (*rpc.Client, error) {
 	// the "insecure" option).
 	r1 := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for tries := 0; tries < 100; tries++ {
-		p := r1.Intn(1024)
+		p := 1 + r1.Intn(1023) // not 0: that asks the kernel for an ephemeral port
 		ldr := &net.TCPAddr{Port: p}
 		util.Debugf("Connecting to %s from reserved port %d", raddr, p)
 

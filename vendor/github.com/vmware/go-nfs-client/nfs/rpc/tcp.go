@@ -20,6 +20,13 @@ type tcpTransport struct {
 	rlock, wlock sync.Mutex
 }
 
+// ReservedPort reports whether the connection originates from a
+// reserved (<1024) port, which "secure" NFS exports require.
+func (t *tcpTransport) ReservedPort() bool {
+	a, ok := t.wc.LocalAddr().(*net.TCPAddr)
+	return ok && a.Port < 1024
+}
+
 // Get the response from the conn, buffer the contents, and return a reader to
 // it.
 func (t *tcpTransport) recv() (io.ReadSeeker, error) {

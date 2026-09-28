@@ -32,6 +32,11 @@ const (
 	MNT3ErrServerFault = 10006 // A failure on the server
 )
 
+// ErrMountAccess is returned by Mount when the server denies the MNT
+// call (MNT3ERR_ACCES): the client isn't allowed by the export, or the
+// export is "secure" and the call didn't come from a reserved port.
+var ErrMountAccess = errors.New("MNT3ERR_ACCES")
+
 type Mount struct {
 	*rpc.Client
 	auth    rpc.Auth
@@ -118,7 +123,7 @@ func (m *Mount) Mount(dirpath string, auth rpc.Auth) (*Target, error) {
 	case MNT3ErrIO:
 		return nil, errors.New("MNT3ERR_IO")
 	case MNT3ErrAcces:
-		return nil, errors.New("MNT3ERR_ACCES")
+		return nil, ErrMountAccess
 	case MNT3ErrNotDir:
 		return nil, errors.New("MNT3ERR_NOTDIR")
 	case MNT3ErrNameTooLong:
