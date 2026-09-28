@@ -42,10 +42,13 @@ install=shfm.install
 # and the llama.cpp commit that llama-go's submodule points at
 _llamago=992bbf8cfdc7484d4b3d724fa9133c5a87d6310d
 _llamacpp=90c26fcd4b2114b4aa39d09d69318cb8f438d27a
+# The first checksum is the release's source archive, only known once it's
+# tagged: the release workflow publishes this PKGBUILD with it filled in
+# (shfm-PKGBUILD.tar.gz), and it's copied back here afterwards.
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         "llama-go-$_llamago.tar.gz::https://github.com/tcpipuk/llama-go/archive/$_llamago.tar.gz"
         "llama.cpp-$_llamacpp.tar.gz::https://github.com/ggml-org/llama.cpp/archive/$_llamacpp.tar.gz")
-sha256sums=('0383236e7e502856179b5a8ca6e4a904c406b17caea01570c57fa0557178396f'
+sha256sums=('30bf4867e0fa0e55403f9431f2526e159101f3d9e868bb8a1d1f5256115c6cd4'
             '6fd78f62efb2bd36bbd370f1be3fdda25b33cb7ee8076a9b5296fea4e513339c'
             'f679a75f99b6d2ca2efd25596c2d856745eec2a42c43cfdd7e00a373d40c4357')
 
