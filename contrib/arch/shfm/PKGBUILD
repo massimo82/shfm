@@ -35,7 +35,7 @@ optdepends=('vulkan-driver: GPU acceleration for semantic search'
             'pandoc-cli: semantic search in more document formats'
             'libreoffice: semantic search in office documents'
             'shfm-models: models for semantic search (or shfm-models-4b)')
-options=('!lto')
+options=('!lto' '!debug')
 install=shfm.install
 
 # llama-go pinned to the commit shfm's patches in third_party/llama-go target,
