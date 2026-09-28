@@ -46,7 +46,8 @@ jobs:
           version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)
           pkgver=$(sed -n 's/^pkgver=//p' contrib/arch/shfm/PKGBUILD)
           debver=$(sed -n '1s/^shfm (\(.*\)).*/\1/p' contrib/debian/changelog)
-          for v in "internal/version/version.go:$version" "contrib/arch/shfm/PKGBUILD:$pkgver" "contrib/debian/changelog:$debver"; do
+          rpmver=$(sed -n 's/^Version: *//p' contrib/rpm/shfm.spec)
+          for v in "internal/version/version.go:$version" "contrib/arch/shfm/PKGBUILD:$pkgver" "contrib/debian/changelog:$debver" "contrib/rpm/shfm.spec:$rpmver"; do
             if [ "v${v#*:}" != "$GITHUB_REF_NAME" ]; then
               echo "::error::tag $GITHUB_REF_NAME does not match ${v%%:*} (v${v#*:})"
               exit 1
@@ -99,4 +100,4 @@ jobs:
             --generate-notes \
             --verify-tag \
             $prerelease \
-            dist/*.tar.gz dist/*.pkg.tar.zst dist/*.pkg.tar dist/*.deb dist/*.sha256
+            dist/*.tar.gz dist/*.pkg.tar.zst dist/*.pkg.tar dist/*.deb dist/*.rpm dist/*.sha256

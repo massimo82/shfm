@@ -622,8 +622,13 @@ binaries (base build, no semantic search):
 - **Debian 13+, Ubuntu 24.04+ and derivatives** (amd64, arm64):
   `sudo apt install ./shfm_VERSION_amd64.deb`; built from
   `contrib/debian/` (see the top of `contrib/debian/rules`).
+- **Fedora 44+ and derivatives** (x86_64, aarch64):
+  `sudo dnf install ./shfm-VERSION-1.fc44.x86_64.rpm`; the release's
+  `shfm-VERSION-1.fc44.src.rpm` builds it again with `rpmbuild --rebuild`
+  (`--with native` for this machine's CPU only); it's
+  `contrib/rpm/shfm.spec` here.
 
-Both set the NFS capability (see [Notes](#notes)) on install and on every
+All of them set the NFS capability (see [Notes](#notes)) on install and on every
 upgrade, and register shfm as a file manager next to the others without
 taking over: see [Choosing shfm explicitly](#choosing-shfm-explicitly).
 Semantic search on x86_64 needs a CPU with AVX2 (2013 onwards), as
@@ -637,12 +642,14 @@ still come first:
 
 - **`shfm-models`**: Qwen3-Embedding-0.6B and the reranker, about 1 GB,
   models included: `shfm-models-1-1-any.pkg.tar` (Arch),
-  `shfm-models_1_all.deb` (Debian/Ubuntu).
+  `shfm-models_1_all.deb` (Debian/Ubuntu), `shfm-models-1-1.fc44.noarch.rpm`
+  (Fedora).
 - **`shfm-models-4b`**: Qwen3-Embedding-4B, the default, and the reranker,
   about 4.7 GB — too large for a release asset, so they're downloaded from
   Hugging Face, checksums checked: on Arch when building the release's
   `shfm-models-4b-PKGBUILD.tar.gz` with `makepkg -si`, on Debian/Ubuntu
-  when installing `shfm-models-4b_1_all.deb` (removing it removes them).
+  and Fedora when installing `shfm-models-4b_1_all.deb` or
+  `shfm-models-4b-1-1.fc44.noarch.rpm` (removing it removes them).
 
 ## Building
 
@@ -1385,8 +1392,8 @@ internal/opener/                default-app resolution (XDG) and launching
 internal/fusemount/             FUSE mounts of network sources, for opening remote files in place
 contrib/gio-module/             optional GIO module listing those mounts in GTK file dialogs
 contrib/desktop-integration/    optional desktop entry, D-Bus and portal files registering shfm as a file manager
-contrib/arch/, contrib/debian/  packages with every feature (PKGBUILD, Debian packaging), built for each release
-contrib/arch/shfm-models*/, contrib/debian-models/  the models packages for semantic search
+contrib/arch/, contrib/debian/, contrib/rpm/  packages with every feature (PKGBUILD, Debian packaging, RPM spec), built for each release
+contrib/arch/shfm-models*/, contrib/debian-models/, contrib/rpm/shfm-models.spec  the models packages for semantic search
 contrib/fetch-llama-go.sh       fetches the pinned llama-go and llama.cpp sources for the semantic search build
 contrib/site/                   the website: this README split into pages (MkDocs), published on GitHub Pages
 internal/filemanager1/          org.freedesktop.FileManager1 service ("Show in folder")
@@ -1418,8 +1425,9 @@ vendor/                         Go module dependencies (the default build works 
 The current release is **0.2.12**, shown in the title bar next to "Shell File
 Manager". It lives in a single constant, `Version` in
 `internal/version/version.go`; to cut a new release change it there, and
-the README's title line, `pkgver` in `contrib/arch/shfm/PKGBUILD` and a new entry
-at the top of `contrib/debian/changelog`, then push a `vVERSION` tag: the
+the README's title line, `pkgver` in `contrib/arch/shfm/PKGBUILD`, a new entry
+at the top of `contrib/debian/changelog`, and `Version` and a `%changelog`
+entry in `contrib/rpm/shfm.spec`, then push a `vVERSION` tag: the
 release workflow checks they all agree, and publishes the binaries and the
 packages.
 

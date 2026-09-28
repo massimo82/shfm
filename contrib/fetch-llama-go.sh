@@ -6,7 +6,8 @@
 # same as step 1 of README "Full build", from checksummed archives instead of
 # git. Run from anywhere; does nothing if llama.cpp is already there.
 #
-# contrib/arch/shfm/PKGBUILD pins the same commits: keep them in step.
+# contrib/arch/shfm/PKGBUILD and contrib/rpm/shfm.spec pin the same commits:
+# keep them in step.
 
 set -eu
 

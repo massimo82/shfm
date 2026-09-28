@@ -1,9 +1,10 @@
 name: Packages
 
-# The Arch and Debian/Ubuntu packages: shfm with every feature (semantic
-# search with Vulkan, desktop integration, GIO module), from contrib/arch/shfm
-# and contrib/debian, and the models for its semantic search, from
-# contrib/arch/shfm-models* and contrib/debian-models. Called by release.yml,
+# The Arch, Debian/Ubuntu and Fedora packages: shfm with every feature
+# (semantic search with Vulkan, desktop integration, GIO module), from
+# contrib/arch/shfm, contrib/debian and contrib/rpm/shfm.spec, and the models
+# for its semantic search, from contrib/arch/shfm-models*,
+# contrib/debian-models and contrib/rpm/shfm-models.spec. Called by release.yml,
 # which publishes them; run it by hand (Actions → Packages → Run workflow) to
 # try the packaging on a branch, the packages are then left as the run's
 # artifacts.
@@ -213,5 +214,101 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: package-debian-models
+          path: dist/*
+          if-no-files-found: error
+
+  fedora:
+    # Built on Fedora 44: installs there and on later releases
+    name: fedora (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container: fedora:44
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64, runner: ubuntu-24.04 }
+          - { arch: aarch64, runner: ubuntu-24.04-arm }
+    steps:
+      - name: Install tools
+        run: dnf -y install git tar rpm-build rpmdevtools
+
+      - uses: actions/checkout@v5
+
+      # The source archive is the checked-out tree, as the release's own
+      # archive would be; llama-go and llama.cpp are the spec's downloads
+      - name: Get the sources
+        run: |
+          version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)
+          sources=$(rpm --eval '%{_sourcedir}')
+          mkdir -p "$sources"
+          tar --exclude=.git --transform "s|^\.|shfm-$version|" \
+            -czf "$sources/shfm-$version.tar.gz" -C "$GITHUB_WORKSPACE" .
+          spectool -g -R -s 1,2 contrib/rpm/shfm.spec
+
+      - name: Build
+        run: |
+          dnf -y builddep contrib/rpm/shfm.spec
+          rpmbuild -ba contrib/rpm/shfm.spec
+
+      - name: Install and run
+        run: |
+          dnf -y install "$(rpm --eval '%{_rpmdir}')"/*/shfm-*.rpm
+          getcap /usr/bin/shfm | grep -q cap_net_bind_service
+          shfm --help
+
+      - name: Collect
+        run: |
+          mkdir dist
+          cp "$(rpm --eval '%{_rpmdir}')"/*/shfm-*.rpm dist/
+          # The source package once, from the x86_64 build
+          if [ "${{ matrix.arch }}" = x86_64 ]; then cp "$(rpm --eval '%{_srcrpmdir}')"/shfm-*.src.rpm dist/; fi
+          (cd dist && for f in *.rpm; do sha256sum "$f" > "$f.sha256"; done)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-fedora-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  fedora-models:
+    name: fedora models
+    runs-on: ubuntu-latest
+    container: fedora:44
+    steps:
+      - name: Install tools
+        run: dnf -y install git tar rpm-build rpmdevtools curl
+
+      - uses: actions/checkout@v5
+
+      - name: Build
+        run: |
+          spectool -g -R contrib/rpm/shfm-models.spec
+          rpmbuild -bb contrib/rpm/shfm-models.spec
+
+      # --nodeps: they depend on shfm, built by the other job.
+      # shfm-models-4b downloads its models when installed, and removes them
+      # when removed.
+      - name: Install and remove
+        run: |
+          R=$(rpm --eval '%{_rpmdir}')/noarch
+          M=/usr/share/shfm/models
+          rpm -i --nodeps $R/shfm-models-4b-*.rpm
+          ls -l $M
+          test -f $M/Qwen3-Embedding-4B-Q8_0.gguf && test -f $M/Qwen3-Reranker-0.6B-Q4_K_M.gguf
+          rpm -e --nodeps shfm-models-4b
+          test ! -e $M
+          rpm -i --nodeps $R/shfm-models-1-*.rpm
+          test -f $M/Qwen3-Embedding-0.6B-Q8_0.gguf && test -f $M/Qwen3-Reranker-0.6B-Q4_K_M.gguf
+          rpm -e --nodeps shfm-models
+
+      - name: Collect
+        run: |
+          mkdir dist
+          cp "$(rpm --eval '%{_rpmdir}')"/noarch/*.rpm dist/
+          (cd dist && for f in *.rpm; do sha256sum "$f" > "$f.sha256"; done)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-fedora-models
           path: dist/*
           if-no-files-found: error

@@ -1,5 +1,5 @@
-# The models: file, sha256, URL. shfm-models ships the first two, and
-# shfm-models-4b downloads the other two when installed. contrib/arch pins
+# shfm-models' models: file, sha256, URL (shfm-models-4b's are in its
+# postinst). contrib/arch/shfm-models* and contrib/rpm/shfm-models.spec pin
 # the same files: keep them in step.
 Qwen3-Embedding-0.6B-Q8_0.gguf 06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439 https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf
 Qwen3-Reranker-0.6B-Q4_K_M.gguf c04f5f5657c52e04538c455e8c62817db3d3b795b39e9f547f8581510445f075 https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp/resolve/main/Qwen3-Reranker-0.6B-Q4_K_M.gguf
