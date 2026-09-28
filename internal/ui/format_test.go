@@ -18,6 +18,8 @@
 package ui
 
 import (
+	"errors"
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -196,5 +198,19 @@ func TestToggleHidden(t *testing.T) {
 	m.toggleHidden(10)
 	if got := names(m.panes[1]); len(got) != 1 || got[0] != "b" {
 		t.Fatalf("hidden files should be hidden again, got %v", got)
+	}
+}
+
+// Opening the fsck lost+found at a mount point says what it is, not just
+// "permission denied". Needs one on this machine (the root filesystem's,
+// on ext4) that the user running the tests can't read.
+func TestLostAndFoundPermissionMessage(t *testing.T) {
+	if _, err := os.ReadDir("/lost+found"); err == nil || !errors.Is(err, iofs.ErrPermission) {
+		t.Skip("no unreadable /lost+found here")
+	}
+	fs := vfs.NewLocalFS("Local", "/")
+	p := NewPane(fs, "/lost+found", true, 0, nil)
+	if p.Err != errLostAndFound {
+		t.Fatalf("error = %v, want errLostAndFound", p.Err)
 	}
 }

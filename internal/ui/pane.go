@@ -19,6 +19,7 @@ package ui
 
 import (
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -31,6 +32,10 @@ import (
 )
 
 var errNotADirectory = errors.New("the given path is not a folder")
+
+// errLostAndFound replaces "permission denied" inside lost+found (see
+// isLostAndFound), which says nothing of what the folder is.
+var errLostAndFound = errors.New("lost+found is where fsck puts the pieces of damaged files it recovers: only root can open it, and it's normally empty")
 
 // PaneMode distinguishes normal filesystem browsing from the trash view.
 type PaneMode int
@@ -161,6 +166,10 @@ func (p *Pane) Load() {
 	entries, err := p.FS.List(p.Path)
 	if err != nil {
 		p.Err = err
+		if errors.Is(err, fs.ErrPermission) &&
+			isLostAndFound(p.FS, p.FS.Dir(p.Path), vfs.Entry{Name: p.FS.Base(p.Path), IsDir: true}) {
+			p.Err = errLostAndFound
+		}
 		p.Entries = nil
 		return
 	}
