@@ -1,3 +1,10 @@
+shfm (0.2.12) unstable; urgency=medium
+
+  * Semantic search builds on arm64.
+  * Website on GitHub Pages, made from the README.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Mon, 28 Sep 2026 14:45:00 +0200
+
 shfm (0.2.11) unstable; urgency=medium
 
   * Packages for Arch and Debian/Ubuntu, and packaged models for semantic
