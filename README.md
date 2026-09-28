@@ -64,7 +64,13 @@ operation (see [Notes](#notes)); for archives in formats the Go standard
 library can't read or write (see [Archives](#archives)), `xz`, `zstd`,
 `bzip2`, `lzip`, `lz4`, `bsdtar`, `7z` and `unrar` when they happen to be
 installed; and, only for the optional semantic content search, `pandoc`
-and `libreoffice`/`soffice`.
+and `libreoffice`/`soffice`. None of them is assumed to be there. They are
+looked up on `$PATH` first, then in the folders programs are usually
+installed in (`/usr/local/bin`, `/usr/bin`, `/usr/sbin`..., NixOS's
+`/run/current-system/sw/bin` and profiles, `/snap/bin`, Homebrew,
+`~/.local/bin`, `~/bin`), because shfm started by D-Bus (as the portal's
+file dialog) or by a desktop launcher may get a much shorter `$PATH` than
+your shell's.
 
 ## Layout
 
@@ -285,7 +291,11 @@ first next time.
 
 Not created: RAR (its compressor is proprietary), `.tar.lzma` (superseded
 by xz) and single compressed files such as `.gz` (an archive does the same
-job). External tools run without a terminal, so one asking for an
+job). Which formats are available depends on the tools installed: the
+create dialog lists every format, showing the ones this machine can't
+write dimmed with what to install (`.tar.lz — lzip · needs lzip or
+bsdtar`), and extracting an archive whose tool is missing is refused
+straight away, saying what to install. External tools run without a terminal, so one asking for an
 encrypted archive's password fails instead of taking over shfm's screen.
 The same code (`internal/archive`) reads the archives indexed by the
 semantic search.
@@ -1124,9 +1134,9 @@ llama-go's Go/C++ wrapper but will fail at the final link step with
    after any re-clone or update of `third_party/llama-go`.
 
 Separately from all of the above: `internal/semantic/extract` also looks
-for `pandoc` and `libreoffice`/`soffice` on `$PATH` at runtime (checked
-once, lazily, the first time semantic search actually needs to extract
-text — see `extract/external.go`) and, when found, uses them **instead of**
+for `pandoc` and `libreoffice`/`soffice` at runtime, on `$PATH` or in the
+usual install folders (checked once, lazily, the first time semantic
+search actually needs to extract text — see `extract/external.go`) and, when found, uses them **instead of**
 this package's own minimal built-in parsers wherever they can do better:
 
 - `pandoc` reads DOCX/RTF/ODT straight to Markdown in one step — far more
@@ -1156,7 +1166,7 @@ more complete.
 ZIP/TAR/TAR.GZ/GZ/BZ2/TAR.BZ2 archives are always indexed (bzip2 support
 comes from the Go standard library, same as gzip); every other format in
 the [Archives](#archives) table (xz/lzma, zstd, lzip, lz4, 7z, RAR) is
-indexed when the tool it needs there is found on `$PATH` — graceful
+indexed when the tool it needs there is found — graceful
 upgrades, same tiering as pandoc/LibreOffice above, and the same reader
 (`internal/archive`) extraction uses. Every archive format works by looking
 inside for whatever document types are already supported (recursively

@@ -20,6 +20,8 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -77,7 +79,7 @@ func TestCreateArchiveDialogThenExtract(t *testing.T) {
 
 	m.askCreateArchive()
 	d := &m.dialog
-	kinds := archive.Creatable()
+	kinds := archive.CreateKinds()
 	if d.Kind != DialogCreateArchive || len(d.Items) != len(kinds) {
 		t.Fatalf("dialog %v with %d formats", d.Kind, len(d.Items))
 	}
@@ -133,5 +135,69 @@ func TestExtractIgnoresNonArchives(t *testing.T) {
 	m.doExtract()
 	if m.dialog.Kind != DialogNone || len(m.tasks) != 0 {
 		t.Errorf("extract started on a non-archive")
+	}
+}
+
+// withArchiveNeeds simulates a machine where only the formats in have can
+// be read and written: every other one needs "lzip or bsdtar".
+func withArchiveNeeds(t *testing.T, have ...archive.Kind) {
+	t.Helper()
+	oldRead, oldCreate := archiveReadNeeds, archiveCreateNeeds
+	t.Cleanup(func() { archiveReadNeeds, archiveCreateNeeds = oldRead, oldCreate })
+	needs := func(k archive.Kind) string {
+		if slices.Contains(have, k) {
+			return ""
+		}
+		return "lzip or bsdtar"
+	}
+	archiveReadNeeds, archiveCreateNeeds = needs, needs
+}
+
+func TestCreateArchiveDialogMissingTools(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("alpha"), 0o644)
+	withArchiveNeeds(t, archive.KindZip, archive.KindTar)
+	m := archiveTestModel(t, dir)
+	m.archiveKind = archive.KindTarLzip // remembered, but not writable here
+	moveCursorTo(t, m.activePane(), "a.txt")
+
+	m.askCreateArchive()
+	d := &m.dialog
+	kinds := archive.CreateKinds()
+	zip, tar := slices.Index(kinds, archive.KindZip), slices.Index(kinds, archive.KindTar)
+	if len(d.Items) != len(kinds) || d.ItemIdx != zip {
+		t.Fatalf("%d formats, #%d selected; want all %d, ZIP selected", len(d.Items), d.ItemIdx, len(kinds))
+	}
+	if view := m.renderDialogBox(); !strings.Contains(view, ".tar.lz — lzip · needs lzip or bsdtar") {
+		t.Errorf("disabled format not shown with its need:\n%s", view)
+	}
+	// The arrows skip what can't be written, both ways.
+	m.updateDialogKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	if d.ItemIdx != tar || d.Inputs[0].Value() != "a.tar" {
+		t.Errorf("after down: #%d %q, want TAR", d.ItemIdx, d.Inputs[0].Value())
+	}
+	m.updateDialogKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	if d.ItemIdx != zip {
+		t.Errorf("after up: #%d, want ZIP", d.ItemIdx)
+	}
+	// Clicking a disabled one says what to install, and changes nothing.
+	m.selectArchiveKind(slices.Index(kinds, archive.KindTarLzip))
+	if d.ItemIdx != zip || d.Inputs[0].Value() != "a.zip" || d.Message != "Install lzip or bsdtar to create .tar.lz archives" {
+		t.Errorf("disabled pick: #%d %q, message %q", d.ItemIdx, d.Inputs[0].Value(), d.Message)
+	}
+}
+
+func TestExtractMissingTool(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.7z"), []byte("not read"), 0o644)
+	withArchiveNeeds(t, archive.KindZip)
+	m := archiveTestModel(t, dir)
+	moveCursorTo(t, m.activePane(), "a.7z")
+	m.doExtract()
+	if len(m.tasks) != 0 || !m.statusErr || m.status != "Can't extract a.7z: install lzip or bsdtar" {
+		t.Errorf("tasks %d, status %q", len(m.tasks), m.status)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a")); err == nil {
+		t.Errorf("destination folder created")
 	}
 }

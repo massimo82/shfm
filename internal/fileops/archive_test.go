@@ -20,12 +20,15 @@ package fileops
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"shfm/internal/archive"
 	"shfm/internal/vfs"
@@ -78,6 +81,24 @@ func sameTree(t *testing.T, got, want map[string]string) {
 	}
 }
 
+// dumpArchive logs every entry of the archive at p, as shfm's reader and
+// (when installed) bsdtar each see it, to tell a mode lost while creating
+// the archive from one lost while reading it.
+func dumpArchive(t *testing.T, p string) {
+	t.Helper()
+	err := archive.Walk(context.Background(), archive.Source{Name: p, LocalPath: p}, func(e archive.Entry, _ io.Reader) error {
+		t.Logf("walk: %s type=%v mode=%v mtime=%v", e.Name, e.Type, e.Mode, e.ModTime)
+		return nil
+	})
+	if err != nil {
+		t.Logf("walk: %v", err)
+	}
+	if bsdtar, err := exec.LookPath("bsdtar"); err == nil {
+		out, err := exec.Command(bsdtar, "-tvf", p).CombinedOutput()
+		t.Logf("bsdtar -tvf: %v\n%s", err, out)
+	}
+}
+
 func writeTarFile(t *testing.T, p string, hdrs []*tar.Header, contents []string) {
 	t.Helper()
 	var buf bytes.Buffer
@@ -112,6 +133,11 @@ func TestCreateThenExtract(t *testing.T) {
 	os.WriteFile(filepath.Join(src, "docs", "deep", "b.txt"), []byte("beta"), 0o600)
 	os.WriteFile(filepath.Join(src, "note.md"), []byte("note"), 0o644)
 	os.Symlink("a.txt", filepath.Join(src, "docs", "link"))
+	// Whole seconds: the precision every format keeps.
+	fileTime := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	dirTime := time.Date(2021, 6, 7, 8, 9, 10, 0, time.UTC)
+	os.Chtimes(filepath.Join(src, "docs", "deep", "b.txt"), fileTime, fileTime)
+	os.Chtimes(filepath.Join(src, "docs", "deep"), dirTime, dirTime)
 	fs := vfs.NewLocalFS("local", "/")
 	items := []Item{{FS: fs, Path: filepath.Join(src, "docs")}, {FS: fs, Path: filepath.Join(src, "note.md")}}
 
@@ -135,9 +161,20 @@ func TestCreateThenExtract(t *testing.T) {
 				"bundle/docs/link":       "-> a.txt",
 				"bundle/note.md":         "note",
 			})
-			st, err := os.Stat(filepath.Join(out, "bundle", "bundle", "docs", "deep", "b.txt"))
-			if err != nil || st.Mode().Perm() != 0o600 {
-				t.Errorf("mode of b.txt: %v, %v", st, err)
+			deep := filepath.Join(out, "bundle", "bundle", "docs", "deep")
+			st, err := os.Stat(filepath.Join(deep, "b.txt"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st.Mode().Perm() != 0o600 {
+				t.Errorf("mode of b.txt: %v", st.Mode())
+				dumpArchive(t, dest)
+			}
+			if !st.ModTime().Equal(fileTime) {
+				t.Errorf("mtime of b.txt: %v, want %v", st.ModTime(), fileTime)
+			}
+			if st, err := os.Stat(deep); err != nil || !st.ModTime().Equal(dirTime) {
+				t.Errorf("mtime of docs/deep: %v, want %v", st, dirTime)
 			}
 		})
 	}

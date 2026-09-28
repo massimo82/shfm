@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"shfm/internal/toolpath"
 )
 
 // pkexec is located once, lazily, and cached — the same pattern as every
@@ -56,7 +58,7 @@ func locatePkexec() {
 		return
 	}
 	defer func() { pkexecLocated = true }()
-	if p, err := exec.LookPath("pkexec"); err == nil {
+	if p, err := toolpath.Find("pkexec"); err == nil {
 		pkexecPath = p
 	}
 }

@@ -209,10 +209,13 @@ func (m *Model) renderDialogBox() string {
 		for i, it := range d.Items {
 			prefix := "  "
 			s := styleFile
-			if i == d.ItemIdx {
+			switch {
+			case d.ArchiveNeeds[i] != "":
+				s, it = styleDim, it+" · needs "+d.ArchiveNeeds[i]
+			case i == d.ItemIdx:
 				prefix, s = "\u25b8 ", styleAccent
 			}
-			b.WriteString(prefix + s.Render(it) + "\n")
+			b.WriteString(prefix + s.Render(truncate(it, 58)) + "\n")
 		}
 		b.WriteString("\n" + d.Inputs[0].View() + "\n")
 		root := fileops.ArchiveRoot(strings.TrimSpace(d.Inputs[0].Value()))

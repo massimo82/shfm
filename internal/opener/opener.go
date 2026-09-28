@@ -34,6 +34,8 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+
+	"shfm/internal/toolpath"
 )
 
 // App describes an installed application discovered from a .desktop file.
@@ -311,6 +313,11 @@ func buildCmd(app App, targetPath string) (*exec.Cmd, error) {
 	argv := expandExec(app.Exec, targetPath)
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("empty Exec= line for %s", app.Name)
+	}
+	// Found where PATH alone may miss it (see toolpath); otherwise left
+	// for exec to report as not found.
+	if p, err := toolpath.Find(argv[0]); err == nil {
+		argv[0] = p
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil

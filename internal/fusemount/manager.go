@@ -45,6 +45,7 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 
+	"shfm/internal/toolpath"
 	"shfm/internal/vfs"
 )
 
@@ -417,7 +418,7 @@ func (mg *Manager) unmountLocked(key string, mnt *mount) {
 // gone (a stale mount after a crash). Best effort.
 func lazyUnmount(dir string) {
 	for _, name := range []string{"fusermount3", "fusermount"} {
-		if bin, err := exec.LookPath(name); err == nil {
+		if bin, err := toolpath.Find(name); err == nil {
 			if exec.Command(bin, "-u", "-z", dir).Run() == nil {
 				return
 			}

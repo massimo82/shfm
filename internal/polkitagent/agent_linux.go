@@ -34,6 +34,8 @@ import (
 	"sync"
 
 	"github.com/godbus/dbus/v5"
+
+	"shfm/internal/toolpath"
 )
 
 const (
@@ -51,11 +53,19 @@ const (
 
 // The helper that checks the password with PAM and reports the outcome to
 // polkitd: reached through its socket-activated service (polkit ≥ 126),
-// or run directly (setuid root) on older setups. Variables so tests can
-// point them at fakes.
+// or run directly (setuid root) on older setups, from wherever the
+// distribution put it: only system folders, never PATH or the user's.
+// Variables so tests can point them at fakes.
 var (
 	helperSocket = "/run/polkit/agent-helper.socket"
-	helperPath   = "/usr/lib/polkit-1/polkit-agent-helper-1"
+	helperPaths  = []string{
+		"/usr/lib/polkit-1/polkit-agent-helper-1",     // Arch, Debian, Fedora...
+		"/usr/libexec/polkit-1/polkit-agent-helper-1", // libexecdir builds
+		"/usr/lib64/polkit-1/polkit-agent-helper-1",
+		"/usr/libexec/polkit-agent-helper-1",
+		"/usr/lib/policykit-1/polkit-agent-helper-1", // older Debian/Ubuntu
+		"/run/wrappers/bin/polkit-agent-helper-1",    // NixOS setuid wrapper
+	}
 )
 
 // subject is polkit's (sa{sv}) Subject, and identity its Identity.
@@ -232,7 +242,11 @@ func openHelper(name, cookie string) (io.ReadWriteCloser, error) {
 		}
 		return c, nil
 	}
-	cmd := exec.Command(helperPath, name)
+	helper := toolpath.FindFile(helperPaths...)
+	if helper == "" {
+		return nil, fmt.Errorf("polkit helper: no socket at %s, and polkit-agent-helper-1 not found", helperSocket)
+	}
+	cmd := exec.Command(helper, name)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err

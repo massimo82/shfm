@@ -18,6 +18,7 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -29,10 +30,19 @@ import (
 
 // --- extract ---------------------------------------------------------------------
 
+// archiveReadNeeds and archiveCreateNeeds say what to install to read or
+// write a format ("" when nothing): variables, so tests can simulate a
+// machine without some tool.
+var (
+	archiveReadNeeds   = archive.ReadNeeds
+	archiveCreateNeeds = archive.CreateNeeds
+)
+
 // doExtract extracts the selected archives (or the one under the cursor),
 // each into a new folder next to it named after it minus its extension,
 // as a background task. Selected entries that aren't archives are left
-// alone.
+// alone, and so are archives this machine lacks the tool to read, saying
+// what to install.
 func (m *Model) doExtract() {
 	p := m.activePane()
 	if p.Mode != PaneNormal {
@@ -40,15 +50,30 @@ func (m *Model) doExtract() {
 	}
 	var items []fileops.Item
 	others := 0
+	var unreadable []string // names of archives needing a missing tool
+	need := ""              // what the last of them needs
 	for _, n := range p.SelectedNames() {
-		if e, ok := p.entryByName(n); ok && !e.IsDir && archive.IsArchive(n) {
-			items = append(items, fileops.Item{FS: p.FS, Path: p.FS.Join(p.Path, n)})
-		} else {
+		e, ok := p.entryByName(n)
+		kind, _ := archive.Detect(n)
+		switch {
+		case !ok || e.IsDir || kind == "":
 			others++
+		case archiveReadNeeds(kind) != "":
+			unreadable = append(unreadable, n)
+			need = archiveReadNeeds(kind)
+		default:
+			items = append(items, fileops.Item{FS: p.FS, Path: p.FS.Join(p.Path, n)})
 		}
 	}
 	if len(items) == 0 {
-		m.setStatus("Nothing to extract: not an archive")
+		switch {
+		case len(unreadable) == 1:
+			m.setError("Can't extract %s: install %s", unreadable[0], need)
+		case len(unreadable) > 1:
+			m.setError("Can't extract %d archives: a tool is missing (%s needs %s)", len(unreadable), unreadable[len(unreadable)-1], need)
+		default:
+			m.setStatus("Nothing to extract: not an archive")
+		}
 		return
 	}
 	p.DeselectAll()
@@ -56,7 +81,10 @@ func (m *Model) doExtract() {
 		return fileops.Extract(items, prog)
 	})
 	m.dialog = Dialog{Kind: DialogProgress, Title: t.Kind.String(), TaskID: t.ID}
-	if others > 0 {
+	switch {
+	case len(unreadable) > 0:
+		m.setStatus("%d archive(s) left out: a tool is missing (%s needs %s)", len(unreadable), unreadable[len(unreadable)-1], need)
+	case others > 0:
 		m.setStatus("%d selected item(s) aren't archives and were left out", others)
 	}
 }
@@ -76,19 +104,24 @@ func (m *Model) askCreateArchive() {
 		m.setStatus("Nothing to archive")
 		return
 	}
-	kinds := archive.Creatable()
-	idx := 0
+	// Every format is listed; the ones this machine can't write are shown
+	// disabled, with what to install.
+	kinds := archive.CreateKinds()
+	labels := make([]string, len(kinds))
+	needs := make([]string, len(kinds))
+	idx := -1
 	for i, k := range kinds {
-		if k == m.archiveKind {
+		labels[i], needs[i] = k.Label(), archiveCreateNeeds(k)
+		if needs[i] == "" && (idx < 0 || k == m.archiveKind) {
 			idx = i
 		}
 	}
-	labels := make([]string, len(kinds))
-	for i, k := range kinds {
-		labels[i] = k.Label()
+	if idx < 0 {
+		m.setError("No archive format can be created")
+		return
 	}
 	d := newSingleInputDialog(DialogCreateArchive, "Create archive", "archive name", defaultArchiveBase(p, names)+kinds[idx].Ext())
-	d.Items, d.ItemIdx, d.ArchiveKinds, d.ArchiveNames = labels, idx, kinds, names
+	d.Items, d.ItemIdx, d.ArchiveKinds, d.ArchiveNeeds, d.ArchiveNames = labels, idx, kinds, needs, names
 	m.dialog = d
 }
 
@@ -119,21 +152,33 @@ func defaultArchiveBase(p *Pane, names []string) string {
 func (m *Model) updateCreateArchiveKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	d := &m.dialog
 	n := len(d.ArchiveKinds)
+	step := 1
 	switch msg.String() {
 	case "up", "shift+tab":
-		m.selectArchiveKind((d.ItemIdx - 1 + n) % n)
+		step = -1
 	case "down", "tab":
-		m.selectArchiveKind((d.ItemIdx + 1) % n)
 	default:
 		return nil, false
+	}
+	// Disabled formats are skipped.
+	for i := (d.ItemIdx + step + n) % n; i != d.ItemIdx; i = (i + step + n) % n {
+		if d.ArchiveNeeds[i] == "" {
+			m.selectArchiveKind(i)
+			break
+		}
 	}
 	return nil, true
 }
 
 // selectArchiveKind picks format i, swapping the name's extension for
-// the new format's.
+// the new format's; a format this machine can't write only says what to
+// install.
 func (m *Model) selectArchiveKind(i int) {
 	d := &m.dialog
+	if need := d.ArchiveNeeds[i]; need != "" {
+		d.Message = fmt.Sprintf("Install %s to create %s archives", need, d.ArchiveKinds[i].Ext())
+		return
+	}
 	name := d.Inputs[0].Value()
 	if _, base := archive.Detect(name); archive.IsArchive(name) {
 		name = base

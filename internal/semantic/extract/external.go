@@ -30,6 +30,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"shfm/internal/toolpath"
 )
 
 // pandoc and LibreOffice are optional system dependencies — shfm never
@@ -48,11 +50,11 @@ var (
 
 func locateExternalTools() {
 	toolsOnce.Do(func() {
-		if p, err := exec.LookPath("pandoc"); err == nil {
+		if p, err := toolpath.Find("pandoc"); err == nil {
 			pandocPath = p
 		}
 		for _, name := range []string{"libreoffice", "soffice"} {
-			if p, err := exec.LookPath(name); err == nil {
+			if p, err := toolpath.Find(name); err == nil {
 				sofficePath = p
 				break
 			}

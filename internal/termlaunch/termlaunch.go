@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"shfm/internal/toolpath"
 )
 
 // execArgs is how each known terminal is told to run a command: the
@@ -63,7 +65,7 @@ var probeOrder = []string{
 // lookPath and getenv are variables so tests can fake the installed
 // terminals and the environment.
 var (
-	lookPath = exec.LookPath
+	lookPath = toolpath.Find
 	getenv   = os.Getenv
 )
 

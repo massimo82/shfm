@@ -129,9 +129,12 @@ type Dialog struct {
 	PickPaths []string // DialogPickOverwrite: the choice to confirm
 
 	// DialogCreateArchive: Inputs[0] is the archive's name, Items the
-	// formats' labels, parallel to ArchiveKinds; ArchiveNames are the
-	// entries to archive, in the active pane's folder.
+	// formats' labels, parallel to ArchiveKinds and ArchiveNeeds (what to
+	// install to write that format, "" when nothing: the others are shown
+	// disabled); ArchiveNames are the entries to archive, in the active
+	// pane's folder.
 	ArchiveKinds []archive.Kind
+	ArchiveNeeds []string
 	ArchiveNames []string
 }
 

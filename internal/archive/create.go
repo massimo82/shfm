@@ -30,7 +30,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 )
 
 // creatable lists the formats Create writes, in the order a menu offers
@@ -40,6 +42,12 @@ import (
 var creatable = []Kind{
 	KindZip, KindTarGz, KindTarXz, KindTarZstd, KindTarBz2, KindSevenZip,
 	KindTar, KindTarLzip, KindTarLz4,
+}
+
+// CreateKinds returns every format Create writes, in menu order, whether
+// or not this machine can: see CreateNeeds.
+func CreateKinds() []Kind {
+	return append([]Kind(nil), creatable...)
 }
 
 // Creatable returns the formats Create can write on this machine, in menu
@@ -53,6 +61,12 @@ func Creatable() []Kind {
 		}
 	}
 	return out
+}
+
+// CreateNeeds says what to install to write kind ("lzip or bsdtar"), ""
+// when this machine already can.
+func CreateNeeds(kind Kind) string {
+	return orList(createNeeds(kind))
 }
 
 // Ext returns the filename suffix an archive of kind is given
@@ -106,9 +120,9 @@ var compressTools = map[Kind]struct {
 	KindLz4:   {"lz4", []string{"-c", "-q"}, "--lz4"},
 }
 
-// missingCreateTool explains what needs installing to write kind, nil
-// when nothing does.
-func missingCreateTool(kind Kind) error {
+// createNeeds returns the tools any one of which writing kind needs, nil
+// when this machine already can.
+func createNeeds(kind Kind) []string {
 	switch kind {
 	case KindZip, KindTar, KindTarGz:
 		return nil
@@ -116,15 +130,21 @@ func missingCreateTool(kind Kind) error {
 		if toolPath("bsdtar") != "" || toolPath("7z") != "" {
 			return nil
 		}
-		return fmt.Errorf("creating .7z needs bsdtar or 7-Zip (7z, 7zz or 7za), and neither is installed")
+		return []string{"bsdtar", "7-Zip"}
 	}
-	if c, ok := compressTools[kind.tarFilter()]; ok {
-		if toolPath(c.tool) != "" || toolPath("bsdtar") != "" {
-			return nil
-		}
-		return fmt.Errorf("creating %s needs the %s command or bsdtar, and neither is installed", kind.Ext(), c.tool)
+	if c, ok := compressTools[kind.tarFilter()]; ok && toolPath(c.tool) == "" && toolPath("bsdtar") == "" {
+		return []string{c.tool, "bsdtar"}
 	}
-	return fmt.Errorf("can't create %s archives", kind)
+	return nil
+}
+
+// missingCreateTool explains what needs installing to write kind, nil
+// when nothing does.
+func missingCreateTool(kind Kind) error {
+	if !slices.Contains(creatable, kind) {
+		return fmt.Errorf("can't create %s archives", kind)
+	}
+	return missingError("creating", kind, createNeeds(kind))
 }
 
 // PutFunc adds one entry to the archive being created: a file's content
@@ -299,6 +319,14 @@ func throughTool(ctx context.Context, tool string, args []string, out io.Writer,
 	return ctx.Err()
 }
 
+// stageTimes gives a staged file or folder its entry's modification time,
+// best-effort: the content matters more.
+func stageTimes(p string, modTime time.Time) {
+	if !modTime.IsZero() {
+		_ = os.Chtimes(p, modTime, modTime)
+	}
+}
+
 // createSevenZip writes a 7z with the 7-Zip command, which only archives
 // real files: add's entries are first written into a staging folder.
 func createSevenZip(ctx context.Context, out io.Writer, tempDir string, add func(PutFunc) error) error {
@@ -312,6 +340,7 @@ func createSevenZip(ctx context.Context, out io.Writer, tempDir string, add func
 		return err
 	}
 	var names []string
+	var dirs []Entry // their attributes are set once their content is in
 	err = add(func(e Entry, r io.Reader) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -325,6 +354,7 @@ func createSevenZip(ctx context.Context, out io.Writer, tempDir string, add func
 		}
 		switch e.Type {
 		case TypeDir:
+			dirs = append(dirs, e)
 			return os.MkdirAll(p, 0o755)
 		case TypeSymlink:
 			return os.Symlink(e.Linkname, p)
@@ -337,13 +367,32 @@ func createSevenZip(ctx context.Context, out io.Writer, tempDir string, add func
 		if cerr := f.Close(); err == nil {
 			err = cerr
 		}
-		if err == nil && !e.ModTime.IsZero() {
-			_ = os.Chtimes(p, e.ModTime, e.ModTime)
+		if err != nil {
+			return err
 		}
-		return err
+		// 7-Zip stores what it finds on disk. Readable by its owner, or
+		// 7-Zip couldn't archive it.
+		if mode := e.Mode.Perm(); mode != 0 {
+			if err := os.Chmod(p, mode|0o400); err != nil {
+				return err
+			}
+		}
+		stageTimes(p, e.ModTime)
+		return nil
 	})
 	if err != nil {
 		return err
+	}
+	for _, d := range dirs {
+		p := filepath.Join(content, filepath.FromSlash(d.Name))
+		// Kept usable by its owner, as extracting makes it anyway: 7-Zip
+		// must list it, and the staging folder be removed.
+		if mode := d.Mode.Perm(); mode != 0 {
+			if err := os.Chmod(p, mode|0o700); err != nil {
+				return err
+			}
+		}
+		stageTimes(p, d.ModTime)
 	}
 	if len(names) == 0 {
 		return errors.New("nothing to archive")

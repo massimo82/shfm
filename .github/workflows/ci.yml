@@ -38,10 +38,15 @@ jobs:
 
       # MTP support is cgo (github.com/hanwen/usb -> libusb) and there is no
       # pure-Go fallback, so the base build needs the libusb headers and gcc.
+      #
+      # The archive tools are optional at run time, and the tests hide some
+      # of them to simulate each kind of machine (internal/archive toolSets):
+      # every one is installed so that no code path is left untested.
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev
+          sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev \
+            libarchive-tools 7zip xz-utils zstd bzip2 lzip lz4
 
       # First-party code only: third_party/ is vendored upstream code.
       - name: gofmt

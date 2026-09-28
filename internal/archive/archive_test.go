@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -124,8 +125,22 @@ func putFixture(put PutFunc) error {
 
 type walked struct {
 	Type     EntryType
+	Mode     fs.FileMode // 0 for a symlink, whose mode varies by format
 	Content  string
 	Linkname string
+}
+
+// wantFixture is what walkAll reports for an archive of fixture.
+func wantFixture() map[string]walked {
+	want := map[string]walked{}
+	for _, f := range fixture {
+		w := walked{Type: f.e.Type, Content: f.content, Linkname: f.e.Linkname}
+		if f.e.Type != TypeSymlink {
+			w.Mode = f.e.Mode
+		}
+		want[f.e.Name] = w
+	}
+	return want
 }
 
 func walkAll(t *testing.T, src Source) map[string]walked {
@@ -137,6 +152,9 @@ func walkAll(t *testing.T, src Source) map[string]walked {
 			return nil
 		}
 		w := walked{Type: e.Type, Linkname: e.Linkname}
+		if e.Type != TypeSymlink {
+			w.Mode = e.Mode
+		}
 		if r != nil {
 			b, err := io.ReadAll(r)
 			if err != nil {
@@ -153,36 +171,64 @@ func walkAll(t *testing.T, src Source) map[string]walked {
 	return got
 }
 
-// TestRoundTrip creates an archive in every format this machine can write
+// toolSets are the machines TestRoundTrip simulates: each writes and reads
+// through different code (the standard library, bsdtar converting a tar
+// stream, 7-Zip staging through a folder, a compressor in a pipe), and
+// which tools a machine has, under which of their names, varies.
+var toolSets = []struct {
+	name  string
+	tools []string // nil: every tool installed here, as found
+}{
+	{"installed", nil},
+	{"none", []string{}},
+	{"bsdtar", []string{"bsdtar"}},
+	{"7-Zip", toolNames["7z"]},
+	{"compressors", []string{"bzip2", "xz", "zstd", "lzip", "plzip", "lz4"}},
+}
+
+// TestRoundTrip creates an archive in every format, as each of toolSets,
 // and reads it back, both from a local path and through Open (as from a
-// remote backend).
+// remote backend). A format the set's tools can't write is skipped, saying
+// what is missing: nothing is assumed installed.
 func TestRoundTrip(t *testing.T) {
-	want := map[string]walked{}
-	for _, f := range fixture {
-		want[f.e.Name] = walked{Type: f.e.Type, Content: f.content, Linkname: f.e.Linkname}
-	}
-	for _, kind := range Creatable() {
-		t.Run(string(kind), func(t *testing.T) {
-			p := filepath.Join(t.TempDir(), "out"+kind.Ext())
-			f, err := os.Create(p)
-			if err != nil {
-				t.Fatal(err)
+	for _, set := range toolSets {
+		t.Run(set.name, func(t *testing.T) {
+			if set.tools != nil {
+				withTools(t, set.tools...)
 			}
-			if err := Create(context.Background(), kind, f, t.TempDir(), putFixture); err != nil {
-				t.Fatal(err)
-			}
-			if err := f.Close(); err != nil {
-				t.Fatal(err)
-			}
-			if got := walkAll(t, Source{Name: p, LocalPath: p}); !reflect.DeepEqual(got, want) {
-				t.Errorf("local read:\n got %v\nwant %v", got, want)
-			}
-			remote := Source{Name: filepath.Base(p), TempDir: t.TempDir(),
-				Open: func() (io.ReadCloser, error) { return os.Open(p) }}
-			if got := walkAll(t, remote); !reflect.DeepEqual(got, want) {
-				t.Errorf("stream read:\n got %v\nwant %v", got, want)
+			for _, kind := range creatable {
+				t.Run(string(kind), func(t *testing.T) {
+					if err := missingCreateTool(kind); err != nil {
+						t.Skip(err)
+					}
+					roundTrip(t, kind)
+				})
 			}
 		})
+	}
+}
+
+func roundTrip(t *testing.T, kind Kind) {
+	t.Helper()
+	want := wantFixture()
+	p := filepath.Join(t.TempDir(), "out"+kind.Ext())
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Create(context.Background(), kind, f, t.TempDir(), putFixture); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := walkAll(t, Source{Name: p, LocalPath: p}); !reflect.DeepEqual(got, want) {
+		t.Errorf("local read:\n got %v\nwant %v", got, want)
+	}
+	remote := Source{Name: filepath.Base(p), TempDir: t.TempDir(),
+		Open: func() (io.ReadCloser, error) { return os.Open(p) }}
+	if got := walkAll(t, remote); !reflect.DeepEqual(got, want) {
+		t.Errorf("stream read:\n got %v\nwant %v", got, want)
 	}
 }
 
@@ -222,30 +268,29 @@ func TestNoTools(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "7-Zip") {
 		t.Errorf("Walk of a .7z without tools: %v", err)
 	}
-}
-
-// TestBsdtarFallback reads and writes .tar.xz and .7z through bsdtar alone.
-func TestBsdtarFallback(t *testing.T) {
-	if _, err := exec.LookPath("bsdtar"); err != nil {
-		t.Skip("bsdtar not installed")
+	if got := CreateKinds(); !reflect.DeepEqual(got, creatable) {
+		t.Errorf("CreateKinds() = %v, want every format", got)
 	}
-	withTools(t, "bsdtar")
-	want := map[string]walked{}
-	for _, f := range fixture {
-		want[f.e.Name] = walked{Type: f.e.Type, Content: f.content, Linkname: f.e.Linkname}
+	for _, c := range []struct {
+		kind         Kind
+		read, create string
+	}{
+		{KindZip, "", ""},
+		{KindTarBz2, "", "bzip2 or bsdtar"},
+		{KindTarLzip, "lzip or bsdtar", "lzip or bsdtar"},
+		{KindSevenZip, "bsdtar or 7-Zip", "bsdtar or 7-Zip"},
+		{KindRar, "bsdtar, unrar or 7-Zip", ""},
+		{KindXz, "xz", ""},
+	} {
+		if got := ReadNeeds(c.kind); got != c.read {
+			t.Errorf("ReadNeeds(%s) = %q, want %q", c.kind, got, c.read)
+		}
+		if got := CreateNeeds(c.kind); got != c.create {
+			t.Errorf("CreateNeeds(%s) = %q, want %q", c.kind, got, c.create)
+		}
 	}
-	for _, kind := range []Kind{KindTarXz, KindTarZstd, KindSevenZip} {
-		var buf bytes.Buffer
-		if err := Create(context.Background(), kind, &buf, t.TempDir(), putFixture); err != nil {
-			t.Fatalf("%s: %v", kind, err)
-		}
-		p := filepath.Join(t.TempDir(), "out"+kind.Ext())
-		if err := os.WriteFile(p, buf.Bytes(), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if got := walkAll(t, Source{Name: p, LocalPath: p}); !reflect.DeepEqual(got, want) {
-			t.Errorf("%s:\n got %v\nwant %v", kind, got, want)
-		}
+	if err := missingTool(KindTarLzip); err == nil || err.Error() != "reading .tar.lz needs lzip or bsdtar, and neither is installed" {
+		t.Errorf("missingTool(tar.lz) = %v", err)
 	}
 }
 

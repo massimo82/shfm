@@ -120,6 +120,11 @@ func (l *LocalFS) BirthTime(path string) (time.Time, error) {
 	return birthTime(path, false), nil
 }
 
+// Chtimes implements TimesSetter: a zero time is left unchanged.
+func (l *LocalFS) Chtimes(path string, atime, mtime time.Time) error {
+	return os.Chtimes(path, atime, mtime)
+}
+
 func (l *LocalFS) Mkdir(path string) error { return os.Mkdir(path, 0o755) }
 func (l *LocalFS) CreateEmptyFile(path string) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)

@@ -19,8 +19,10 @@ package archive
 
 import (
 	"fmt"
-	"os/exec"
+	"strings"
 	"sync"
+
+	"shfm/internal/toolpath"
 )
 
 // The external tools are optional system dependencies: located once,
@@ -45,9 +47,9 @@ var toolNames = map[string][]string{
 var (
 	toolsMu   sync.Mutex
 	toolPaths map[string]string
-	// lookPath is exec.LookPath, replaced by tests to simulate a machine
-	// without some tool.
-	lookPath = exec.LookPath
+	// lookPath is toolpath.Find (PATH, then the usual folders), replaced
+	// by tests to simulate a machine without some tool.
+	lookPath = toolpath.Find
 )
 
 // toolPath returns the path of the external tool (a toolNames key), ""
@@ -106,9 +108,15 @@ func Supported(name string) bool {
 	return kind != "" && Available(kind)
 }
 
-// missingTool explains what needs installing to read kind, nil when
-// nothing does.
-func missingTool(kind Kind) error {
+// ReadNeeds says what to install to read kind ("xz or bsdtar"), "" when
+// this machine already can.
+func ReadNeeds(kind Kind) string {
+	return orList(readNeeds(kind))
+}
+
+// readNeeds returns the tools any one of which reading kind needs, nil
+// when this machine already can (or kind is unknown).
+func readNeeds(kind Kind) []string {
 	switch kind {
 	case KindZip, KindTar, KindTarGz, KindTarBz2, KindGzip, KindBzip2:
 		return nil
@@ -116,26 +124,54 @@ func missingTool(kind Kind) error {
 		if toolPath("bsdtar") != "" || toolPath("7z") != "" {
 			return nil
 		}
-		return fmt.Errorf("reading .7z needs bsdtar or 7-Zip (7z, 7zz or 7za), and neither is installed")
+		return []string{"bsdtar", "7-Zip"}
 	case KindRar:
 		if toolPath("bsdtar") != "" || toolPath("unrar") != "" || toolPath("7z") != "" {
 			return nil
 		}
-		return fmt.Errorf("reading .rar needs bsdtar, unrar or 7-Zip, and none is installed")
+		return []string{"bsdtar", "unrar", "7-Zip"}
 	}
 	if kind.Single() {
-		tool := filterTool(kind)
-		if toolPath(tool) != "" {
-			return nil
+		if tool := filterTool(kind); toolPath(tool) == "" {
+			return []string{tool}
 		}
-		return fmt.Errorf("reading .%s needs the %s command, which isn't installed", kind, tool)
+		return nil
 	}
 	if f := kind.tarFilter(); f != "" {
-		tool := filterTool(f)
-		if toolPath(tool) != "" || toolPath("bsdtar") != "" {
-			return nil
+		if tool := filterTool(f); toolPath(tool) == "" && toolPath("bsdtar") == "" {
+			return []string{tool, "bsdtar"}
 		}
-		return fmt.Errorf("reading .tar.%s needs the %s command or bsdtar, and neither is installed", f, tool)
 	}
-	return fmt.Errorf("unknown archive format %q", kind)
+	return nil
+}
+
+// missingTool explains what needs installing to read kind, nil when
+// nothing does.
+func missingTool(kind Kind) error {
+	if kind.Ext() == "" {
+		return fmt.Errorf("unknown archive format %q", kind)
+	}
+	return missingError("reading", kind, readNeeds(kind))
+}
+
+// missingError explains that doing verb to kind needs one of tools, nil
+// when there are none to install.
+func missingError(verb string, kind Kind, tools []string) error {
+	switch len(tools) {
+	case 0:
+		return nil
+	case 1:
+		return fmt.Errorf("%s %s needs %s, which isn't installed", verb, kind.Ext(), tools[0])
+	case 2:
+		return fmt.Errorf("%s %s needs %s, and neither is installed", verb, kind.Ext(), orList(tools))
+	}
+	return fmt.Errorf("%s %s needs %s, and none is installed", verb, kind.Ext(), orList(tools))
+}
+
+// orList joins names as "a", "a or b", "a, b or c".
+func orList(names []string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }
