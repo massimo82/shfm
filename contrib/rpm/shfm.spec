@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.2.12
+Version:        0.2.13
 Release:        1%{?dist}
 Summary:        Terminal file manager with SMB/NFS/SFTP/MTP support and local semantic search
 License:        GPL-3.0-or-later AND MIT
@@ -139,5 +139,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Mon Sep 28 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.2.13-1
+- Packages for Fedora and derivatives.
+- The Arch PKGBUILD is made from a template, with its source checksum.
+
 * Mon Sep 28 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.2.12-1
 - First RPM package.
