@@ -30,6 +30,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"shfm/internal/archive"
 )
 
 func TestTextTxt(t *testing.T) {
@@ -73,35 +75,14 @@ func TestSupported(t *testing.T) {
 		".doc":     externalSupported(".doc"),
 		".rtf":     externalSupported(".rtf"),
 		".odt":     externalSupported(".odt"),
-		"a.xz":     archiveKindAvailable("xz"),
-		"a.lzma":   archiveKindAvailable("lzma"),
-		"a.tar.xz": archiveKindAvailable("tarxz"),
-		"a.7z":     archiveKindAvailable("7z"),
+		"a.xz":     archive.Available(archive.KindXz),
+		"a.lzma":   archive.Available(archive.KindLzma),
+		"a.tar.xz": archive.Available(archive.KindTarXz),
+		"a.7z":     archive.Available(archive.KindSevenZip),
 	}
 	for name, want := range cases {
 		if got := Supported(name); got != want {
 			t.Errorf("Supported(%q) = %v, want %v", name, got, want)
-		}
-	}
-}
-
-func TestArchiveKind(t *testing.T) {
-	cases := map[string]string{
-		"a.zip": "zip", "a.ZIP": "zip",
-		"a.tar":    "tar",
-		"a.tar.gz": "targz", "a.tgz": "targz", "a.TAR.GZ": "targz",
-		"a.gz":      "gzip",
-		"a.bz2":     "bzip2",
-		"a.tar.bz2": "tarbz2", "a.tbz2": "tarbz2", "a.tbz": "tarbz2",
-		"a.xz":     "xz",
-		"a.lzma":   "lzma",
-		"a.tar.xz": "tarxz", "a.txz": "tarxz",
-		"a.7z":  "7z",
-		"a.txt": "", "a.docx": "", "": "",
-	}
-	for name, want := range cases {
-		if got := archiveKind(name); got != want {
-			t.Errorf("archiveKind(%q) = %q, want %q", name, got, want)
 		}
 	}
 }
@@ -326,7 +307,8 @@ func TestTarBz2Text(t *testing.T) {
 // option here (the stdlib has no xz/lzma encoder either, only a decoder is
 // needed at runtime, and this test needs to *produce* a real .xz file).
 func TestXzText(t *testing.T) {
-	if !archiveKindAvailable("xz") {
+	xzPath, err := exec.LookPath("xz")
+	if err != nil {
 		t.Skip("xz not found on this machine")
 	}
 	dir := t.TempDir()
@@ -343,7 +325,8 @@ func TestXzText(t *testing.T) {
 }
 
 func TestTarXzText(t *testing.T) {
-	if !archiveKindAvailable("tarxz") {
+	xzPath, err := exec.LookPath("xz")
+	if err != nil {
 		t.Skip("xz not found on this machine")
 	}
 	dir := t.TempDir()
@@ -383,7 +366,14 @@ func TestTarXzText(t *testing.T) {
 // TestSevenZText exercises the 7z command-backed path end-to-end — skipped
 // if no 7z/7zz/7za build is installed.
 func TestSevenZText(t *testing.T) {
-	if !archiveKindAvailable("7z") {
+	sevenZipPath := ""
+	for _, name := range []string{"7z", "7zz", "7za"} {
+		if p, err := exec.LookPath(name); err == nil {
+			sevenZipPath = p
+			break
+		}
+	}
+	if sevenZipPath == "" || !archive.Available(archive.KindSevenZip) {
 		t.Skip("no 7z/7zz/7za found on this machine")
 	}
 	dir := t.TempDir()

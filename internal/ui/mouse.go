@@ -247,6 +247,11 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 			m.dialog.ItemIdx = row
 			m.confirmDialog()
 		}
+	case DialogCreateArchive:
+		// Select only: the name still needs confirming.
+		if row >= 0 && row < len(m.dialog.Items) {
+			m.selectArchiveKind(row)
+		}
 	case DialogMirrorList:
 		// Select only: Enter syncs, p pauses, x deletes.
 		if row >= 0 && row < len(m.dialog.Items) {

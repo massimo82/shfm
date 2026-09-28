@@ -36,6 +36,8 @@ mouse, in one pane or two side by side.
 - Search by name: live filter, regex, recursive.
 - Semantic search by content, optional and fully local.
 - Freedesktop.org trash: move to trash, restore, empty.
+- Archives: extract one into a new folder next to it, or create one
+  choosing its format (ZIP, TAR with gzip/xz/zstd/bzip2/lzip/lz4, 7z).
 - Automatic one-way mirrors (rsync or generic engine) that never touch
   the source.
 - Formatting removable drives (exFAT, FAT32, ext4, XFS).
@@ -58,9 +60,11 @@ the underlying USB transport.
 
 The only external programs shfm ever runs are: the desktop's default
 application, when you open a file; `pkexec`, to elevate a permission-denied
-operation (see [Notes](#notes)); and, only for the optional semantic
-content search, `pandoc`, `libreoffice`/`soffice`, `xz` and `7z` when they
-happen to be installed.
+operation (see [Notes](#notes)); for archives in formats the Go standard
+library can't read or write (see [Archives](#archives)), `xz`, `zstd`,
+`bzip2`, `lzip`, `lz4`, `bsdtar`, `7z` and `unrar` when they happen to be
+installed; and, only for the optional semantic content search, `pandoc`
+and `libreoffice`/`soffice`.
 
 ## Layout
 
@@ -221,6 +225,10 @@ to toggle between single- and dual-pane layout.
   one. `Ctrl+Alt+M` with an empty clipboard lists the saved mirrors (sync
   now, pause/resume, delete). The source is never modified: see
   [Automatic mirrors](#automatic-mirrors) for how that's enforced.
+- **Archives**: `x` extracts the selected archives (or the one under the
+  cursor), each into a new folder in the same directory named after the
+  archive minus its extension; `z` creates an archive of the selected
+  entries, choosing its format and name. See [Archives](#archives).
 - **Format a removable source**: pick exFAT, FAT32, ext4 or XFS, via a
   dedicated dialog with a red data-loss warning followed by a second,
   explicit "type YES to proceed" confirmation. Refuses to format the disk
@@ -232,6 +240,55 @@ to toggle between single- and dual-pane layout.
   system-wide (`/usr/share/applications`) if run as root, per-user
   (`~/.local/share/applications`) otherwise — but only if neither already
   exists.
+
+## Archives
+
+**Extracting** (`x`): every selected archive (or the one under the
+cursor; selected entries that aren't archives are left alone) is
+extracted, as a background task, into a **new folder in the same
+directory**, named after the archive minus its extension:
+`photos.tar.gz` → `photos/`, `report.txt.gz` → `report.txt/report.txt`.
+If that name is taken, `photos (2)`, `photos (3)`... are used instead:
+nothing existing is ever overwritten. It works on every source (local,
+removable, SMB, NFS, SFTP, MTP), reading and writing through the source
+itself.
+
+Nothing is ever written outside the new folder: entries named with
+`../` or pointing out through a symbolic link are skipped, as are
+encrypted entries, device files and FIFOs; symbolic links are created
+only on local sources (the other backends have none), and hard links
+become copies. Whatever was skipped is reported as the task's error,
+without stopping the rest. Cancelling (`c` in the progress dialog)
+removes the partial folder.
+
+**Creating** (`z`): a dialog lists the formats this machine can write
+(`↑`/`↓`, `Tab` or a click picks one, and swaps the name's extension)
+above the archive's name, proposed from the entry's name (or the folder's,
+for several entries). The archive is created in the current folder, never
+over an existing file. Its content always sits in **one root folder
+named like the archive minus its extension**: `bundle.tar.zst` holds
+`bundle/<the selected entries>`, so extracting it anywhere never
+scatters files. Symbolic links are stored as links from a local source,
+and followed to files elsewhere. The last format chosen is proposed
+first next time.
+
+| Format | Extract | Create |
+|---|---|---|
+| `.zip`, `.tar`, `.tar.gz`/`.tgz`, `.gz` | built in | built in (not `.gz`) |
+| `.tar.bz2`/`.tbz2`/`.tbz`, `.bz2` | built in | `bzip2` or `bsdtar` (not `.bz2`) |
+| `.tar.xz`/`.txz`, `.xz`, `.tar.lzma`/`.tlz`, `.lzma` | `xz`, or `bsdtar` for the tar ones | `.tar.xz`: `xz` or `bsdtar` |
+| `.tar.zst`/`.tzst`, `.zst` | `zstd`, or `bsdtar` for the tar one | `.tar.zst`: `zstd` or `bsdtar` |
+| `.tar.lz`, `.lz` | `lzip`/`plzip`, or `bsdtar` for the tar one | `.tar.lz`: `lzip`/`plzip` or `bsdtar` |
+| `.tar.lz4`, `.lz4` | `lz4`, or `bsdtar` for the tar one | `.tar.lz4`: `lz4` or `bsdtar` |
+| `.7z` | `bsdtar` or 7-Zip (`7z`/`7zz`/`7za`) | `bsdtar` or 7-Zip |
+| `.rar` | `bsdtar`, `unrar` or 7-Zip | — |
+
+Not created: RAR (its compressor is proprietary), `.tar.lzma` (superseded
+by xz) and single compressed files such as `.gz` (an archive does the same
+job). External tools run without a terminal, so one asking for an
+encrypted archive's password fails instead of taking over shfm's screen.
+The same code (`internal/archive`) reads the archives indexed by the
+semantic search.
 
 ## Automatic mirrors
 
@@ -498,6 +555,8 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+Alt+M` | paste as an automatic mirror (empty clipboard: list mirrors) |
 | `r`, `m`, `f` | rename, new folder, new file |
 | `i` | properties (permissions, owner, group) |
+| `x` | extract the selected archives here, each into its own new folder |
+| `z` | create an archive of the selected entries, choosing the format |
 | `/` | search/filter the current folder by name |
 | `Esc` | cancel a search/filter or close a dialog |
 | `Ctrl+F` | semantic search on file contents (optional, needs a special build: see [Optional: semantic (content) search](#optional-semantic-content-search)) |
@@ -806,7 +865,8 @@ shfm's own settings stay in `~/.config/shfm/` (and its log in
 `Ctrl+F` — semantic search over file *contents* (TXT/Markdown/LaTeX/PDF/
 DOCX always; DOC/RTF/ODT too if `pandoc` and/or `libreoffice` are found
 installed — see below; ZIP/TAR/TAR.GZ/TAR.BZ2 archives always, plus
-TAR.XZ/7Z if `xz`/`7z` are found too — see further below), as opposed to
+the other [archive formats](#archives) when their tools are found — see
+further below), as opposed to
 `/`'s search over file *names* — is a self-contained,
 removable module (`internal/semantic/`) compiled in only with the
 `semantic` build tag. The plain `go build -o shfm .` above never touches
@@ -1094,10 +1154,11 @@ DOC/RTF/ODT become indexable too, and DOCX extraction gets meaningfully
 more complete.
 
 ZIP/TAR/TAR.GZ/GZ/BZ2/TAR.BZ2 archives are always indexed (bzip2 support
-comes from the Go standard library, same as gzip); TAR.XZ/XZ/LZMA need the
-`xz` command found on `$PATH`, and 7Z needs a 7-Zip build (`7z`, `7zz` or
-`7za`, whichever this machine actually has) — both graceful upgrades, same
-tiering as pandoc/LibreOffice above. Every archive format works by looking
+comes from the Go standard library, same as gzip); every other format in
+the [Archives](#archives) table (xz/lzma, zstd, lzip, lz4, 7z, RAR) is
+indexed when the tool it needs there is found on `$PATH` — graceful
+upgrades, same tiering as pandoc/LibreOffice above, and the same reader
+(`internal/archive`) extraction uses. Every archive format works by looking
 inside for whatever document types are already supported (recursively
 reusing all of the above — pandoc/LibreOffice included where relevant),
 extracting each one and concatenating the results. Semantic search has no
@@ -1266,7 +1327,8 @@ internal/pick/                  the portal backend's conversation with shfm as a
 internal/termlaunch/            running shfm in a new terminal window, for both services
 internal/idle/                  idle exit of the D-Bus activated services
 internal/trash/                 Freedesktop.org Trash Specification
-internal/fileops/               copy/move/delete/rename (cross-backend, with progress)
+internal/fileops/               copy/move/delete/rename, archive extract/create (cross-backend, with progress)
+internal/archive/               archive formats: detection, reading entries, creation (shared with semantic search)
 internal/mirror/                one-way mirrors: rsync (local) and generic engine
 internal/wlclip/                Wayland clipboard client (data-control protocol)
 internal/drives/                local disks, removable device mount/format (udisks2)

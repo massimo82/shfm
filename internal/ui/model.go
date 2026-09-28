@@ -29,6 +29,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"shfm/internal/archive"
 	"shfm/internal/config"
 	"shfm/internal/fusemount"
 	"shfm/internal/semantic"
@@ -85,6 +86,10 @@ type Model struct {
 
 	// auth is the pending polkit password request, if any: see auth.go.
 	auth *authState
+
+	// archiveKind is the format last chosen for a new archive, offered
+	// first next time (see archive.go).
+	archiveKind archive.Kind
 
 	// Background task tracking (copy/move/delete): see tasks.go.
 	tasks         []*Task
@@ -418,6 +423,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.askNewFile()
 	case config.ActionProperties:
 		m.openProperties()
+	case config.ActionExtract:
+		m.doExtract()
+	case config.ActionCompress:
+		m.askCreateArchive()
 
 	// --- source and path ---
 	case config.ActionSourceMenu:

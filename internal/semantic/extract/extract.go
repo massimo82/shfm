@@ -41,6 +41,8 @@ import (
 	"strings"
 
 	"github.com/ledongthuc/pdf"
+
+	"shfm/internal/archive"
 )
 
 // extensions are the file extensions this package knows how to pull text
@@ -55,12 +57,12 @@ var extensions = map[string]bool{
 // Supported reports whether name (a filename or path — needs more than
 // just its filepath.Ext, since recognising a ".tar.gz" needs the two-part
 // suffix, not just ".gz") is a type Text can extract from: always for TXT/
-// Markdown/PDF/DOCX/ZIP/TAR/TAR.GZ/GZ/BZ2/TAR.BZ2; DOC/RTF/ODT because
-// pandoc/LibreOffice were found (see external.go), or XZ/LZMA/7Z because xz
-// and/or a 7-Zip build were found (see archive.go) — on this machine.
+// Markdown/PDF/DOCX; DOC/RTF/ODT because
+// pandoc/LibreOffice were found (see external.go); archives when
+// internal/archive can read their format — on this machine.
 func Supported(name string) bool {
-	if kind := archiveKind(name); kind != "" {
-		return archiveKindAvailable(kind)
+	if archive.IsArchive(name) {
+		return archive.Supported(name)
 	}
 	ext := strings.ToLower(filepath.Ext(name))
 	return extensions[ext] || externalSupported(ext)
@@ -77,8 +79,8 @@ func Supported(name string) bool {
 // even attempt; docxText exists purely as the no-external-tools fallback,
 // same as this package's behaviour before external.go existed.
 func Text(path string) (string, error) {
-	if kind := archiveKind(path); kind != "" {
-		return archiveText(path, kind)
+	if archive.IsArchive(path) {
+		return archiveText(path)
 	}
 	if text, ok, err := extractExternal(path); ok {
 		return text, err

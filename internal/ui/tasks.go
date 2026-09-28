@@ -37,6 +37,8 @@ const (
 	TaskDelete
 	TaskFormat
 	TaskMirror
+	TaskExtract
+	TaskCompress
 )
 
 func (k TaskKind) String() string {
@@ -51,6 +53,10 @@ func (k TaskKind) String() string {
 		return "Format"
 	case TaskMirror:
 		return "Mirror"
+	case TaskExtract:
+		return "Extract"
+	case TaskCompress:
+		return "Compress"
 	default:
 		return "Task"
 	}

@@ -62,6 +62,8 @@ const (
 	ActionNewFolder        Action = "new-folder"
 	ActionNewFile          Action = "new-file"
 	ActionProperties       Action = "properties"
+	ActionExtract          Action = "extract"
+	ActionCompress         Action = "compress"
 	ActionSearch           Action = "search"
 	ActionSemanticSearch   Action = "semantic-search"
 	ActionCancel           Action = "cancel"
@@ -123,6 +125,8 @@ var keybindingDefs = []keybindingDef{
 	{ActionNewFolder, []string{"m"}, "Create new folder"},
 	{ActionNewFile, []string{"f"}, "Create new file"},
 	{ActionProperties, []string{"i"}, "Entry properties"},
+	{ActionExtract, []string{"x"}, "Extract archive here"},
+	{ActionCompress, []string{"z"}, "Create an archive"},
 
 	{ActionSearch, []string{"/"}, "Search/filter by name"},
 	{ActionSemanticSearch, []string{"ctrl+f"}, "Search file contents"},

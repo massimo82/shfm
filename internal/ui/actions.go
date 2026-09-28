@@ -825,6 +825,9 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		}
 		m.dialog = Dialog{}
 
+	case DialogCreateArchive:
+		m.performCreateArchive()
+
 	case DialogNewChoice:
 		if d.ItemIdx == 0 {
 			m.askNewFile()

@@ -25,6 +25,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"shfm/internal/archive"
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/opener"
@@ -70,6 +71,7 @@ const (
 	DialogPickOverwrite
 	DialogPickFilter
 	DialogPickOptions
+	DialogCreateArchive
 )
 
 // Dialog is the state of any currently active modal.
@@ -125,6 +127,12 @@ type Dialog struct {
 	Auth polkitagent.Prompt // DialogAuth: Inputs[0] is the answer
 
 	PickPaths []string // DialogPickOverwrite: the choice to confirm
+
+	// DialogCreateArchive: Inputs[0] is the archive's name, Items the
+	// formats' labels, parallel to ArchiveKinds; ArchiveNames are the
+	// entries to archive, in the active pane's folder.
+	ArchiveKinds []archive.Kind
+	ArchiveNames []string
 }
 
 func newSingleInputDialog(kind DialogKind, title, placeholder, value string) Dialog {
@@ -192,6 +200,11 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if d.Kind == DialogAuth {
 		return m.updateAuthDialogKey(msg), true
+	}
+	if d.Kind == DialogCreateArchive {
+		if cmd, handled := m.updateCreateArchiveKey(msg); handled {
+			return cmd, false
+		}
 	}
 	if d.Kind == DialogMirrorList {
 		if cmd, handled := m.updateMirrorListKey(msg); handled {

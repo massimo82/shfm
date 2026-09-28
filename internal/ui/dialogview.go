@@ -25,6 +25,7 @@ import (
 
 	"shfm/internal/config"
 	"shfm/internal/drives"
+	"shfm/internal/fileops"
 )
 
 // helpEntry is one "key — action" row in the compact help dialog.
@@ -202,6 +203,24 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(d.Inputs[0].View())
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("Semantic search: TXT/MD/TEX/PDF/DOCX/archives (+DOC/RTF/ODT with pandoc/LibreOffice) · Enter search · Esc cancel"))
+		return dialogBox(64).Render(b.String())
+
+	case DialogCreateArchive:
+		for i, it := range d.Items {
+			prefix := "  "
+			s := styleFile
+			if i == d.ItemIdx {
+				prefix, s = "\u25b8 ", styleAccent
+			}
+			b.WriteString(prefix + s.Render(it) + "\n")
+		}
+		b.WriteString("\n" + d.Inputs[0].View() + "\n")
+		root := fileops.ArchiveRoot(strings.TrimSpace(d.Inputs[0].Value()))
+		b.WriteString(styleDim.Render(truncate("everything inside the folder "+root+"/", 58)) + "\n\n")
+		if d.Message != "" {
+			b.WriteString(styleErr.Render(d.Message) + "\n\n")
+		}
+		b.WriteString(styleDim.Render("\u2191/\u2193 or click format · Enter create · Esc cancel"))
 		return dialogBox(64).Render(b.String())
 
 	case DialogNewChoice:

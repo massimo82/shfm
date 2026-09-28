@@ -370,6 +370,18 @@ func (p *Pane) CurrentEntry() (vfs.Entry, bool) {
 	return p.Entries[p.Cursor], true
 }
 
+// entryByName returns the entry named name in the pane's folder: from
+// the listing, or asked to the backend when a filter hides it.
+func (p *Pane) entryByName(name string) (vfs.Entry, bool) {
+	for _, e := range p.Entries {
+		if e.Name == name {
+			return e, true
+		}
+	}
+	e, err := p.FS.Stat(p.FS.Join(p.Path, name))
+	return e, err == nil
+}
+
 // IsParentEntry reports whether e is the special ".." entry.
 func IsParentEntry(e vfs.Entry) bool { return e.Name == parentEntryName }
 
