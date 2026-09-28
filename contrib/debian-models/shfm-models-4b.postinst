@@ -1,0 +1,34 @@
+#!/bin/sh
+# Downloads the models, checks them and puts them in place. A failed
+# download (no network...) fails the installation: "dpkg --configure -a"
+# tries again, resuming what was already downloaded.
+set -e
+
+MODELS=/usr/share/shfm/models
+
+download() { # file sha256 url
+	if [ -f "$MODELS/$1" ] && echo "$2  $MODELS/$1" | sha256sum -c --status; then
+		return 0
+	fi
+	echo "shfm-models-4b: downloading $1 from Hugging Face..."
+	curl -fL --retry 3 -C - -o "$MODELS/$1.part" "$3"
+	if ! echo "$2  $MODELS/$1.part" | sha256sum -c --status; then
+		rm -f "$MODELS/$1.part"
+		echo "shfm-models-4b: $1 doesn't match its checksum" >&2
+		return 1
+	fi
+	chmod 644 "$MODELS/$1.part"
+	mv "$MODELS/$1.part" "$MODELS/$1"
+}
+
+if [ "$1" = configure ]; then
+	mkdir -p "$MODELS"
+	download Qwen3-Embedding-4B-Q8_0.gguf \
+		b60ae5ce2dd6a0b77f82cadf21def1f310a3e10cde380ad0081b07a9d416949d \
+		https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF/resolve/main/Qwen3-Embedding-4B-Q8_0.gguf
+	download Qwen3-Reranker-0.6B-Q4_K_M.gguf \
+		c04f5f5657c52e04538c455e8c62817db3d3b795b39e9f547f8581510445f075 \
+		https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp/resolve/main/Qwen3-Reranker-0.6B-Q4_K_M.gguf
+fi
+
+#DEBHELPER#

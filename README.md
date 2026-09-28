@@ -600,6 +600,44 @@ action shfm doesn't recognize, are ignored rather than treated as errors.
 Restart shfm after editing. The in-app help (`Ctrl+Alt+H` / `?`) always
 reflects the current file, since both read from the same configuration.
 
+## Packages
+
+Each [release](https://github.com/massimo82/shfm/releases) comes with
+packages of shfm with every feature — semantic search with Vulkan GPU
+acceleration, the [desktop integration](#desktop-integration) and the
+[GIO module](#network-sources-in-other-applications) — next to the plain
+binaries (base build, no semantic search):
+
+- **Arch, Artix, Manjaro and derivatives** (x86_64):
+  `sudo pacman -U shfm-VERSION-1-x86_64.pkg.tar.zst`. The release's
+  `shfm-PKGBUILD.tar.gz` builds it again with `makepkg -si`
+  (`_native=1 makepkg -si` for this machine's CPU only); it's
+  `contrib/arch/shfm/` here.
+- **Debian 13+, Ubuntu 24.04+ and derivatives** (amd64, arm64):
+  `sudo apt install ./shfm_VERSION_amd64.deb`; built from
+  `contrib/debian/` (see the top of `contrib/debian/rules`).
+
+Both set the NFS capability (see [Notes](#notes)) on install and on every
+upgrade, and register shfm as a file manager next to the others without
+taking over: see [Choosing shfm explicitly](#choosing-shfm-explicitly).
+Semantic search on x86_64 needs a CPU with AVX2 (2013 onwards), as
+llama.cpp's own generic builds; everything else runs on any.
+
+The models for semantic search come in two packages of their own, one or
+the other (see "Which one to choose" in
+[Optional: semantic (content) search](#optional-semantic-content-search)),
+installed in `/usr/share/shfm/models/`; models in `~/.cache/shfm/models/`
+still come first:
+
+- **`shfm-models`**: Qwen3-Embedding-0.6B and the reranker, about 1 GB,
+  models included: `shfm-models-1-1-any.pkg.tar` (Arch),
+  `shfm-models_1_all.deb` (Debian/Ubuntu).
+- **`shfm-models-4b`**: Qwen3-Embedding-4B, the default, and the reranker,
+  about 4.7 GB — too large for a release asset, so they're downloaded from
+  Hugging Face, checksums checked: on Arch when building the release's
+  `shfm-models-4b-PKGBUILD.tar.gz` with `makepkg -si`, on Debian/Ubuntu
+  when installing `shfm-models-4b_1_all.deb` (removing it removes them).
+
 ## Building
 
 shfm currently works, and is tested, only on **GNU/Linux**. Requires
@@ -956,9 +994,10 @@ llama-go's Go/C++ wrapper but will fail at the final link step with
    The plain `go build -o shfm .` still works unaffected with `go.work`
    present, since nothing in the default build imports llama-go.
 3. Provide a local Qwen3-Embedding GGUF model file in
-   `$XDG_CACHE_HOME/shfm/models/` (`~/.cache/shfm/models/` by default). shfm
-   never downloads it on its own — it's a large file, not something to
-   fetch silently on a keypress.
+   `$XDG_CACHE_HOME/shfm/models/` (`~/.cache/shfm/models/` by default), or
+   install a models package (see [Packages](#packages)), which puts them in
+   `/usr/share/shfm/models/`. shfm never downloads it on its own — it's a
+   large file, not something to fetch silently on a keypress.
 
    **How shfm picks the model files:** it loads the file in that directory
    whose name ends in `.gguf`, with no environment variable or setting to
@@ -971,7 +1010,11 @@ llama-go's Go/C++ wrapper but will fail at the final link step with
    called just `model.gguf` is still recognised. A file that is neither, such
    as a chat model, is ignored, and the error you get if no model is found
    names it. There must be at most one enabled file per role; if there are
-   two shfm refuses to guess and tells you which ones it found. To keep several
+   two shfm refuses to guess and tells you which ones it found. The
+   system-wide folders (`shfm/models/` in each of `$XDG_DATA_DIRS`, by
+   default `/usr/local/share` then `/usr/share`) come after yours, role by
+   role: a model of yours wins over a packaged one, and a packaged reranker
+   is still used if you only added an embedding model. To keep several
    models around and choose between them, give the ones you don't want to
    use any other ending, for example `.gguf.disabled`, and rename to switch:
    ```sh
@@ -1336,6 +1379,9 @@ internal/opener/                default-app resolution (XDG) and launching
 internal/fusemount/             FUSE mounts of network sources, for opening remote files in place
 contrib/gio-module/             optional GIO module listing those mounts in GTK file dialogs
 contrib/desktop-integration/    optional desktop entry, D-Bus and portal files registering shfm as a file manager
+contrib/arch/, contrib/debian/  packages with every feature (PKGBUILD, Debian packaging), built for each release
+contrib/arch/shfm-models*/, contrib/debian-models/  the models packages for semantic search
+contrib/fetch-llama-go.sh       fetches the pinned llama-go and llama.cpp sources for the semantic search build
 internal/filemanager1/          org.freedesktop.FileManager1 service ("Show in folder")
 internal/portal/                xdg-desktop-portal file chooser backend
 internal/pick/                  the portal backend's conversation with shfm as a file dialog
@@ -1364,8 +1410,11 @@ vendor/                         Go module dependencies (the default build works 
 
 The current release is **0.2.10**, shown in the title bar next to "Shell File
 Manager". It lives in a single constant, `Version` in
-`internal/version/version.go`; to cut a new release change it there (and the
-README's title line) and rebuild.
+`internal/version/version.go`; to cut a new release change it there, and
+the README's title line, `pkgver` in `contrib/arch/shfm/PKGBUILD` and a new entry
+at the top of `contrib/debian/changelog`, then push a `vVERSION` tag: the
+release workflow checks they all agree, and publishes the binaries and the
+packages.
 
 ## Notes
 

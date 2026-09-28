@@ -1,0 +1,107 @@
+# Maintainer: Massimo Cavalleri <massimo.cavalleri@gmail.com>
+#
+# shfm with every feature: semantic (content) search with Vulkan GPU
+# acceleration (README, "Full build"), the desktop integration and the GIO
+# module listing network sources in GTK file dialogs. For Arch, Artix and
+# derivatives: nothing here needs systemd.
+#
+# llama.cpp is built for a generic CPU of the architecture (on x86_64 with
+# AVX2/FMA/F16C, as llama.cpp's own generic builds), so the package can be
+# installed on other machines. To build for this machine's CPU only:
+#   _native=1 makepkg -si
+
+pkgname=shfm
+pkgver=0.2.10
+pkgrel=1
+pkgdesc='Terminal file manager with SMB/NFS/SFTP/MTP support and local semantic search (Vulkan)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/massimo82/shfm'
+license=('GPL-3.0-or-later' 'MIT')
+depends=('glibc' 'gcc-libs' 'libusb' 'vulkan-icd-loader' 'glib2' 'libcap')
+makedepends=('go' 'cmake' 'vulkan-headers' 'spirv-headers' 'shaderc')
+optdepends=('vulkan-driver: GPU acceleration for semantic search'
+            'fuse3: network sources in other applications'\'' file dialogs'
+            'udisks2: removable drives and disk formatting'
+            'polkit: operations needing elevation (pkexec)'
+            'xdg-desktop-portal: shfm as the file dialog'
+            'xz: .xz archives'
+            'zstd: .zst archives'
+            'bzip2: .bz2 archives'
+            'lzip: .lz archives'
+            'lz4: .lz4 archives'
+            'libarchive: more archive formats (bsdtar)'
+            '7zip: .7z archives'
+            'unrar: .rar archives'
+            'pandoc-cli: semantic search in more document formats'
+            'libreoffice: semantic search in office documents'
+            'shfm-models: models for semantic search (or shfm-models-4b)')
+options=('!lto')
+install=shfm.install
+
+# llama-go pinned to the commit shfm's patches in third_party/llama-go target,
+# and the llama.cpp commit that llama-go's submodule points at
+_llamago=992bbf8cfdc7484d4b3d724fa9133c5a87d6310d
+_llamacpp=90c26fcd4b2114b4aa39d09d69318cb8f438d27a
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+        "llama-go-$_llamago.tar.gz::https://github.com/tcpipuk/llama-go/archive/$_llamago.tar.gz"
+        "llama.cpp-$_llamacpp.tar.gz::https://github.com/ggml-org/llama.cpp/archive/$_llamacpp.tar.gz")
+sha256sums=('0383236e7e502856179b5a8ca6e4a904c406b17caea01570c57fa0557178396f'
+            '6fd78f62efb2bd36bbd370f1be3fdda25b33cb7ee8076a9b5296fea4e513339c'
+            'f679a75f99b6d2ca2efd25596c2d856745eec2a42c43cfdd7e00a373d40c4357')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+
+  # Upstream llama-go merged into third_party/llama-go without overwriting
+  # the files carrying shfm's patches, then llama.cpp in place of its
+  # submodule
+  cp -an "$srcdir/llama-go-$_llamago"/. third_party/llama-go/
+  rm -rf third_party/llama-go/llama.cpp
+  cp -a "$srcdir/llama.cpp-$_llamacpp" third_party/llama-go/llama.cpp
+
+  export GOPATH="$srcdir/gopath" GOFLAGS='-modcacherw'
+  rm -f go.work go.work.sum
+  go work init . ./third_party/llama-go
+  go mod download
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+
+  (
+    cd third_party/llama-go
+    if [[ $_native == 1 ]]; then
+      export CMAKE_ARGS='-DGGML_NATIVE=ON'
+    else
+      # UNAME_M keeps the Makefile's own -march/-mcpu=native off. The x86
+      # extensions are named because ggml turns them all off when
+      # SOURCE_DATE_EPOCH is set, as makepkg does
+      export CMAKE_ARGS='-DGGML_NATIVE=OFF' UNAME_M=generic
+      if [[ $CARCH == x86_64 ]]; then
+        CMAKE_ARGS+=' -DGGML_SSE42=ON -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_FMA=ON -DGGML_F16C=ON'
+      fi
+    fi
+    CMAKE_BUILD_PARALLEL_LEVEL="$(nproc)" BUILD_TYPE=vulkan make libbinding.a
+  )
+
+  export GOPATH="$srcdir/gopath" GOCACHE="$srcdir/gocache"
+  export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_CXXFLAGS="$CXXFLAGS" CGO_LDFLAGS="$LDFLAGS"
+  export GOFLAGS='-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw'
+  go build -tags 'semantic vulkan' -o shfm .
+
+  make -C contrib/gio-module
+  make -C contrib/desktop-integration SHFM=/usr/bin/shfm
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+
+  install -Dm755 shfm "$pkgdir/usr/bin/shfm"
+  make -C contrib/gio-module DESTDIR="$pkgdir" install
+  make -C contrib/desktop-integration DESTDIR="$pkgdir" SHFM=/usr/bin/shfm install install-filemanager1
+
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 third_party/llama-go/LICENSE "$pkgdir/usr/share/licenses/$pkgname/llama-go.LICENSE"
+  install -Dm644 third_party/llama-go/llama.cpp/LICENSE "$pkgdir/usr/share/licenses/$pkgname/llama.cpp.LICENSE"
+}

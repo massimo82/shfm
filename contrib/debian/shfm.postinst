@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+# The capability is stored on the file, so it's set again on every upgrade:
+# lets shfm connect to NFS exports that require a privileged source port.
+if [ "$1" = configure ]; then
+	setcap cap_net_bind_service=+ep /usr/bin/shfm || true
+fi
+
+#DEBHELPER#

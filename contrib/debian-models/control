@@ -1,0 +1,30 @@
+Source: shfm-models
+Section: utils
+Priority: optional
+Maintainer: Massimo Cavalleri <massimo.cavalleri@gmail.com>
+Build-Depends: debhelper-compat (= 13), curl, ca-certificates
+Standards-Version: 4.7.0
+Homepage: https://github.com/massimo82/shfm
+Rules-Requires-Root: no
+
+Package: shfm-models
+Architecture: all
+Depends: ${misc:Depends}, shfm (>> 0.2.10)
+Conflicts: shfm-models-4b
+Description: embedding and reranker models for shfm's semantic search (small)
+ Qwen3-Embedding-0.6B (Q8_0) and Qwen3-Reranker-0.6B (Q4_K_M), about 1 GB,
+ in /usr/share/shfm/models, for shfm's semantic search on file contents.
+ shfm-models-4b has the larger, better embedding model instead. Models in
+ ~/.cache/shfm/models come first, role by role.
+
+Package: shfm-models-4b
+Architecture: all
+Depends: ${misc:Depends}, shfm (>> 0.2.10), curl, ca-certificates
+Conflicts: shfm-models
+Description: embedding and reranker models for shfm's semantic search (4B)
+ Downloads Qwen3-Embedding-4B (Q8_0) and Qwen3-Reranker-0.6B (Q4_K_M) from
+ Hugging Face when installed, about 4.7 GB, checks their checksums and puts
+ them in /usr/share/shfm/models, for shfm's semantic search on file
+ contents: better retrieval than shfm-models, slower queries. Removing the
+ package removes them. Models in ~/.cache/shfm/models come first, role by
+ role.

@@ -92,15 +92,33 @@ const (
 	rerankSystemPrompt   = `Judge whether the Document meets the requirements based on the Query and the Instruct provided. Note that the answer can only be "yes" or "no".`
 )
 
-// modelsDir is where the GGUF model files live. Semantic search never
+// modelsDir is where the user's GGUF model files live. Semantic search never
 // downloads a model on its own — a multi-gigabyte download is not something
-// to trigger silently on a keypress — it only uses what the user put here.
+// to trigger silently on a keypress — it only uses what the user put here,
+// or what a package installed system-wide (systemModelsDirs).
 func modelsDir() (string, error) {
 	cacheDir, err := os.UserCacheDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(cacheDir, "shfm", "models"), nil
+}
+
+// systemModelsDirs are where packages install models (shfm-models puts them
+// in /usr/share/shfm/models): shfm/models in each of $XDG_DATA_DIRS, in
+// order, by default /usr/local/share and /usr/share.
+func systemModelsDirs() []string {
+	dataDirs := os.Getenv("XDG_DATA_DIRS")
+	if dataDirs == "" {
+		dataDirs = "/usr/local/share:/usr/share"
+	}
+	var dirs []string
+	for _, d := range filepath.SplitList(dataDirs) {
+		if filepath.IsAbs(d) {
+			dirs = append(dirs, filepath.Join(d, "shfm", "models"))
+		}
+	}
+	return dirs
 }
 
 // scanModels sorts the enabled model files in dir by role. A model is
@@ -169,33 +187,43 @@ func scanModels(dir string) (byRole map[modelRole][]string, unknown []string, er
 // error saying where to put one, and so is more than one — silently picking
 // among several would mean nobody knows which model built an index or
 // answered a query, so the user is told to disable the extras instead.
+//
+// The user's directory comes first, then the system-wide ones, role by
+// role: the first directory with a model for the role decides, so a model
+// the user put in place wins over a packaged one, while a packaged reranker
+// still serves a user who only added an embedding model.
 func pickModel(role modelRole) (string, error) {
 	dir, err := modelsDir()
 	if err != nil {
 		return "", err
 	}
-	byRole, unknown, err := scanModels(dir)
-	if err != nil {
-		return "", err
-	}
-	found := byRole[role]
-	switch len(found) {
-	case 1:
-		return found[0], nil
-	case 0:
-		msg := fmt.Sprintf("no %s model found in %s: put a GGUF file ending in .gguf there "+
-			"(see the README's \"Building\" section for which one to download)", role, dir)
-		if len(unknown) > 0 {
-			msg += fmt.Sprintf("; ignored, role unknown (no \"embed\"/\"rerank\" in the name, "+
-				"and no embedding or reranker pooling type in the file): %s",
-				strings.Join(baseNames(unknown), ", "))
+	var unknown []string
+	for _, d := range append([]string{dir}, systemModelsDirs()...) {
+		byRole, unk, err := scanModels(d)
+		if err != nil {
+			return "", err
 		}
-		return "", errors.New(msg)
-	default:
-		return "", fmt.Errorf("%w as %s in %s (%s): keep exactly one ending in .gguf "+
-			"and rename the others, e.g. to .gguf.disabled",
-			errSeveralModels, role, dir, strings.Join(baseNames(found), ", "))
+		unknown = append(unknown, unk...)
+		switch found := byRole[role]; len(found) {
+		case 0:
+			continue
+		case 1:
+			return found[0], nil
+		default:
+			return "", fmt.Errorf("%w as %s in %s (%s): keep exactly one ending in .gguf "+
+				"and rename the others, e.g. to .gguf.disabled",
+				errSeveralModels, role, d, strings.Join(baseNames(found), ", "))
+		}
 	}
+	msg := fmt.Sprintf("no %s model found in %s: put a GGUF file ending in .gguf there, "+
+		"or install the shfm-models package "+
+		"(see the README's \"Building\" section for which one to download)", role, dir)
+	if len(unknown) > 0 {
+		msg += fmt.Sprintf("; ignored, role unknown (no \"embed\"/\"rerank\" in the name, "+
+			"and no embedding or reranker pooling type in the file): %s",
+			strings.Join(baseNames(unknown), ", "))
+	}
+	return "", errors.New(msg)
 }
 
 func baseNames(paths []string) []string {
@@ -211,7 +239,7 @@ func baseNames(paths []string) []string {
 var errSeveralModels = errors.New("more than one model enabled")
 
 // modelPath resolves the embedding model file to load: the one enabled
-// embedding model in modelsDir.
+// embedding model, see pickModel.
 func modelPath() (string, error) { return pickModel(roleEmbedding) }
 
 // rerankModelPath resolves the separate, optional reranker model the same

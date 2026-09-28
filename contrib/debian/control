@@ -1,0 +1,40 @@
+Source: shfm
+Section: utils
+Priority: optional
+Maintainer: Massimo Cavalleri <massimo.cavalleri@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               golang-go (>= 2:1.27~),
+               g++,
+               cmake,
+               curl,
+               pkgconf,
+               libusb-1.0-0-dev,
+               libglib2.0-dev,
+               libvulkan-dev,
+               glslc,
+               spirv-headers
+Standards-Version: 4.7.0
+Homepage: https://github.com/massimo82/shfm
+Rules-Requires-Root: no
+
+Package: shfm
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcap2-bin
+Recommends: mesa-vulkan-drivers | vulkan-icd,
+            fuse3,
+            udisks2,
+            pkexec | policykit-1,
+            xdg-desktop-portal
+Suggests: shfm-models | shfm-models-4b,
+          xz-utils, zstd, bzip2, lzip, lz4, libarchive-tools, 7zip, unrar,
+          pandoc, libreoffice
+Description: terminal file manager with SMB/NFS/SFTP/MTP support
+ Two-pane file manager for the terminal, talking directly to removable
+ media, MTP devices and SMB, NFS and SFTP shares, with background tasks,
+ archives, a clipboard shared with the desktop and local semantic search
+ on file contents with Vulkan GPU acceleration.
+ .
+ Registers with the desktop as a file manager next to the others (opening
+ folders, "Show in folder", the file chooser portal) and lists its network
+ sources in GTK file dialogs; which file manager is used stays the
+ system's choice.

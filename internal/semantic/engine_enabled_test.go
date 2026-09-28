@@ -31,6 +31,20 @@ import (
 	chromem "github.com/philippgille/chromem-go"
 )
 
+// TestMain keeps the models installed on this machine (/usr/share/shfm/models,
+// see systemModelsDirs) out of every test: the system-wide directories are
+// an empty one unless a test sets its own.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "shfm-data-dirs")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_DATA_DIRS", dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 // writeFakeModel creates a stand-in "model" file: modelIdentity only looks at
 // its size and head, so no real GGUF is needed (and none of these tests load
 // llama.cpp).
@@ -397,4 +411,63 @@ func TestModelDiscoveryMetadataFallback(t *testing.T) {
 			t.Error("no reranker model: rerankModelPath must fail")
 		}
 	})
+}
+
+// putSystemModel puts a fake model into the system-wide models directory
+// under dataDir, as a package installs one.
+func putSystemModel(t *testing.T, dataDir, name string) string {
+	t.Helper()
+	dir := filepath.Join(dataDir, "shfm", "models")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// Packaged models are used for the roles the user's directory doesn't
+// provide, the first system-wide directory with one deciding.
+func TestModelDiscoverySystemWide(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	local, usr := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_DATA_DIRS", local+string(os.PathListSeparator)+"relative/ignored"+string(os.PathListSeparator)+usr)
+
+	sysEmb := putSystemModel(t, usr, "Qwen3-Embedding-0.6B-Q8_0.gguf")
+	sysRer := putSystemModel(t, usr, "Qwen3-Reranker-0.6B-Q4_K_M.gguf")
+	if got, err := modelPath(); err != nil || got != sysEmb {
+		t.Errorf("modelPath = %q, %v; want the packaged %q", got, err, sysEmb)
+	}
+	if got, err := rerankModelPath(); err != nil || got != sysRer {
+		t.Errorf("rerankModelPath = %q, %v; want the packaged %q", got, err, sysRer)
+	}
+
+	// An earlier system-wide directory comes first.
+	localEmb := putSystemModel(t, local, "Qwen3-Embedding-4B-Q8_0.gguf")
+	if got, err := modelPath(); err != nil || got != localEmb {
+		t.Errorf("modelPath = %q, %v; want %q from the first data dir", got, err, localEmb)
+	}
+
+	// The user's own embedding model wins; the packaged reranker still
+	// serves, since the user has none.
+	userEmb := putModel(t, "Qwen3-Embedding-8B-Q8_0.gguf", 10)
+	if got, err := modelPath(); err != nil || got != userEmb {
+		t.Errorf("modelPath = %q, %v; want the user's %q", got, err, userEmb)
+	}
+	if got, err := rerankModelPath(); err != nil || got != sysRer {
+		t.Errorf("rerankModelPath = %q, %v; want the packaged %q", got, err, sysRer)
+	}
+
+	// Two in a system-wide directory are as ambiguous as in the user's,
+	// for a role the user's directory doesn't settle.
+	putSystemModel(t, usr, "Other-Reranker.gguf")
+	if _, err := rerankModelPath(); !errors.Is(err, errSeveralModels) {
+		t.Errorf("two packaged rerankers must be ambiguous, got %v", err)
+	}
+	userRer := putModel(t, "My-Reranker.gguf", 20)
+	if got, err := rerankModelPath(); err != nil || got != userRer {
+		t.Errorf("rerankModelPath = %q, %v; want the user's %q", got, err, userRer)
+	}
 }

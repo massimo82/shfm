@@ -13,6 +13,10 @@ jobs:
   ci:
     uses: ./.github/workflows/ci.yml
 
+  packages:
+    needs: ci
+    uses: ./.github/workflows/packages.yml
+
   build:
     needs: ci
     name: build (${{ matrix.arch }})
@@ -35,14 +39,19 @@ jobs:
           sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev
 
       # Version is a const shown in the UI, so it can't be injected at link
-      # time: the tag has to agree with the source instead.
-      - name: Check tag matches internal/version
+      # time: the tag has to agree with the source instead, the packages'
+      # versions included.
+      - name: Check tag matches internal/version and the packages
         run: |
           version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match internal/version/version.go (v$version)"
-            exit 1
-          fi
+          pkgver=$(sed -n 's/^pkgver=//p' contrib/arch/shfm/PKGBUILD)
+          debver=$(sed -n '1s/^shfm (\(.*\)).*/\1/p' contrib/debian/changelog)
+          for v in "internal/version/version.go:$version" "contrib/arch/shfm/PKGBUILD:$pkgver" "contrib/debian/changelog:$debver"; do
+            if [ "v${v#*:}" != "$GITHUB_REF_NAME" ]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match ${v%%:*} (v${v#*:})"
+              exit 1
+            fi
+          done
 
       # Base build (no semantic search), built natively on each architecture
       # because of cgo/libusb. It links libusb and glibc dynamically, so it
@@ -65,7 +74,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: build
+    needs: [build, packages]
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub release and upload its assets
@@ -90,4 +99,4 @@ jobs:
             --generate-notes \
             --verify-tag \
             $prerelease \
-            dist/*.tar.gz dist/*.sha256
+            dist/*.tar.gz dist/*.pkg.tar.zst dist/*.pkg.tar dist/*.deb dist/*.sha256

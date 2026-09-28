@@ -1,0 +1,30 @@
+# Maintainer: Massimo Cavalleri <massimo.cavalleri@gmail.com>
+#
+# The models for shfm's semantic search, the small ones: Qwen3-Embedding-0.6B
+# (Q8_0) and the Qwen3-Reranker-0.6B reranker (Q4_K_M), about 1 GB, in
+# /usr/share/shfm/models. shfm-models-4b has the larger, better embedding
+# model instead. Models in ~/.cache/shfm/models come first, role by role.
+#
+# Its version is the models', not shfm's.
+
+pkgname=shfm-models
+pkgver=1
+pkgrel=1
+pkgdesc='Embedding (Qwen3-Embedding-0.6B) and reranker models for shfm'\''s semantic search'
+arch=('any')
+url='https://github.com/massimo82/shfm'
+license=('Apache-2.0')
+depends=('shfm>0.2.10')
+conflicts=('shfm-models-4b')
+options=('!strip' '!debug')
+# The weights hardly compress
+PKGEXT='.pkg.tar'
+source=('https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf'
+        'https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp/resolve/main/Qwen3-Reranker-0.6B-Q4_K_M.gguf')
+sha256sums=('06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439'
+            'c04f5f5657c52e04538c455e8c62817db3d3b795b39e9f547f8581510445f075')
+
+package() {
+  install -Dm644 -t "$pkgdir/usr/share/shfm/models" \
+    Qwen3-Embedding-0.6B-Q8_0.gguf Qwen3-Reranker-0.6B-Q4_K_M.gguf
+}

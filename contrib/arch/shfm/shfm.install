@@ -1,0 +1,19 @@
+# The capability is stored on the file, so it's set again on every upgrade:
+# lets shfm connect to NFS exports that require a privileged source port.
+post_install() {
+  setcap cap_net_bind_service=+ep usr/bin/shfm
+  cat <<'EOF'
+==> shfm is registered as a file manager next to the others: nothing
+    changes by itself. To choose it for opening folders, as the file dialog
+    or for "Show in folder", see "Desktop integration" in
+    /usr/share/doc/shfm/README.md. Applications and the file chooser portal
+    list network sources once restarted.
+==> Semantic search (Ctrl+F) needs the models: install shfm-models (or
+    build shfm-models-4b), or put them in ~/.cache/shfm/models/; see
+    "Packages" in the README.
+EOF
+}
+
+post_upgrade() {
+  setcap cap_net_bind_service=+ep usr/bin/shfm
+}

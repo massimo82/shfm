@@ -1,0 +1,64 @@
+#!/usr/bin/make -f
+#
+# shfm with every feature: semantic search with Vulkan GPU acceleration
+# (README, "Full build"), the desktop integration and the GIO module. Build
+# from the top of the source tree, with Go >= 1.27 on PATH:
+#
+#   contrib/fetch-llama-go.sh
+#   cp -r contrib/debian debian
+#   dpkg-buildpackage -b -us -uc     # -d too if Go isn't the golang-go package
+#
+# llama.cpp is built for a generic CPU of the architecture (on amd64 with
+# AVX2/FMA/F16C, as llama.cpp's own generic builds).
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/architecture.mk
+
+export GOPATH := $(CURDIR)/debian/.go/path
+export GOCACHE := $(CURDIR)/debian/.go/cache
+export GOFLAGS := -modcacherw
+export GOTOOLCHAIN := local
+
+# UNAME_M keeps llama-go's Makefile's own -march/-mcpu=native off. The x86
+# extensions are named because ggml turns them all off when SOURCE_DATE_EPOCH
+# is set, as dpkg-buildpackage does
+LLAMA_CMAKE_ARGS := -DGGML_NATIVE=OFF
+ifeq ($(DEB_HOST_ARCH),amd64)
+LLAMA_CMAKE_ARGS += -DGGML_SSE42=ON -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_FMA=ON -DGGML_F16C=ON
+endif
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	@test -f third_party/llama-go/llama.cpp/CMakeLists.txt || \
+		{ echo "llama.cpp missing: run contrib/fetch-llama-go.sh first" >&2; exit 1; }
+	test -f go.work || go work init . ./third_party/llama-go
+
+override_dh_auto_build:
+	cd third_party/llama-go && \
+		CMAKE_ARGS="$(LLAMA_CMAKE_ARGS)" UNAME_M=generic BUILD_TYPE=vulkan \
+		CMAKE_BUILD_PARALLEL_LEVEL=$$(nproc) $(MAKE) libbinding.a
+	CGO_CPPFLAGS="$(CPPFLAGS)" CGO_CFLAGS="$(CFLAGS)" CGO_CXXFLAGS="$(CXXFLAGS)" CGO_LDFLAGS="$(LDFLAGS)" \
+		go build -buildmode=pie -trimpath -tags 'semantic vulkan' -o shfm .
+	$(MAKE) -C contrib/gio-module
+	$(MAKE) -C contrib/desktop-integration SHFM=/usr/bin/shfm
+
+# The tests run in CI, with every optional tool installed
+override_dh_auto_test:
+
+override_dh_auto_install:
+	install -Dm755 shfm debian/shfm/usr/bin/shfm
+	$(MAKE) -C contrib/gio-module DESTDIR=$(CURDIR)/debian/shfm install
+	$(MAKE) -C contrib/desktop-integration DESTDIR=$(CURDIR)/debian/shfm SHFM=/usr/bin/shfm \
+		install install-filemanager1
+	install -Dm644 README.md debian/shfm/usr/share/doc/shfm/README.md
+
+override_dh_auto_clean:
+	rm -f shfm
+	$(MAKE) -C contrib/gio-module clean
+	$(MAKE) -C contrib/desktop-integration clean
+	rm -rf debian/.go
+
+# dwz doesn't handle Go's DWARF
+override_dh_dwz:

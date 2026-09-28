@@ -1,0 +1,5 @@
+shfm-models (1) unstable; urgency=medium
+
+  * First models packages: Qwen3-Embedding-0.6B or 4B, Qwen3-Reranker-0.6B.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Mon, 28 Sep 2026 12:00:00 +0200

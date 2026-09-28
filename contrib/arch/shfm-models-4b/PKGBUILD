@@ -1,0 +1,34 @@
+# Maintainer: Massimo Cavalleri <massimo.cavalleri@gmail.com>
+#
+# The models for shfm's semantic search, the default embedding model:
+# Qwen3-Embedding-4B (Q8_0) and the Qwen3-Reranker-0.6B reranker (Q4_K_M),
+# about 4.7 GB, in /usr/share/shfm/models: better retrieval than
+# shfm-models' 0.6B, slower queries (README, "Which one to choose"). Too
+# large for a release asset: build it with makepkg -si, which downloads the
+# models from Hugging Face. Models in ~/.cache/shfm/models come first, role
+# by role.
+#
+# Its version is the models', not shfm's.
+
+pkgname=shfm-models-4b
+pkgver=1
+pkgrel=1
+pkgdesc='Embedding (Qwen3-Embedding-4B) and reranker models for shfm'\''s semantic search'
+arch=('any')
+url='https://github.com/massimo82/shfm'
+license=('Apache-2.0')
+depends=('shfm>0.2.10')
+provides=('shfm-models')
+conflicts=('shfm-models')
+options=('!strip' '!debug')
+# The weights hardly compress
+PKGEXT='.pkg.tar'
+source=('https://huggingface.co/Qwen/Qwen3-Embedding-4B-GGUF/resolve/main/Qwen3-Embedding-4B-Q8_0.gguf'
+        'https://huggingface.co/Voodisss/Qwen3-Reranker-0.6B-GGUF-llama_cpp/resolve/main/Qwen3-Reranker-0.6B-Q4_K_M.gguf')
+sha256sums=('b60ae5ce2dd6a0b77f82cadf21def1f310a3e10cde380ad0081b07a9d416949d'
+            'c04f5f5657c52e04538c455e8c62817db3d3b795b39e9f547f8581510445f075')
+
+package() {
+  install -Dm644 -t "$pkgdir/usr/share/shfm/models" \
+    Qwen3-Embedding-4B-Q8_0.gguf Qwen3-Reranker-0.6B-Q4_K_M.gguf
+}

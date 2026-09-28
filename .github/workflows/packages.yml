@@ -1,0 +1,217 @@
+name: Packages
+
+# The Arch and Debian/Ubuntu packages: shfm with every feature (semantic
+# search with Vulkan, desktop integration, GIO module), from contrib/arch/shfm
+# and contrib/debian, and the models for its semantic search, from
+# contrib/arch/shfm-models* and contrib/debian-models. Called by release.yml,
+# which publishes them; run it by hand (Actions → Packages → Run workflow) to
+# try the packaging on a branch, the packages are then left as the run's
+# artifacts.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arch:
+    # Arch Linux has no official image for aarch64: x86_64 only
+    name: arch (x86_64)
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm --needed git pacman-contrib
+
+      - uses: actions/checkout@v5
+
+      # makepkg refuses to run as root; -s installs the PKGBUILD's
+      # dependencies, so they are checked too
+      - name: Set up a build user
+        run: |
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          mkdir /build
+          cp -r contrib/arch/shfm /build/
+          chown -R builder /build
+
+      # On a tag, the PKGBUILD downloads that release's source from GitHub,
+      # as it will for whoever uses the published one, and gets its checksum.
+      # Otherwise it builds the checked-out tree.
+      - name: Point the PKGBUILD at the source
+        run: |
+          version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)
+          cd /build/shfm
+          sed -i "s/^pkgver=.*/pkgver=$version/" PKGBUILD
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            sudo -u builder updpkgsums
+          else
+            tar --exclude=.git --transform "s|^\.|shfm-$version|" \
+              -czf "shfm-$version.tar.gz" -C "$GITHUB_WORKSPACE" .
+            chown builder "shfm-$version.tar.gz"
+            sed -i \
+              -e "s|^source=(\"\$pkgname-\$pkgver.tar.gz::[^\"]*\"|source=(\"\$pkgname-\$pkgver.tar.gz\"|" \
+              -e "0,/^sha256sums=('[0-9a-f]*'/s//sha256sums=('SKIP'/" PKGBUILD
+          fi
+
+      - name: Build
+        run: cd /build/shfm && sudo -u builder makepkg -s --noconfirm
+
+      - name: Install and run
+        run: |
+          pacman -U --noconfirm /build/shfm/shfm-*.pkg.tar.zst
+          getcap /usr/bin/shfm | grep -q cap_net_bind_service
+          shfm --help
+
+      - name: Collect
+        run: |
+          mkdir dist
+          cp /build/shfm/shfm-*.pkg.tar.zst dist/
+          (cd dist && for f in *.pkg.tar.zst; do sha256sum "$f" > "$f.sha256"; done)
+          # The PKGBUILD as built, for building it again (AUR, makepkg)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tar -czf dist/shfm-PKGBUILD.tar.gz -C /build shfm/PKGBUILD shfm/shfm.install
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-arch
+          path: dist/*
+          if-no-files-found: error
+
+  arch-models:
+    name: arch models
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up a build user
+        run: |
+          useradd -m builder
+          mkdir /build
+          cp -r contrib/arch/shfm-models contrib/arch/shfm-models-4b /build/
+          chown -R builder /build
+
+      # -d: they depend on shfm, built by the other job
+      - name: Build shfm-models
+        run: |
+          cd /build/shfm-models && sudo -u builder makepkg -d --noconfirm
+          tar -tf shfm-models-*.pkg.tar | grep -x usr/share/shfm/models/Qwen3-Embedding-0.6B-Q8_0.gguf
+          tar -tf shfm-models-*.pkg.tar | grep -x usr/share/shfm/models/Qwen3-Reranker-0.6B-Q4_K_M.gguf
+
+      # Too large for a release asset: only its PKGBUILD is published, and
+      # its downloads are checked here
+      - name: Check shfm-models-4b's sources
+        run: |
+          cd /build/shfm-models-4b && sudo -u builder makepkg --verifysource
+          rm -f *.gguf
+
+      - name: Collect
+        run: |
+          mkdir dist
+          cp /build/shfm-models/shfm-models-*.pkg.tar dist/
+          (cd dist && for f in *.pkg.tar; do sha256sum "$f" > "$f.sha256"; done)
+          tar -czf dist/shfm-models-PKGBUILD.tar.gz -C contrib/arch shfm-models/PKGBUILD
+          tar -czf dist/shfm-models-4b-PKGBUILD.tar.gz -C contrib/arch shfm-models-4b/PKGBUILD
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-arch-models
+          path: dist/*
+          if-no-files-found: error
+
+  debian:
+    # Built on Ubuntu 24.04: installs there and on later releases, and on
+    # Debian 13 and later.
+    name: debian (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v5
+
+      # Ubuntu's golang-go is older than go.mod asks for: Go comes from here,
+      # hence dpkg-buildpackage -d below.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debhelper dpkg-dev \
+            g++ cmake curl pkgconf libusb-1.0-0-dev libglib2.0-dev \
+            libvulkan-dev glslc spirv-headers
+
+      - name: Build
+        run: |
+          contrib/fetch-llama-go.sh
+          cp -r contrib/debian debian
+          dpkg-buildpackage -b -us -uc -d
+
+      - name: Install and run
+        run: |
+          sudo apt-get install -y ../shfm_*.deb
+          getcap /usr/bin/shfm | grep -q cap_net_bind_service
+          shfm --help
+
+      - name: Collect
+        run: |
+          mkdir dist
+          cp ../shfm_*.deb dist/
+          (cd dist && for f in *.deb; do sha256sum "$f" > "$f.sha256"; done)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-debian-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  debian-models:
+    name: debian models
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debhelper dpkg-dev curl ca-certificates
+
+      - name: Build
+        run: |
+          cp -r contrib/debian-models debian
+          dpkg-buildpackage -b -us -uc
+
+      # --force-depends: they depend on shfm, built by the other job.
+      # shfm-models-4b downloads its models when installed, and removes them
+      # when removed.
+      - name: Install and remove
+        run: |
+          M=/usr/share/shfm/models
+          sudo dpkg --force-depends -i ../shfm-models-4b_*_all.deb
+          ls -l $M
+          test -f $M/Qwen3-Embedding-4B-Q8_0.gguf && test -f $M/Qwen3-Reranker-0.6B-Q4_K_M.gguf
+          sudo dpkg --force-depends -r shfm-models-4b
+          test ! -e $M
+          sudo dpkg --force-depends -i ../shfm-models_*_all.deb
+          test -f $M/Qwen3-Embedding-0.6B-Q8_0.gguf && test -f $M/Qwen3-Reranker-0.6B-Q4_K_M.gguf
+          sudo dpkg --force-depends -r shfm-models
+
+      - name: Collect
+        run: |
+          mkdir dist
+          cp ../shfm-models_*_all.deb ../shfm-models-4b_*_all.deb dist/
+          (cd dist && for f in *.deb; do sha256sum "$f" > "$f.sha256"; done)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-debian-models
+          path: dist/*
+          if-no-files-found: error

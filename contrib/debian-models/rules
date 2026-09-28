@@ -1,0 +1,33 @@
+#!/usr/bin/make -f
+#
+# shfm-models and shfm-models-4b. Build from the top of shfm's source tree:
+#
+#   cp -r contrib/debian-models debian
+#   dpkg-buildpackage -b -us -uc
+#
+# which downloads shfm-models' models (about 1 GB) from Hugging Face.
+
+MODELS := /usr/share/shfm/models
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	grep -v '^#' debian/models | while read -r name sum url; do \
+		curl -fL --retry 3 -C - -o "debian/$$name" "$$url" && \
+		echo "$$sum  debian/$$name" | sha256sum -c || exit 1; \
+	done
+
+override_dh_auto_test:
+
+override_dh_auto_install:
+	grep -v '^#' debian/models | while read -r name sum url; do \
+		install -Dm644 "debian/$$name" "debian/shfm-models$(MODELS)/$$name" || exit 1; \
+	done
+
+override_dh_auto_clean:
+	grep -v '^#' debian/models | while read -r name sum url; do rm -f "debian/$$name"; done
+
+# The weights hardly compress
+override_dh_builddeb:
+	dh_builddeb -- -Znone

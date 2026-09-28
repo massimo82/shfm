@@ -1,0 +1,17 @@
+#!/bin/sh
+# The models aren't the package's files, dpkg doesn't know them: removed
+# here, with any partial download.
+set -e
+
+MODELS=/usr/share/shfm/models
+
+case "$1" in
+remove|purge)
+	for f in Qwen3-Embedding-4B-Q8_0.gguf Qwen3-Reranker-0.6B-Q4_K_M.gguf; do
+		rm -f "$MODELS/$f" "$MODELS/$f.part"
+	done
+	rmdir --ignore-fail-on-non-empty "$MODELS" /usr/share/shfm 2>/dev/null || true
+	;;
+esac
+
+#DEBHELPER#
