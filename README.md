@@ -1,4 +1,4 @@
-# shfm — Shell File Manager v0.2.9
+# shfm — Shell File Manager v0.2.10
 
 shfm is a file manager for the terminal. It browses and manages files
 on local disks, removable drives, phones and cameras (MTP) and network
@@ -1357,7 +1357,7 @@ vendor/                         Go module dependencies (the default build works 
 
 ## Version
 
-The current release is **0.2.9**, shown in the title bar next to "Shell File
+The current release is **0.2.10**, shown in the title bar next to "Shell File
 Manager". It lives in a single constant, `Version` in
 `internal/version/version.go`; to cut a new release change it there (and the
 README's title line) and rebuild.
