@@ -1,3 +1,9 @@
+shfm (0.2.14) unstable; urgency=medium
+
+  * NFS: a denied mount from an unprivileged port suggests setcap.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Mon, 28 Sep 2026 18:00:00 +0200
+
 shfm (0.2.13) unstable; urgency=medium
 
   * Packages for Fedora and derivatives.
