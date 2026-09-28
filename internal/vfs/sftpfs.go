@@ -46,11 +46,26 @@ type SFTPOptions struct {
 // SFTP protocol on top) — both established, widely used pure-Go libraries,
 // no external ssh/sftp/scp commands involved.
 type SFTPFS struct {
-	opts    SFTPOptions // kept for Redial
-	sshConn *ssh.Client
-	client  *sftp.Client
-	label   string
-	root    string
+	opts  SFTPOptions // kept for Redial
+	sess  *session[*sftpConn]
+	label string
+	root  string
+}
+
+// sftpConn is an SFTP session with the SSH connection carrying it.
+type sftpConn struct {
+	ssh    *ssh.Client
+	client *sftp.Client
+}
+
+func (c *sftpConn) close() {
+	c.client.Close()
+	c.ssh.Close()
+}
+
+func sftpAlive(c *sftpConn) bool {
+	_, err := c.client.Getwd()
+	return err == nil
 }
 
 // DialSFTP connects and authenticates to the SFTP server described by opts.
@@ -64,6 +79,27 @@ func DialSFTP(opts SFTPOptions) (*SFTPFS, error) {
 	if opts.Port == 0 {
 		opts.Port = 22
 	}
+	conn, err := dialSFTPConn(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	root := opts.BasePath
+	if root == "" {
+		if wd, err := conn.client.Getwd(); err == nil {
+			root = wd
+		} else {
+			root = "/"
+		}
+	}
+
+	sess := newSession(conn, func() (*sftpConn, error) { return dialSFTPConn(opts) },
+		sftpAlive, (*sftpConn).close)
+	label := fmt.Sprintf("sftp://%s@%s", opts.User, opts.Host)
+	return &SFTPFS{opts: opts, sess: sess, label: label, root: root}, nil
+}
+
+func dialSFTPConn(opts SFTPOptions) (*sftpConn, error) {
 	auths, err := sftpAuthMethods(opts)
 	if err != nil {
 		return nil, err
@@ -90,18 +126,17 @@ func DialSFTP(opts SFTPOptions) (*SFTPFS, error) {
 		sshConn.Close()
 		return nil, fmt.Errorf("SFTP session on %s failed: %w", addr, err)
 	}
+	return &sftpConn{ssh: sshConn, client: client}, nil
+}
 
-	root := opts.BasePath
-	if root == "" {
-		if wd, err := client.Getwd(); err == nil {
-			root = wd
-		} else {
-			root = "/"
-		}
-	}
+// withClient runs op on the SFTP client, reconnecting if the connection
+// is gone.
+func withClient[T any](s *SFTPFS, op func(c *sftp.Client) (T, error)) (T, error) {
+	return run(s.sess, func(c *sftpConn) (T, error) { return op(c.client) })
+}
 
-	label := fmt.Sprintf("sftp://%s@%s", opts.User, opts.Host)
-	return &SFTPFS{opts: opts, sshConn: sshConn, client: client, label: label, root: root}, nil
+func (s *SFTPFS) do(op func(c *sftp.Client) error) error {
+	return do(s.sess, func(c *sftpConn) error { return op(c.client) })
 }
 
 func sftpAuthMethods(opts SFTPOptions) ([]ssh.AuthMethod, error) {
@@ -197,7 +232,11 @@ func (s *SFTPFS) Label() string { return s.label }
 func (s *SFTPFS) Root() string  { return s.root }
 
 func (s *SFTPFS) List(p string) ([]Entry, error) {
-	infos, err := s.client.ReadDir(p)
+	var client *sftp.Client
+	infos, err := withClient(s, func(c *sftp.Client) ([]os.FileInfo, error) {
+		client = c
+		return c.ReadDir(p)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +247,7 @@ func (s *SFTPFS) List(p string) ([]Entry, error) {
 			// ReadDir, like Lstat, reports the symlink's own type: resolve
 			// the target so a symlink to a folder can actually be navigated
 			// into, matching Stat()'s behavior for the same entry.
-			if target, err := s.client.Stat(path.Join(p, e.Name)); err == nil {
+			if target, err := client.Stat(path.Join(p, e.Name)); err == nil {
 				followSymlink(&e, target)
 			}
 		}
@@ -218,13 +257,17 @@ func (s *SFTPFS) List(p string) ([]Entry, error) {
 }
 
 func (s *SFTPFS) Stat(p string) (Entry, error) {
-	info, err := s.client.Lstat(p)
+	var client *sftp.Client
+	info, err := withClient(s, func(c *sftp.Client) (os.FileInfo, error) {
+		client = c
+		return c.Lstat(p)
+	})
 	if err != nil {
 		return Entry{}, err
 	}
 	e := entryFromInfo(info)
 	if e.IsSymlink {
-		if target, err := s.client.Stat(p); err == nil {
+		if target, err := client.Stat(p); err == nil {
 			followSymlink(&e, target)
 		}
 	}
@@ -254,9 +297,9 @@ func entryFromInfo(info os.FileInfo) Entry {
 	}
 }
 
-func (s *SFTPFS) Mkdir(p string) error { return s.client.Mkdir(p) }
+func (s *SFTPFS) Mkdir(p string) error { return s.do(func(c *sftp.Client) error { return c.Mkdir(p) }) }
 func (s *SFTPFS) CreateEmptyFile(p string) error {
-	f, err := s.client.Create(p)
+	f, err := withClient(s, func(c *sftp.Client) (*sftp.File, error) { return c.Create(p) })
 	if err != nil {
 		return err
 	}
@@ -264,14 +307,14 @@ func (s *SFTPFS) CreateEmptyFile(p string) error {
 }
 
 func (s *SFTPFS) Remove(p string) error {
-	info, err := s.client.Lstat(p)
+	info, err := withClient(s, func(c *sftp.Client) (os.FileInfo, error) { return c.Lstat(p) })
 	if err != nil {
 		return err
 	}
 	if !info.IsDir() {
-		return s.client.Remove(p)
+		return s.do(func(c *sftp.Client) error { return c.Remove(p) })
 	}
-	children, err := s.client.ReadDir(p)
+	children, err := withClient(s, func(c *sftp.Client) ([]os.FileInfo, error) { return c.ReadDir(p) })
 	if err != nil {
 		return err
 	}
@@ -280,7 +323,7 @@ func (s *SFTPFS) Remove(p string) error {
 			return err
 		}
 	}
-	return s.client.RemoveDirectory(p)
+	return s.do(func(c *sftp.Client) error { return c.RemoveDirectory(p) })
 }
 
 func (s *SFTPFS) Rename(oldPath, newPath string) error {
@@ -288,19 +331,26 @@ func (s *SFTPFS) Rename(oldPath, newPath string) error {
 	// supports the "posix-rename@openssh.com" extension (virtually every
 	// modern OpenSSH server does); fall back to the plain SFTP Rename
 	// (which fails if the destination exists) otherwise.
-	if err := s.client.PosixRename(oldPath, newPath); err == nil {
-		return nil
-	}
-	return s.client.Rename(oldPath, newPath)
+	return s.do(func(c *sftp.Client) error {
+		if err := c.PosixRename(oldPath, newPath); err == nil {
+			return nil
+		}
+		return c.Rename(oldPath, newPath)
+	})
 }
 
-func (s *SFTPFS) Open(p string) (io.ReadCloser, error)    { return s.client.Open(p) }
-func (s *SFTPFS) Create(p string) (io.WriteCloser, error) { return s.client.Create(p) }
+func (s *SFTPFS) Open(p string) (io.ReadCloser, error) {
+	return withClient(s, func(c *sftp.Client) (io.ReadCloser, error) { return c.Open(p) })
+}
+
+func (s *SFTPFS) Create(p string) (io.WriteCloser, error) {
+	return withClient(s, func(c *sftp.Client) (io.WriteCloser, error) { return c.Create(p) })
+}
 
 // OpenRandom implements RandomAccessOpener: *sftp.File already reads and
 // writes at arbitrary offsets.
 func (s *SFTPFS) OpenRandom(p string, flag int, perm os.FileMode) (RandomAccessFile, error) {
-	return s.client.OpenFile(p, flag)
+	return withClient(s, func(c *sftp.Client) (RandomAccessFile, error) { return c.OpenFile(p, flag) })
 }
 
 // Redial implements Redialer.
@@ -312,21 +362,25 @@ func (s *SFTPFS) Base(p string) string       { return path.Base(p) }
 func (s *SFTPFS) SupportsTrash() bool        { return false }
 
 func (s *SFTPFS) Close() error {
-	s.client.Close()
-	return s.sshConn.Close()
+	s.sess.shutdown()
+	return nil
 }
 
 // Chmod implements vfs.PermissionsEditor.
-func (s *SFTPFS) Chmod(p string, mode os.FileMode) error { return s.client.Chmod(p, mode) }
+func (s *SFTPFS) Chmod(p string, mode os.FileMode) error {
+	return s.do(func(c *sftp.Client) error { return c.Chmod(p, mode) })
+}
 
 // Chown implements vfs.PermissionsEditor.
-func (s *SFTPFS) Chown(p string, uid, gid int) error { return s.client.Chown(p, uid, gid) }
+func (s *SFTPFS) Chown(p string, uid, gid int) error {
+	return s.do(func(c *sftp.Client) error { return c.Chown(p, uid, gid) })
+}
 
 // Chtimes implements TimesSetter. SFTP sets both times at once: a zero one
 // is filled in from the file's current attributes.
 func (s *SFTPFS) Chtimes(p string, atime, mtime time.Time) error {
 	if atime.IsZero() || mtime.IsZero() {
-		info, err := s.client.Stat(p)
+		info, err := withClient(s, func(c *sftp.Client) (os.FileInfo, error) { return c.Stat(p) })
 		if err != nil {
 			return err
 		}
@@ -340,13 +394,13 @@ func (s *SFTPFS) Chtimes(p string, atime, mtime time.Time) error {
 			}
 		}
 	}
-	return s.client.Chtimes(p, atime, mtime)
+	return s.do(func(c *sftp.Client) error { return c.Chtimes(p, atime, mtime) })
 }
 
 // Space implements SpaceReporter, where the server supports the
 // statvfs@openssh.com extension (OpenSSH does).
 func (s *SFTPFS) Space(p string) (total, free uint64, err error) {
-	st, err := s.client.StatVFS(p)
+	st, err := withClient(s, func(c *sftp.Client) (*sftp.StatVFS, error) { return c.StatVFS(p) })
 	if err != nil {
 		return 0, 0, err
 	}

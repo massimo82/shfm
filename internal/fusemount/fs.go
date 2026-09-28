@@ -611,7 +611,7 @@ func (h *handle) do(op func(f vfs.RandomAccessFile) error) syscall.Errno {
 		}
 	}
 	err := op(h.f)
-	if vfs.IsConnectionFailure(err) && !errors.Is(err, io.EOF) && m.reconnectLocked() {
+	if err != io.EOF && vfs.IsConnectionFailure(err) && m.reconnectLocked() {
 		if err = h.reopenLocked(); err == nil {
 			err = op(h.f)
 		}

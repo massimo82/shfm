@@ -18,6 +18,7 @@
 package vfs
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +48,7 @@ type SMBOptions struct {
 // (no external command, no dependency on smbclient/cifs-utils).
 type SMBFS struct {
 	opts  SMBOptions
-	conn  *smb.Connection
+	sess  *session[*smb.Connection]
 	label string
 }
 
@@ -56,6 +57,29 @@ func DialSMB(opts SMBOptions) (*SMBFS, error) {
 	if opts.Port == 0 {
 		opts.Port = 445
 	}
+	conn, err := dialSMBConn(opts)
+	if err != nil {
+		return nil, err
+	}
+	sess := newSession(conn, func() (*smb.Connection, error) { return dialSMBConn(opts) },
+		smbAlive, (*smb.Connection).Close)
+	label := fmt.Sprintf("smb://%s/%s", opts.Host, opts.Share)
+	return &SMBFS{opts: opts, sess: sess, label: label}, nil
+}
+
+// smbProbeTimeout bounds the ECHO that checks whether a connection still
+// works: a server that doesn't answer it in time counts as gone.
+const smbProbeTimeout = 10 * time.Second
+
+func smbAlive(c *smb.Connection) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), smbProbeTimeout)
+	defer cancel()
+	return c.EchoContext(ctx) == nil
+}
+
+// dialSMBConn opens and authenticates a connection, and connects it to
+// the share.
+func dialSMBConn(opts SMBOptions) (*smb.Connection, error) {
 	initiator := &spnego.NTLMInitiator{
 		User:     opts.User,
 		Password: opts.Password,
@@ -78,8 +102,21 @@ func DialSMB(opts SMBOptions) (*SMBFS, error) {
 		conn.Close()
 		return nil, fmt.Errorf("could not connect to share %q: %w", opts.Share, err)
 	}
-	label := fmt.Sprintf("smb://%s/%s", opts.Host, opts.Share)
-	return &SMBFS{opts: opts, conn: conn, label: label}, nil
+	return conn, nil
+}
+
+// listDir runs a directory query, reconnecting if the connection is gone.
+func (s *SMBFS) listDir(dir, pattern string) ([]smb.SharedFile, error) {
+	return run(s.sess, func(c *smb.Connection) ([]smb.SharedFile, error) {
+		return c.ListDirectory(s.opts.Share, dir, pattern)
+	})
+}
+
+// openExt opens a file or folder, reconnecting if the connection is gone.
+func (s *SMBFS) openExt(path string, opts *smb.CreateReqOpts) (*smb.File, error) {
+	return run(s.sess, func(c *smb.Connection) (*smb.File, error) {
+		return c.OpenFileExt(s.opts.Share, path, opts)
+	})
 }
 
 func (s *SMBFS) Kind() Kind    { return KindSMB }
@@ -95,7 +132,7 @@ func smbPath(p string) string {
 }
 
 func (s *SMBFS) List(path string) ([]Entry, error) {
-	files, err := s.conn.ListDirectory(s.opts.Share, smbPath(path), "*")
+	files, err := s.listDir(smbPath(path), "*")
 	if err != nil {
 		return nil, smbErr(err)
 	}
@@ -117,7 +154,7 @@ func (s *SMBFS) List(path string) ([]Entry, error) {
 }
 
 func (s *SMBFS) Stat(path string) (Entry, error) {
-	list, err := s.conn.ListDirectory(s.opts.Share, smbPath(s.Dir(path)), s.Base(path))
+	list, err := s.listDir(smbPath(s.Dir(path)), s.Base(path))
 	if err != nil {
 		return Entry{}, smbErr(err)
 	}
@@ -142,7 +179,9 @@ func filetimeToTime(ft uint64) time.Time {
 	return time.Unix(0, int64(unixNano)).UTC()
 }
 
-func (s *SMBFS) Mkdir(path string) error { return smbErr(s.conn.Mkdir(s.opts.Share, smbPath(path))) }
+func (s *SMBFS) Mkdir(path string) error {
+	return smbErr(do(s.sess, func(c *smb.Connection) error { return c.Mkdir(s.opts.Share, smbPath(path)) }))
+}
 
 func (s *SMBFS) CreateEmptyFile(path string) error {
 	w, err := s.Create(path)
@@ -168,9 +207,9 @@ func (s *SMBFS) Remove(path string) error {
 				return err
 			}
 		}
-		return smbErr(s.conn.DeleteDir(s.opts.Share, smbPath(path)))
+		return smbErr(do(s.sess, func(c *smb.Connection) error { return c.DeleteDir(s.opts.Share, smbPath(path)) }))
 	}
-	return smbErr(s.conn.DeleteFile(s.opts.Share, smbPath(path)))
+	return smbErr(do(s.sess, func(c *smb.Connection) error { return c.DeleteFile(s.opts.Share, smbPath(path)) }))
 }
 
 // Rename renames/moves natively on the server, overwriting an existing
@@ -179,7 +218,7 @@ func (s *SMBFS) Rename(oldPath, newPath string) error {
 	opts := smb.NewCreateReqOpts()
 	opts.DesiredAccess = smb.FAccMaskDelete | smb.FAccMaskFileReadAttributes | smb.FAccMaskSynchronize
 	opts.ShareAccess = smb.FileShareRead | smb.FileShareWrite | smb.FileShareDelete
-	f, err := s.conn.OpenFileExt(s.opts.Share, smbPath(oldPath), opts)
+	f, err := s.openExt(smbPath(oldPath), opts)
 	if err != nil {
 		return smbErr(err)
 	}
@@ -187,24 +226,27 @@ func (s *SMBFS) Rename(oldPath, newPath string) error {
 	return smbErr(f.Rename(smbPath(newPath), true))
 }
 
+// smbReadCloser reads a file sequentially; every Read is a download
+// starting at the current offset, so it can resume on a new connection.
 type smbReadCloser struct {
-	conn   *smb.Connection
+	sess   *session[*smb.Connection]
 	share  string
 	path   string
 	offset uint64
-	closed bool
 }
 
 func (r *smbReadCloser) Read(p []byte) (int, error) {
 	n := 0
-	err := r.conn.RetrieveFile(r.share, r.path, r.offset, func(chunk []byte) (int, error) {
-		c := copy(p[n:], chunk)
-		n += c
-		r.offset += uint64(c)
-		if n >= len(p) {
-			return c, io.EOF // stop this round of the download: further chunks are read via new calls
-		}
-		return len(chunk), nil
+	err := do(r.sess, func(conn *smb.Connection) error {
+		return conn.RetrieveFile(r.share, r.path, r.offset, func(chunk []byte) (int, error) {
+			c := copy(p[n:], chunk)
+			n += c
+			r.offset += uint64(c)
+			if n >= len(p) {
+				return c, io.EOF // stop this round of the download: further chunks are read via new calls
+			}
+			return len(chunk), nil
+		})
 	})
 	if n == 0 && err == nil {
 		return 0, io.EOF
@@ -222,7 +264,7 @@ func (s *SMBFS) Open(path string) (io.ReadCloser, error) {
 	if _, err := s.Stat(path); err != nil {
 		return nil, err
 	}
-	return &smbReadCloser{conn: s.conn, share: s.opts.Share, path: smbPath(path)}, nil
+	return &smbReadCloser{sess: s.sess, share: s.opts.Share, path: smbPath(path)}, nil
 }
 
 type smbWriteCloser struct {
@@ -244,9 +286,13 @@ func (s *SMBFS) Create(path string) (io.WriteCloser, error) {
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
 	go func() {
-		err := s.conn.PutFile(s.opts.Share, smbPath(path), 0, func(buf []byte) (int, error) {
+		// The upload consumes the data as it goes, so it can't be retried:
+		// a lost connection is only replaced for the operations that follow.
+		conn, gen := s.sess.get()
+		err := conn.PutFile(s.opts.Share, smbPath(path), 0, func(buf []byte) (int, error) {
 			return pr.Read(buf)
 		})
+		s.sess.failed(err, gen)
 		pr.CloseWithError(err)
 		done <- err
 	}()
@@ -307,7 +353,7 @@ func (s *SMBFS) OpenRandom(path string, flag int, perm os.FileMode) (RandomAcces
 	default:
 		opts.CreateDisp = smb.FileOpen
 	}
-	f, err := s.conn.OpenFileExt(s.opts.Share, smbPath(path), opts)
+	f, err := s.openExt(smbPath(path), opts)
 	if err != nil {
 		return nil, smbErr(err)
 	}
@@ -323,7 +369,7 @@ func (s *SMBFS) Chtimes(path string, atime, mtime time.Time) error {
 	opts := smb.NewCreateReqOpts()
 	opts.DesiredAccess = smb.FAccMaskFileReadAttributes | smb.FAccMaskFileWriteAttributes | smb.FAccMaskSynchronize
 	opts.ShareAccess = smb.FileShareRead | smb.FileShareWrite | smb.FileShareDelete
-	f, err := s.conn.OpenFileExt(s.opts.Share, smbPath(path), opts)
+	f, err := s.openExt(smbPath(path), opts)
 	if err != nil {
 		return smbErr(err)
 	}
@@ -337,7 +383,7 @@ func (s *SMBFS) Space(path string) (total, free uint64, err error) {
 	opts := smb.NewCreateReqOpts()
 	opts.DesiredAccess = smb.FAccMaskFileReadAttributes | smb.FAccMaskSynchronize
 	opts.CreateOpts = smb.FileDirectoryFile
-	f, err := s.conn.OpenFileExt(s.opts.Share, "", opts)
+	f, err := s.openExt("", opts)
 	if err != nil {
 		return 0, 0, smbErr(err)
 	}
@@ -416,6 +462,6 @@ func (s *SMBFS) Base(path string) string {
 func (s *SMBFS) SupportsTrash() bool { return false }
 
 func (s *SMBFS) Close() error {
-	s.conn.Close()
+	s.sess.shutdown()
 	return nil
 }

@@ -41,14 +41,37 @@ type NFSOptions struct {
 // exclusively the pure-Go library github.com/vmware/go-nfs-client
 // (no external mount.nfs).
 type NFSFS struct {
-	opts   NFSOptions
+	opts  NFSOptions
+	sess  *session[*nfsConn]
+	label string
+}
+
+// nfsConn is a mounted export with the connection to its mount daemon.
+type nfsConn struct {
 	mount  *nfsc.Mount
 	target *nfsc.Target
-	label  string
+}
+
+func (c *nfsConn) close() { _ = c.mount.Unmount() }
+
+func nfsAlive(c *nfsConn) bool {
+	_, _, err := c.target.FSStat()
+	return err == nil
 }
 
 // DialNFS mounts (at the application level, without mount(8)) the given NFS export.
 func DialNFS(opts NFSOptions) (*NFSFS, error) {
+	conn, err := dialNFSConn(opts)
+	if err != nil {
+		return nil, err
+	}
+	sess := newSession(conn, func() (*nfsConn, error) { return dialNFSConn(opts) },
+		nfsAlive, (*nfsConn).close)
+	label := fmt.Sprintf("nfs://%s%s", opts.Host, opts.Export)
+	return &NFSFS{opts: opts, sess: sess, label: label}, nil
+}
+
+func dialNFSConn(opts NFSOptions) (*nfsConn, error) {
 	mount, err := nfsc.DialMount(opts.Host)
 	if err != nil {
 		return nil, fmt.Errorf("connection to the mount daemon of %s failed: %w", opts.Host, err)
@@ -59,8 +82,17 @@ func DialNFS(opts NFSOptions) (*NFSFS, error) {
 		mount.Unmount()
 		return nil, fmt.Errorf("mounting export %q failed: %w", opts.Export, err)
 	}
-	label := fmt.Sprintf("nfs://%s%s", opts.Host, opts.Export)
-	return &NFSFS{opts: opts, mount: mount, target: target, label: label}, nil
+	return &nfsConn{mount: mount, target: target}, nil
+}
+
+// withTarget runs op on the mounted export, reconnecting if the
+// connection is gone.
+func withTarget[T any](n *NFSFS, op func(t *nfsc.Target) (T, error)) (T, error) {
+	return run(n.sess, func(c *nfsConn) (T, error) { return op(c.target) })
+}
+
+func (n *NFSFS) do(op func(t *nfsc.Target) error) error {
+	return do(n.sess, func(c *nfsConn) error { return op(c.target) })
 }
 
 func (n *NFSFS) Kind() Kind    { return KindNFS }
@@ -76,7 +108,11 @@ func nfsPath(p string) string {
 }
 
 func (n *NFSFS) List(path string) ([]Entry, error) {
-	items, err := n.target.ReadDirPlus(nfsPath(path))
+	var target *nfsc.Target
+	items, err := withTarget(n, func(t *nfsc.Target) ([]*nfsc.EntryPlus, error) {
+		target = t
+		return t.ReadDirPlus(nfsPath(path))
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +131,8 @@ func (n *NFSFS) List(path string) ([]Entry, error) {
 			ModTime:   it.ModTime(),
 		}
 		if isSymlink {
-			if target, err := n.symlinkTarget(path, it.Name()); err == nil {
-				followSymlink(&e, target)
+			if info, err := n.symlinkTarget(target, path, it.Name()); err == nil {
+				followSymlink(&e, info)
 			}
 		}
 		entries = append(entries, e)
@@ -105,7 +141,12 @@ func (n *NFSFS) List(path string) ([]Entry, error) {
 }
 
 func (n *NFSFS) Stat(path string) (Entry, error) {
-	info, _, err := n.target.Lookup(nfsPath(path))
+	var target *nfsc.Target
+	info, err := withTarget(n, func(t *nfsc.Target) (os.FileInfo, error) {
+		target = t
+		info, _, err := t.Lookup(nfsPath(path))
+		return info, err
+	})
 	if err != nil {
 		return Entry{}, err
 	}
@@ -120,8 +161,8 @@ func (n *NFSFS) Stat(path string) (Entry, error) {
 		ModTime:   info.ModTime(),
 	}
 	if isSymlink {
-		if target, err := n.symlinkTarget(n.Dir(path), n.Base(path)); err == nil {
-			followSymlink(&e, target)
+		if info, err := n.symlinkTarget(target, n.Dir(path), n.Base(path)); err == nil {
+			followSymlink(&e, info)
 		}
 	}
 	return e, nil
@@ -134,9 +175,9 @@ func (n *NFSFS) Stat(path string) (Entry, error) {
 // text, followed by a second LOOKUP on the resolved path.
 // symlinkTarget returns the attributes of the target of the symlink name
 // in dir.
-func (n *NFSFS) symlinkTarget(dir, name string) (os.FileInfo, error) {
+func (n *NFSFS) symlinkTarget(t *nfsc.Target, dir, name string) (os.FileInfo, error) {
 	linkPath := n.Join(dir, name)
-	f, err := n.target.Open(nfsPath(linkPath))
+	f, err := t.Open(nfsPath(linkPath))
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +189,7 @@ func (n *NFSFS) symlinkTarget(dir, name string) (os.FileInfo, error) {
 	if !strings.HasPrefix(target, "/") {
 		resolved = n.Join(dir, target)
 	}
-	info, _, err := n.target.Lookup(nfsPath(resolved))
+	info, _, err := t.Lookup(nfsPath(resolved))
 	if err != nil {
 		return nil, err
 	}
@@ -156,13 +197,17 @@ func (n *NFSFS) symlinkTarget(dir, name string) (os.FileInfo, error) {
 }
 
 func (n *NFSFS) Mkdir(path string) error {
-	_, err := n.target.Mkdir(nfsPath(path), 0o755)
-	return err
+	return n.do(func(t *nfsc.Target) error {
+		_, err := t.Mkdir(nfsPath(path), 0o755)
+		return err
+	})
 }
 
 func (n *NFSFS) CreateEmptyFile(path string) error {
-	_, err := n.target.Create(nfsPath(path), 0o644)
-	return err
+	return n.do(func(t *nfsc.Target) error {
+		_, err := t.Create(nfsPath(path), 0o644)
+		return err
+	})
 }
 
 func (n *NFSFS) Remove(path string) error {
@@ -171,19 +216,19 @@ func (n *NFSFS) Remove(path string) error {
 		return err
 	}
 	if entry.IsDir {
-		return n.target.RemoveAll(nfsPath(path))
+		return n.do(func(t *nfsc.Target) error { return t.RemoveAll(nfsPath(path)) })
 	}
-	return n.target.Remove(nfsPath(path))
+	return n.do(func(t *nfsc.Target) error { return t.Remove(nfsPath(path)) })
 }
 
 // Rename renames/moves natively on the server (NFSPROC3_RENAME, patched
 // into third_party/go-nfs-client), replacing an existing destination.
 func (n *NFSFS) Rename(oldPath, newPath string) error {
-	return n.target.Rename(nfsPath(oldPath), nfsPath(newPath))
+	return n.do(func(t *nfsc.Target) error { return t.Rename(nfsPath(oldPath), nfsPath(newPath)) })
 }
 
 func (n *NFSFS) Open(path string) (io.ReadCloser, error) {
-	f, err := n.target.Open(nfsPath(path))
+	f, err := withTarget(n, func(t *nfsc.Target) (*nfsc.File, error) { return t.Open(nfsPath(path)) })
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +236,7 @@ func (n *NFSFS) Open(path string) (io.ReadCloser, error) {
 }
 
 func (n *NFSFS) Create(path string) (io.WriteCloser, error) {
-	f, err := n.target.OpenFile(nfsPath(path), 0o644)
+	f, err := withTarget(n, func(t *nfsc.Target) (*nfsc.File, error) { return t.OpenFile(nfsPath(path), 0o644) })
 	if err != nil {
 		return nil, err
 	}
@@ -249,21 +294,22 @@ func (r *nfsRandomFile) Close() error { return r.f.Close() }
 // OpenRandom implements RandomAccessOpener.
 func (n *NFSFS) OpenRandom(path string, flag int, perm os.FileMode) (RandomAccessFile, error) {
 	p := nfsPath(path)
-	var f *nfsc.File
-	var err error
-	switch {
-	case flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0:
-		if _, _, lerr := n.target.Lookup(p); lerr == nil {
-			return nil, os.ErrExist
+	f, err := withTarget(n, func(t *nfsc.Target) (*nfsc.File, error) {
+		switch {
+		case flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0:
+			if _, _, lerr := t.Lookup(p); lerr == nil {
+				return nil, os.ErrExist
+			}
+			if _, err := t.Create(p, perm); err != nil {
+				return nil, err
+			}
+			return t.Open(p)
+		case flag&os.O_CREATE != 0:
+			return t.OpenFile(p, perm)
+		default:
+			return t.Open(p)
 		}
-		if _, err = n.target.Create(p, perm); err == nil {
-			f, err = n.target.Open(p)
-		}
-	case flag&os.O_CREATE != 0:
-		f, err = n.target.OpenFile(p, perm)
-	default:
-		f, err = n.target.Open(p)
-	}
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +326,8 @@ func (n *NFSFS) Redial() (FileSystem, error) { return DialNFS(n.opts) }
 
 // Chmod implements PermissionsEditor (NFSPROC3_SETATTR).
 func (n *NFSFS) Chmod(path string, mode os.FileMode) error {
-	return n.target.SetAttr(nfsPath(path), nfsc.Sattr3{Mode: nfsc.SetMode{SetIt: true, Mode: uint32(mode.Perm())}})
+	attr := nfsc.Sattr3{Mode: nfsc.SetMode{SetIt: true, Mode: uint32(mode.Perm())}}
+	return n.do(func(t *nfsc.Target) error { return t.SetAttr(nfsPath(path), attr) })
 }
 
 // Chown implements PermissionsEditor; a negative uid or gid is left
@@ -293,7 +340,7 @@ func (n *NFSFS) Chown(path string, uid, gid int) error {
 	if gid >= 0 {
 		attr.GID = nfsc.SetUID{SetIt: true, UID: uint32(gid)}
 	}
-	return n.target.SetAttr(nfsPath(path), attr)
+	return n.do(func(t *nfsc.Target) error { return t.SetAttr(nfsPath(path), attr) })
 }
 
 // Chtimes implements TimesSetter.
@@ -305,12 +352,16 @@ func (n *NFSFS) Chtimes(path string, atime, mtime time.Time) error {
 	if !mtime.IsZero() {
 		attr.Mtime = nfsc.ClientTime(mtime)
 	}
-	return n.target.SetAttr(nfsPath(path), attr)
+	return n.do(func(t *nfsc.Target) error { return t.SetAttr(nfsPath(path), attr) })
 }
 
 // Space implements SpaceReporter (NFSPROC3_FSSTAT).
 func (n *NFSFS) Space(path string) (total, free uint64, err error) {
-	return n.target.FSStat()
+	err = n.do(func(t *nfsc.Target) error {
+		total, free, err = t.FSStat()
+		return err
+	})
+	return total, free, err
 }
 
 func (n *NFSFS) Join(elem ...string) string {
@@ -342,6 +393,6 @@ func (n *NFSFS) Base(path string) string {
 func (n *NFSFS) SupportsTrash() bool { return false }
 
 func (n *NFSFS) Close() error {
-	_ = n.mount.Unmount()
+	n.sess.shutdown()
 	return nil
 }
