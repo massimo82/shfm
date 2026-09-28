@@ -421,8 +421,9 @@ before.
 - **KDE** (Dolphin's and KDE applications' file dialogs, and GTK
   applications' under Plasma, through the file chooser portal): works
   out of the box. The source is listed under **Remote**.
-- **GNOME and other GTK/GIO desktops** (GTK applications' file dialogs,
-  the file chooser portal's included): needs a small optional GIO module,
+- **GNOME and other GTK/GIO desktops**, standalone compositors (Hyprland,
+  sway, labwc...) included (GTK applications' file dialogs, the file
+  chooser portal's included): needs a small optional GIO module,
   which lists the source under **Other Locations → Networks**:
 
   ```sh
@@ -489,9 +490,10 @@ installing.
 
 - Folders: `xdg-mime default shfm.desktop inode/directory`.
 - File dialog: in `~/.config/xdg-desktop-portal/portals.conf`, or
-  `DESKTOP-portals.conf` (e.g. `labwc-portals.conf`, see
-  `man portals.conf`: a user file replaces the distribution's for that
-  desktop, so start from a copy of it), add to the `[preferred]` group
+  `DESKTOP-portals.conf` (e.g. `labwc-portals.conf`,
+  `hyprland-portals.conf`, see `man portals.conf`: a user file replaces
+  the distribution's for that desktop, so start from a copy of it), add
+  to the `[preferred]` group
   `org.freedesktop.impl.portal.FileChooser=shfm`, then
   `systemctl --user restart xdg-desktop-portal`. Firefox shows its file
   dialog through the portal only once
@@ -738,7 +740,7 @@ folder.
    Running `shfm` now works, and adds it to the application menu.
 
 3. **Network sources in GTK file dialogs** (GNOME and other GTK/GIO
-   desktops only; KDE lists them already) — see
+   desktops, Hyprland, sway and labwc included; KDE lists them already) — see
    [Network sources in other applications](#network-sources-in-other-applications):
 
    ```sh
@@ -768,8 +770,8 @@ folder.
    ```
 
    If it prints nothing, add this line to the compositor's startup (e.g.
-   `~/.config/labwc/autostart`, or `exec` in sway's/Hyprland's config)
-   and log in again:
+   `~/.config/labwc/autostart`, `exec` in sway's config, `exec-once =` in
+   `~/.config/hypr/hyprland.conf`) and log in again:
 
    ```sh
    dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
@@ -794,11 +796,14 @@ folder.
 8. **Use shfm as the file dialog** (optional): choose its backend in the
    portal's configuration. A user file replaces the distribution's for
    that desktop, so start from a copy of it (`labwc` here: use your
-   desktop's name, as in `$XDG_CURRENT_DESKTOP`, lowercase):
+   desktop's name, as in `$XDG_CURRENT_DESKTOP`, lowercase — `hyprland`
+   for Hyprland, whose own portal has no file dialog, so the GTK one is
+   used until shfm is chosen):
 
    ```sh
    mkdir -p ~/.config/xdg-desktop-portal
    cp /usr/share/xdg-desktop-portal/labwc-portals.conf ~/.config/xdg-desktop-portal/
+   # Hyprland: cp /usr/share/xdg-desktop-portal/hyprland-portals.conf ~/.config/xdg-desktop-portal/
    ```
 
    add to its `[preferred]` group
