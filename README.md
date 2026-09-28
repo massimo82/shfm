@@ -638,7 +638,168 @@ when run as a normal user, or system-wide to `/usr/share/applications/` when
 run as root, with `Exec=` pointing at the binary's own path. It is only
 created if no `shfm.desktop` exists yet, and never rewritten: if you later
 move the binary, delete the old `shfm.desktop` and it is regenerated on the
-next run.
+next run. The per-user copy doesn't register shfm for opening folders: see
+[Desktop integration](#desktop-integration).
+
+### Complete installation
+
+Every step, in order, from source to a shfm registered with the desktop.
+Only steps 1 and 2 are needed to use shfm; each of the others adds one
+optional piece, and says what it changes. Commands run from the source
+folder.
+
+1. **Build.** The base build (everything but semantic search):
+
+   ```sh
+   go build -o shfm .
+   ```
+
+   or the full build with semantic search and GPU acceleration: follow
+   [Full build](#full-build-every-feature-vulkan-gpu-acceleration), then
+   provide the models (steps 3 and 4 of
+   [Optional: semantic (content) search](#optional-semantic-content-search)).
+
+2. **Install the binary.**
+
+   ```sh
+   sudo install -m 755 shfm /usr/bin/shfm
+   sudo setcap 'cap_net_bind_service=+ep' /usr/bin/shfm   # NFS exports requiring a privileged port
+   ```
+
+   Running `shfm` now works, and adds it to the application menu.
+
+3. **Network sources in GTK file dialogs** (GNOME and other GTK/GIO
+   desktops only; KDE lists them already) — see
+   [Network sources in other applications](#network-sources-in-other-applications):
+
+   ```sh
+   make -C contrib/gio-module
+   sudo make -C contrib/gio-module install
+   systemctl --user restart xdg-desktop-portal-gtk
+   ```
+
+4. **Register shfm as a file manager** — see
+   [Desktop integration](#desktop-integration). Installs, next to the other
+   file managers', the desktop entry declaring shfm able to open folders
+   and the file chooser portal backend. Nothing changes by itself: the
+   default file manager and file dialog stay in use; shfm is used where
+   it's the only one.
+
+   ```sh
+   make -C contrib/desktop-integration
+   sudo make -C contrib/desktop-integration install
+   rm -f ~/.local/share/applications/shfm.desktop   # the per-user copy would hide the system-wide one
+   ```
+
+5. **Let the session bus open terminals.** shfm's services are started by
+   the bus, and need `WAYLAND_DISPLAY` from it. Check:
+
+   ```sh
+   systemctl --user show-environment | grep WAYLAND_DISPLAY
+   ```
+
+   If it prints nothing, add this line to the compositor's startup (e.g.
+   `~/.config/labwc/autostart`, or `exec` in sway's/Hyprland's config)
+   and log in again:
+
+   ```sh
+   dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
+   ```
+
+6. **Choose the terminal** (optional): otherwise `$TERMINAL`, or the first
+   installed of a list — see [The terminal](#the-terminal). In
+   `~/.config/shfm/config.json`:
+
+   ```json
+   "terminal": "foot"
+   ```
+
+7. **Use shfm for opening folders** (optional). Note the current default
+   first, to go back to it:
+
+   ```sh
+   xdg-mime query default inode/directory
+   xdg-mime default shfm.desktop inode/directory
+   ```
+
+8. **Use shfm as the file dialog** (optional): choose its backend in the
+   portal's configuration. A user file replaces the distribution's for
+   that desktop, so start from a copy of it (`labwc` here: use your
+   desktop's name, as in `$XDG_CURRENT_DESKTOP`, lowercase):
+
+   ```sh
+   mkdir -p ~/.config/xdg-desktop-portal
+   cp /usr/share/xdg-desktop-portal/labwc-portals.conf ~/.config/xdg-desktop-portal/
+   ```
+
+   add to its `[preferred]` group
+
+   ```ini
+   org.freedesktop.impl.portal.FileChooser=shfm
+   ```
+
+   then restart the portal:
+
+   ```sh
+   systemctl --user restart xdg-desktop-portal
+   ```
+
+   Chromium shows its file dialog through the portal on its own; Firefox
+   only once
+   `widget.use-xdg-desktop-portal.file-picker` is set to `1` in
+   `about:config`, and Firefox restarted. To go back: remove that line
+   (or the whole copied file) and restart the portal.
+
+9. **Use shfm for "Show in folder"** (optional): install its
+   FileManager1 service, and have the bus reread its service files.
+
+   ```sh
+   sudo make -C contrib/desktop-integration install-filemanager1
+   busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig
+   ```
+
+   With another file manager's service installed too (Thunar, Dolphin,
+   Nautilus...), which one the bus starts is unspecified, and one already
+   running keeps answering: see [Desktop integration](#desktop-integration).
+
+**Checking it works.**
+
+- `shfm ~/Downloads/some-file` opens the folder with the cursor on the file.
+- The file dialog backend, called directly (whichever backend the portal
+  uses): shfm opens in a terminal; `Ctrl+O` in a folder prints its URI.
+
+  ```sh
+  gdbus call --session --dest org.freedesktop.impl.portal.desktop.shfm \
+    --object-path /org/freedesktop/portal/desktop \
+    --method org.freedesktop.impl.portal.FileChooser.OpenFile \
+    /org/freedesktop/portal/desktop/request/1_1/test "" "" "Test" "{'directory': <true>}"
+  ```
+
+- Something doesn't start: `~/.cache/shfm/logs/shfm.log`, and
+  `journalctl --user -b | grep shfm` for the services' own errors.
+
+**Updating.** Rebuild, then repeat step 2 (`setcap` included: it's lost
+with every new binary). A service still running keeps the old binary
+until it exits, after five idle minutes; to switch at once:
+
+```sh
+pkill -f 'shfm --portal'; pkill -f 'shfm --filemanager1'
+```
+
+**Uninstalling.** Undo the optional steps 7–9 first (restore the previous
+folder default, remove the portal configuration line), then:
+
+```sh
+sudo make -C contrib/desktop-integration uninstall
+sudo make -C contrib/gio-module uninstall
+busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig
+systemctl --user restart xdg-desktop-portal
+sudo rm /usr/bin/shfm
+rm -f ~/.local/share/applications/shfm.desktop
+```
+
+shfm's own settings stay in `~/.config/shfm/` (and its log in
+`~/.cache/shfm/`): delete them too to remove every trace.
 
 ### Optional: semantic (content) search
 
