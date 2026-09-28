@@ -969,6 +969,15 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 
 	case DialogHelp, DialogMessage, DialogConnecting:
 		m.dialog = Dialog{}
+
+	case DialogPickSaveName:
+		m.confirmPickSaveName()
+	case DialogPickOverwrite:
+		m.pickFinish(d.PickPaths)
+	case DialogPickFilter:
+		m.confirmPickFilter()
+	case DialogPickOptions:
+		m.cyclePickOption()
 	}
 	if m.quitting {
 		// DialogConfirmQuit's case above (or any future path that decides

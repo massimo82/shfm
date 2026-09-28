@@ -31,8 +31,11 @@ import (
 	"shfm/internal/applog"
 	"shfm/internal/config"
 	"shfm/internal/desktopfile"
+	"shfm/internal/filemanager1"
 	"shfm/internal/fusemount"
+	"shfm/internal/pick"
 	"shfm/internal/polkitagent"
+	"shfm/internal/portal"
 	"shfm/internal/ui"
 	"shfm/internal/vfs"
 )
@@ -59,16 +62,43 @@ func main() {
 
 	keymap := config.LoadKeyMap()
 
-	// One optional positional argument: a folder to open both panes on
-	// instead of the home folder (e.g. `shfm /mnt/data`). Anything invalid
-	// (missing, not a directory, unresolvable) is silently ignored by
-	// ui.New/resolveStartPath in favor of the usual home-folder default,
-	// rather than refusing to start over a typo'd path.
-	var startPath string
-	if len(os.Args) > 1 {
-		startPath = os.Args[1]
+	opts, err := parseArgs(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "shfm:", err)
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
 	}
-	m := ui.New(cfg, keymap, startPath)
+	switch {
+	case opts.help:
+		fmt.Print(usage)
+		return
+	case opts.fileManager1:
+		serveOrExit(filemanager1.Serve(func(args []string) error {
+			return startShfmInTerminal(cfg, args)
+		}, serviceIdleExit))
+		return
+	case opts.portal:
+		serveOrExit(portal.Serve(func(sock string) (<-chan error, error) {
+			return startShfmInTerminalWait(cfg, []string{"--pick", sock})
+		}, serviceIdleExit))
+		return
+	}
+
+	// File chooser mode: the portal backend that started this shfm (see
+	// internal/portal) waits on the socket for the request, and the
+	// answer.
+	var session *pick.Session
+	if opts.pickSocket != "" {
+		s, req, err := pick.Dial(opts.pickSocket)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "shfm: could not reach the file chooser portal:", err)
+			os.Exit(1)
+		}
+		session = s
+		opts.start.Pick = &req
+	}
+
+	m := ui.New(cfg, keymap, opts.start)
 
 	// Sources are exposed to external apps through FUSE mounts, made as
 	// soon as a network source is opened (other sources: on first use);
@@ -80,6 +110,10 @@ func main() {
 	// Alternate screen and mouse reporting are requested by the model's
 	// View (bubbletea v2 has no program options for them).
 	p := tea.NewProgram(m)
+	if session != nil {
+		// The application withdrew its request: nothing left to choose.
+		session.WatchWithdrawn(p.Quit)
+	}
 	vfs.TerminalHandoff = ui.TerminalHandoff(p)
 	// pkexec asks shfm itself for the password, in a dialog; without the
 	// agent (no polkit, no system bus) it falls back to the terminal.
@@ -88,7 +122,15 @@ func main() {
 	} else {
 		defer agent.Close()
 	}
-	_, err := p.Run()
+	_, err = p.Run()
+	if session != nil {
+		if reply, ok := m.PickReply(); ok {
+			if err := session.Send(reply); err != nil {
+				applog.Warn("could not answer the file chooser portal", "error", err)
+			}
+		}
+		session.Close()
+	}
 	mounts.Close()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

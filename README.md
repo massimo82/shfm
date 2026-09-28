@@ -26,6 +26,10 @@ mouse, in one pane or two side by side.
 - Opening files with the desktop's default application.
 - Open network sources listed in other applications' file dialogs, in
   GNOME/GTK and KDE.
+- Desktop integration, optional: shfm registers as a file manager like
+  any other — for opening folders, browsers' "Show in folder" and their
+  file dialog (e.g. choosing the download folder) — used when the system
+  picks it.
 - Properties dialog, to view and edit permissions, owner and group.
 - Automatic elevation (`pkexec`) for operations that need it, with the
   password asked inside shfm.
@@ -373,6 +377,98 @@ connection. Qt applications that don't use KDE's file dialogs don't list
 the source, as they don't list gvfs's or KDE's either. MTP devices aren't
 listed this way: desktops list phones themselves.
 
+## Desktop integration
+
+shfm can register with the desktop as a file manager like any other,
+next to those already installed: it never takes over, and which one is
+used stays the system's choice. It then answers when the system picks it,
+opening in a new terminal window:
+
+- **opening folders** (the default application for `inode/directory`):
+  `shfm.desktop` declares shfm able to open them, so the desktop offers it
+  with the others, and uses it when it's the default
+  (`xdg-mime default shfm.desktop inode/directory`) or the only one;
+- **the file dialog** of Firefox, Chromium and sandboxed applications
+  (choosing the download folder, a file to upload, where to save a page),
+  through xdg-desktop-portal's file chooser: used when the portal's
+  configuration picks shfm, or it's the only backend installed — a GTK,
+  GNOME or KDE one stays in use otherwise;
+- **"Show in folder"** (Firefox, Chromium and others ask the file manager
+  through the `org.freedesktop.FileManager1` D-Bus service): shfm opens on
+  the file's folder with the cursor on it.
+
+```sh
+make -C contrib/desktop-integration
+sudo make -C contrib/desktop-integration install                # desktop entry and file dialog
+sudo make -C contrib/desktop-integration install-filemanager1   # "Show in folder", see below
+# uninstall both: sudo make -C contrib/desktop-integration uninstall
+```
+
+`install-filemanager1` is separate because the bus has no notion of a
+default among several providers of the same service: with another file
+manager's installed too (Thunar, Dolphin, Nautilus...), which one it
+starts is unspecified — it may well be shfm. Install it where shfm is
+the only file manager, or if you want it to answer "Show in folder".
+
+The desktop entry is installed system-wide, next to the other file
+managers'. The per-user copy shfm writes on its first run (see
+[Installing](#installing)) doesn't declare `inode/directory`: it would come
+before theirs, and on a desktop where no default was chosen, shfm would
+take over opening folders on its own. A per-user copy also hides the
+system-wide one: delete `~/.local/share/applications/shfm.desktop` after
+installing.
+
+### Choosing shfm explicitly
+
+- Folders: `xdg-mime default shfm.desktop inode/directory`.
+- File dialog: in `~/.config/xdg-desktop-portal/portals.conf`, or
+  `DESKTOP-portals.conf` (e.g. `labwc-portals.conf`, see
+  `man portals.conf`: a user file replaces the distribution's for that
+  desktop, so start from a copy of it), add to the `[preferred]` group
+  `org.freedesktop.impl.portal.FileChooser=shfm`, then
+  `systemctl --user restart xdg-desktop-portal`. Firefox shows its file
+  dialog through the portal only once
+  `widget.use-xdg-desktop-portal.file-picker` is `1` in `about:config`.
+
+### The terminal
+
+shfm opens in `"terminal"` from `$XDG_CONFIG_HOME/shfm/config.json` if
+set — a name (`"alacritty"`), or a command line shfm's own is appended to
+(`"wezterm start --"`, `"foot --app-id=shfm-dialog"`, handy for a window
+rule that floats it) — otherwise `$TERMINAL`, otherwise the first
+installed of `xdg-terminal-exec`, foot, alacritty, kitty, ghostty,
+wezterm, konsole, gnome-terminal, kgx, xfce4-terminal, mate-terminal,
+terminator, xterm, urxvt, st. The two D-Bus services (`shfm --portal`,
+`shfm --filemanager1`) are started by the session bus on demand, exit
+after five idle minutes, and get the session's environment from it: under
+a standalone compositor, it must pass `WAYLAND_DISPLAY` on
+(`dbus-update-activation-environment --systemd WAYLAND_DISPLAY
+XDG_CURRENT_DESKTOP`, which labwc, sway and Hyprland setups usually
+already run at startup), or no terminal can open.
+
+### shfm as a file dialog
+
+The dialog is shfm itself, as usual but with a line of hints below the
+lists:
+
+- **Choosing files**: `Enter` or a double click on a file chooses it;
+  when the application accepts several, select them with `Space` and
+  press `Ctrl+O`. Files of other types than the one chosen with `Ctrl+T`
+  (among those the application offers) aren't listed.
+- **Choosing a folder** (e.g. the download folder): only folders are
+  listed; `Enter` opens one, `Ctrl+O` chooses the folder you're in (or the
+  selected ones, when the application accepts several).
+- **Saving**: `Ctrl+O` asks for the name in the current folder, starting
+  from the application's suggestion; `Enter` on an existing file offers
+  to replace it. Typing a folder's name opens it.
+- `Ctrl+E` shows the application's extra options, if it has any; `Esc`
+  (with no search or filter to cancel) or `q` cancels.
+
+Only local folders can be chosen: an application given a file on a
+network source's FUSE mount would lose it as soon as shfm exits. The keys
+are configurable like every other (`pick-accept`, `pick-filter`,
+`pick-options` in `keybindings.conf`).
+
 ## Keyboard shortcuts
 
 No function keys by default: everything goes through `Ctrl` (and
@@ -409,6 +505,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+B` | background tasks |
 | `Ctrl+Alt+H` / `?` | full list of shortcuts |
 | `q` / `Ctrl+Q` | quit |
+| `Ctrl+O`, `Ctrl+T`, `Ctrl+E` | as a file dialog: choose, file type, options (see [Desktop integration](#desktop-integration)) |
 
 ### Customizing keybindings
 
@@ -444,10 +541,21 @@ go build -o shfm .
 ./shfm
 ```
 
-Both panes open on your home folder by default; pass a folder as the one
-optional argument (`./shfm /mnt/data`) to open there instead. An invalid
-argument (missing, not a directory, ...) is silently ignored in favor of
-the home-folder default rather than refusing to start.
+Both panes open on your home folder by default; pass a folder as the
+argument (`./shfm /mnt/data`) to open there instead, or a file
+(`./shfm ~/Downloads/report.pdf`) to open its folder with the cursor on
+it — several files of the same folder are selected. `file://` URIs work
+too, as desktop launchers pass them. An invalid argument (missing,
+unresolvable, ...) is silently ignored rather than refusing to start: a
+deleted file opens its folder, anything else the home folder.
+
+```
+shfm [PATH|URI]...           open a folder, or show files selected in their folder
+shfm --select PATH...        show the paths selected in their folder, folders too
+shfm --properties PATH       show PATH in its folder, with its properties open
+shfm --filemanager1          org.freedesktop.FileManager1 service (see Desktop integration)
+shfm --portal                xdg-desktop-portal file chooser backend (see Desktop integration)
+```
 
 This is the base build: everything except semantic (content) search. For
 a build with **every feature enabled**, including semantic search with
@@ -990,6 +1098,12 @@ internal/mtp/                   MTP device discovery + thin adapter over go-mtpf
 internal/opener/                default-app resolution (XDG) and launching
 internal/fusemount/             FUSE mounts of network sources, for opening remote files in place
 contrib/gio-module/             optional GIO module listing those mounts in GTK file dialogs
+contrib/desktop-integration/    optional desktop entry, D-Bus and portal files registering shfm as a file manager
+internal/filemanager1/          org.freedesktop.FileManager1 service ("Show in folder")
+internal/portal/                xdg-desktop-portal file chooser backend
+internal/pick/                  the portal backend's conversation with shfm as a file dialog
+internal/termlaunch/            running shfm in a new terminal window, for both services
+internal/idle/                  idle exit of the D-Bus activated services
 internal/trash/                 Freedesktop.org Trash Specification
 internal/fileops/               copy/move/delete/rename (cross-backend, with progress)
 internal/mirror/                one-way mirrors: rsync (local) and generic engine

@@ -216,7 +216,32 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click select · Esc cancel"))
 		return dialogBox(40).Render(b.String())
 
-	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash:
+	case DialogPickSaveName:
+		b.WriteString(d.Inputs[0].View())
+		b.WriteString("\n\n")
+		if d.Message != "" {
+			b.WriteString(styleErr.Render(d.Message) + "\n\n")
+		}
+		b.WriteString(styleDim.Render("Enter confirm · Esc cancel"))
+		return dialogBox(64).Render(b.String())
+
+	case DialogPickFilter, DialogPickOptions:
+		for i, it := range d.Items {
+			prefix := "  "
+			s := styleFile
+			if i == d.ItemIdx {
+				prefix, s = "\u25b8 ", styleAccent
+			}
+			b.WriteString(prefix + s.Render(it) + "\n")
+		}
+		hint := "\u2191/\u2193 or click move · Enter/click select · Esc cancel"
+		if d.Kind == DialogPickOptions {
+			hint = "\u2191/\u2193 move · Enter/click change · Esc close"
+		}
+		b.WriteString("\n" + styleDim.Render(hint))
+		return dialogBox(56).Render(b.String())
+
+	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash, DialogPickOverwrite:
 		b.WriteString(d.Message)
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("y / Enter confirm · n / Esc cancel"))

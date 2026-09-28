@@ -43,7 +43,7 @@ func mirrorTestModel(t *testing.T) (*Model, string) {
 	}
 	os.MkdirAll(filepath.Join(tmp, "dst"), 0o755)
 
-	m := New(config.Default(), config.DefaultKeyMap(), tmp)
+	m := New(config.Default(), config.DefaultKeyMap(), Start{Paths: []string{tmp}})
 	fs := vfs.NewLocalFS("Local", tmp)
 	m.panes[0] = NewPane(fs, filepath.Join(tmp, "dst"), false, 0, nil)
 	// Keep the other pane off the real home folder too.

@@ -242,7 +242,7 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 				break
 			}
 		}
-	case DialogTaskList, DialogNewChoice, DialogChooseApp, DialogFormatChoose:
+	case DialogTaskList, DialogNewChoice, DialogChooseApp, DialogFormatChoose, DialogPickFilter, DialogPickOptions:
 		if row >= 0 && row < len(m.dialog.Items) {
 			m.dialog.ItemIdx = row
 			m.confirmDialog()

@@ -30,7 +30,7 @@ import (
 )
 
 func newTestModel() *Model {
-	return New(config.Default(), config.DefaultKeyMap(), "")
+	return New(config.Default(), config.DefaultKeyMap(), Start{})
 }
 
 func TestFormatDialogFlow(t *testing.T) {

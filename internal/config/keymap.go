@@ -71,6 +71,9 @@ const (
 	ActionRestoreOrRefresh Action = "restore-or-refresh"
 	ActionEmptyTrash       Action = "empty-trash"
 	ActionMirror           Action = "mirror"
+	ActionPickAccept       Action = "pick-accept"
+	ActionPickFilter       Action = "pick-filter"
+	ActionPickOptions      Action = "pick-options"
 )
 
 // keybindingDef is one entry in the fixed, built-in catalogue of
@@ -131,6 +134,10 @@ var keybindingDefs = []keybindingDef{
 	{ActionToggleTrashView, []string{"T"}, "Toggle trash view"},
 	{ActionRestoreOrRefresh, []string{"R"}, "Restore or refresh"},
 	{ActionEmptyTrash, []string{"e"}, "Empty the trash"},
+
+	{ActionPickAccept, []string{"ctrl+o"}, "File chooser: choose"},
+	{ActionPickFilter, []string{"ctrl+t"}, "File chooser: file type"},
+	{ActionPickOptions, []string{"ctrl+e"}, "File chooser: options"},
 }
 
 // KeyMap maps each Action to the keys that trigger it (as bubbletea's

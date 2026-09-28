@@ -24,7 +24,6 @@ package ui
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -141,22 +140,22 @@ type Model struct {
 	extClip    []string
 	useExtClip bool
 
+	// picker is set when shfm runs as a file chooser: see picker.go.
+	picker *pickerState
+
 	quitting bool
 }
 
 type rect struct{ x0, y0, w, h int }
 
-// New creates the initial model, opening both panes on startPath if it's a
-// valid, existing local directory (shfm's one optional command-line
-// argument — see main.go), the user's home folder otherwise (or / on
-// error; see homeOrRoot) — including when startPath is "" (no argument
-// given at all), the pre-existing default. keymap resolves keypresses to
-// actions in handleKey — see internal/config's KeyMap and
-// config.LoadKeyMap.
-func New(cfg *config.Config, keymap *config.KeyMap, startPath string) *Model {
-	start := resolveStartPath(startPath)
-	local0 := vfs.NewLocalFS("Local", start)
-	local1 := vfs.NewLocalFS("Local", start)
+// New creates the initial model, opening both panes where start says (see
+// Start and resolveStart): the user's home folder (or / on error; see
+// homeOrRoot) by default. keymap resolves keypresses to actions in
+// handleKey — see internal/config's KeyMap and config.LoadKeyMap.
+func New(cfg *config.Config, keymap *config.KeyMap, start Start) *Model {
+	dir, names := resolveStart(start)
+	local0 := vfs.NewLocalFS("Local", dir)
+	local1 := vfs.NewLocalFS("Local", dir)
 	m := &Model{
 		cfg:       cfg,
 		keymap:    keymap,
@@ -172,8 +171,15 @@ func New(cfg *config.Config, keymap *config.KeyMap, startPath string) *Model {
 		semanticCh:       make(chan semanticMsg, 8),
 		semanticIndexing: map[string]bool{},
 	}
-	m.panes[0] = NewPane(local0, start, cfg.ShowHidden, 0, m.sizeCh)
-	m.panes[1] = NewPane(local1, start, cfg.ShowHidden, 1, m.sizeCh)
+	m.panes[0] = NewPane(local0, dir, cfg.ShowHidden, 0, m.sizeCh)
+	m.panes[1] = NewPane(local1, dir, cfg.ShowHidden, 1, m.sizeCh)
+	if start.Pick != nil {
+		m.startPicker(*start.Pick)
+	}
+	m.reveal(names)
+	if start.Properties && len(names) > 0 {
+		m.openProperties()
+	}
 	return m
 }
 
@@ -182,26 +188,6 @@ func homeOrRoot() string {
 		return h
 	}
 	return "/"
-}
-
-// resolveStartPath validates the optional starting-path argument: it must
-// resolve (relative paths are taken as relative to the current working
-// directory) to an existing local directory, otherwise New falls back to
-// homeOrRoot exactly as if no argument had been given — a typo'd, deleted,
-// or (on multi-user systems) inaccessible path shouldn't stop shfm from
-// starting somewhere sane instead of erroring out.
-func resolveStartPath(path string) string {
-	if path == "" {
-		return homeOrRoot()
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return homeOrRoot()
-	}
-	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
-		return homeOrRoot()
-	}
-	return abs
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -228,6 +214,11 @@ func (m *Model) setError(format string, args ...interface{}) {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
 	m.keepAuthOnTop()
+	if m.quitting && cmd == nil {
+		// A path that decided to quit (e.g. a choice made in file chooser
+		// mode with a double click) may only have set the flag.
+		return m, tea.Quit
+	}
 	return m, cmd
 }
 
@@ -235,6 +226,11 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		// Entries revealed at startup (see reveal) were chosen before the
+		// list's height was known: scroll them into view now.
+		for _, idx := range m.shownPanes() {
+			m.panes[idx].fixOffset(m.paneGeom(idx).listH)
+		}
 		return nil
 	case tea.KeyPressMsg:
 		_, cmd := m.handleKey(msg)
@@ -313,6 +309,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.pickKey(action) {
+		return m, nil
+	}
+
 	listHeight := m.listHeight()
 	p := m.activePane()
 
@@ -337,6 +337,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.ExitSearchResults()
 		case p.FilterActive:
 			p.ClearFilter()
+		case m.picker != nil:
+			m.pickCancel()
+			return m, tea.Quit
 		}
 
 	// --- help and layout ---
@@ -537,6 +540,10 @@ func (m *Model) enterOrOpen() {
 		return
 	}
 	if e, ok := p.CurrentEntry(); ok && !e.IsDir {
+		if m.picker != nil {
+			m.pickActivateFile(e)
+			return
+		}
 		m.openWithDefaultApp(e)
 	}
 }

@@ -48,9 +48,13 @@ func (m *Model) render() string {
 		return "Loading…"
 	}
 
-	title := styleTitle.Width(m.width).Render(m.titleText())
+	titleText, hints := m.titleText(), paneHelpHints
+	if m.picker != nil {
+		titleText, hints = m.pickTitle(), m.pickHints()
+	}
+	title := styleTitle.Width(m.width).Render(titleText)
 	body := m.renderBody()
-	help := styleHelpLine.Width(m.width).Render(" " + truncate(paneHelpHints, m.width-2))
+	help := styleHelpLine.Width(m.width).Render(" " + truncate(hints, m.width-2))
 	status := m.renderStatus()
 
 	screen := lipgloss.JoinVertical(lipgloss.Left, title, body, help, status)

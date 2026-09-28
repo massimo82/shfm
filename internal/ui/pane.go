@@ -92,6 +92,11 @@ type Pane struct {
 	ShowHidden bool
 	Err        error
 
+	// EntryFilter, when set, narrows every folder listing further to the
+	// entries it accepts: the file chooser's file types, or folders only
+	// when choosing a folder (see picker.go).
+	EntryFilter func(vfs.Entry) bool
+
 	// SourceLabel is shown in the pane's SOURCE row.
 	SourceLabel string
 
@@ -189,6 +194,9 @@ func (p *Pane) Load() {
 			continue
 		}
 		if !match(e.Name) {
+			continue
+		}
+		if p.EntryFilter != nil && !p.EntryFilter(e) {
 			continue
 		}
 		filtered = append(filtered, e)

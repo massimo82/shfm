@@ -66,6 +66,10 @@ const (
 	DialogMirrorDeleteCopy
 	DialogMirrorChecking
 	DialogAuth
+	DialogPickSaveName
+	DialogPickOverwrite
+	DialogPickFilter
+	DialogPickOptions
 )
 
 // Dialog is the state of any currently active modal.
@@ -119,6 +123,8 @@ type Dialog struct {
 	MirrorPairID    string              // DialogMirrorConfirmDelete, DialogMirrorDeleteCopy (Items: keep the copy, delete it)
 
 	Auth polkitagent.Prompt // DialogAuth: Inputs[0] is the answer
+
+	PickPaths []string // DialogPickOverwrite: the choice to confirm
 }
 
 func newSingleInputDialog(kind DialogKind, title, placeholder, value string) Dialog {
@@ -280,7 +286,8 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 func hasListNav(k DialogKind) bool {
 	switch k {
 	case DialogSourceMenu, DialogHelp, DialogNewChoice, DialogTaskList, DialogFormatChoose,
-		DialogMirrorConfirm, DialogMirrorList, DialogMirrorDeleteCopy:
+		DialogMirrorConfirm, DialogMirrorList, DialogMirrorDeleteCopy,
+		DialogPickFilter, DialogPickOptions:
 		return true
 	default:
 		return false
@@ -290,7 +297,8 @@ func hasListNav(k DialogKind) bool {
 func isYesNoDialog(k DialogKind) bool {
 	switch k {
 	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash,
-		DialogConfirmQuit, DialogFormatConfirm1, DialogMirrorConfirmDelete:
+		DialogConfirmQuit, DialogFormatConfirm1, DialogMirrorConfirmDelete,
+		DialogPickOverwrite:
 		return true
 	default:
 		return false

@@ -46,6 +46,9 @@ func TestEnsureInstalledCreatesUserFileWhenAbsent(t *testing.T) {
 	if len(data) == 0 || !contains(string(data), "Exec=") {
 		t.Errorf("unexpected desktop file content: %q", data)
 	}
+	if contains(string(data), "MimeType=") {
+		t.Errorf("the per-user copy must not declare MimeType (it would take precedence over the system's file managers): %q", data)
+	}
 }
 
 func TestEnsureInstalledCreatesSystemFileWhenRoot(t *testing.T) {
@@ -67,6 +70,13 @@ func TestEnsureInstalledCreatesSystemFileWhenRoot(t *testing.T) {
 	userPath := filepath.Join(dataHome, "applications", fileName)
 	if exists(userPath) {
 		t.Errorf("did not expect a user-level file to also be created when running as root")
+	}
+	data, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(string(data), "MimeType=inode/directory;\n") || !contains(string(data), " %U\n") {
+		t.Errorf("the system-wide copy should open folders like any file manager: %q", data)
 	}
 }
 

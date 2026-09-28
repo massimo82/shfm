@@ -110,6 +110,17 @@ type Config struct {
 	// true; without a Wayland compositor supporting data-control it
 	// simply does nothing.
 	ShareClipboard bool `json:"share_clipboard"`
+
+	// Terminal is the terminal emulator shfm's desktop services
+	// (`shfm --filemanager1`, `shfm --portal`) open shfm in — "Show in
+	// folder" in a browser, or its file dialog. A bare terminal name
+	// ("alacritty") gets the arguments it needs to run a command; anything
+	// longer ("wezterm start --", "foot --app-id=shfm") is used as given,
+	// with shfm's command line appended. Empty (the default): $TERMINAL,
+	// then the first installed of xdg-terminal-exec, foot, alacritty,
+	// kitty, ghostty, wezterm, konsole, gnome-terminal... (see
+	// internal/termlaunch).
+	Terminal string `json:"terminal,omitempty"`
 }
 
 // Default returns the default configuration.

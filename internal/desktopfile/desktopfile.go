@@ -33,12 +33,21 @@ Type=Application
 Name=shfm
 GenericName=Shell File Manager
 Comment=Terminal-based file manager with SMB/NFS/SFTP/MTP support
-Exec=%s
+Exec=%s %%U
 Terminal=true
 Icon=system-file-manager
 Categories=System;Utility;FileTools;
 Keywords=file;manager;terminal;shell;sftp;smb;nfs;mtp;
-`
+%s`
+
+// mimeTypeLine declares shfm able to open folders, as every file manager
+// does: the desktop then offers it among the others, and uses it when it's
+// the default, or the only one. Only in the system-wide copy, next to the
+// other file managers': a per-user one would come before them, and
+// desktops without an explicitly chosen default (GIO picks the first
+// capable application, the user's first) would switch to shfm on their
+// own.
+const mimeTypeLine = "MimeType=inode/directory;\n"
 
 // systemDir, userDir and getUID are declared as vars/funcs (rather than
 // direct os.* calls) so tests can override them without depending on the
@@ -84,14 +93,11 @@ func EnsureInstalled() error {
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
-	content := fmt.Sprintf(template, exe)
-
-	var target string
+	target, mime := usrPath, ""
 	if getUID() == 0 {
-		target = sysPath
-	} else {
-		target = usrPath
+		target, mime = sysPath, mimeTypeLine
 	}
+	content := fmt.Sprintf(template, exe, mime)
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
