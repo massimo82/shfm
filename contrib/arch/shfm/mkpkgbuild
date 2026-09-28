@@ -1,0 +1,50 @@
+#!/bin/sh
+# Writes shfm's PKGBUILD, with shfm.install, into OUTDIR, from PKGBUILD.in:
+# the version is internal/version/version.go's, and shfm's source is either
+# the release's archive on GitHub, whose checksum is computed by downloading
+# it (the release must be tagged), or with --local an archive of your own
+# (such as the checked-out tree), copied next to the PKGBUILD.
+#
+#   contrib/arch/shfm/mkpkgbuild OUTDIR && cd OUTDIR && makepkg -si
+#   contrib/arch/shfm/mkpkgbuild --local ARCHIVE.tar.gz OUTDIR
+#
+# The archive's top folder must be shfm-VERSION, as GitHub's.
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+root=$(cd "$here/../../.." && pwd)
+
+local_archive=
+if [ "${1:-}" = --local ]; then
+	local_archive=$2
+	shift 2
+fi
+if [ $# -ne 1 ]; then
+	sed -n '2,12s/^# \{0,1\}//p' "$0" >&2
+	exit 2
+fi
+out=$1
+
+version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' "$root/internal/version/version.go")
+[ -n "$version" ] || { echo "no version in internal/version/version.go" >&2; exit 1; }
+mkdir -p "$out"
+
+if [ -n "$local_archive" ]; then
+	source="shfm-$version.tar.gz"
+	cp "$local_archive" "$out/$source"
+	sha256=$(sha256sum "$out/$source" | cut -d' ' -f1)
+else
+	source="\$pkgname-\$pkgver.tar.gz::\$url/archive/refs/tags/v\$pkgver.tar.gz"
+	url="https://github.com/massimo82/shfm/archive/refs/tags/v$version.tar.gz"
+	tmp=$(mktemp)
+	trap 'rm -f "$tmp"' EXIT
+	curl -fsSL -o "$tmp" "$url" ||
+		{ echo "can't download $url: is v$version tagged?" >&2; exit 1; }
+	sha256=$(sha256sum "$tmp" | cut -d' ' -f1)
+fi
+
+sed -e "s|@VERSION@|$version|" -e "s|@SOURCE@|$source|" -e "s|@SHA256@|$sha256|" \
+	"$here/PKGBUILD.in" > "$out/PKGBUILD"
+cp "$here/shfm.install" "$out/"
+echo "$out/PKGBUILD: shfm $version, sha256 $sha256"

@@ -23,9 +23,23 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install tools
-        run: pacman -Syu --noconfirm --needed git pacman-contrib
+        run: pacman -Syu --noconfirm --needed git
 
       - uses: actions/checkout@v5
+
+      # The PKGBUILD from its template: on a tag, with that release's source
+      # archive on GitHub and its checksum, as it's published; otherwise
+      # with an archive of the checked-out tree.
+      - name: Write the PKGBUILD
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            contrib/arch/shfm/mkpkgbuild /build/shfm
+          else
+            version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)
+            tar --exclude=.git --transform "s|^\.|shfm-$version|" \
+              -czf "/tmp/shfm-$version.tar.gz" -C "$GITHUB_WORKSPACE" .
+            contrib/arch/shfm/mkpkgbuild --local "/tmp/shfm-$version.tar.gz" /build/shfm
+          fi
 
       # makepkg refuses to run as root; -s installs the PKGBUILD's
       # dependencies, so they are checked too
@@ -33,28 +47,7 @@ jobs:
         run: |
           useradd -m builder
           echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
-          mkdir /build
-          cp -r contrib/arch/shfm /build/
           chown -R builder /build
-
-      # On a tag, the PKGBUILD downloads that release's source from GitHub,
-      # as it will for whoever uses the published one, and gets its checksum.
-      # Otherwise it builds the checked-out tree.
-      - name: Point the PKGBUILD at the source
-        run: |
-          version=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' internal/version/version.go)
-          cd /build/shfm
-          sed -i "s/^pkgver=.*/pkgver=$version/" PKGBUILD
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            sudo -u builder updpkgsums
-          else
-            tar --exclude=.git --transform "s|^\.|shfm-$version|" \
-              -czf "shfm-$version.tar.gz" -C "$GITHUB_WORKSPACE" .
-            chown builder "shfm-$version.tar.gz"
-            sed -i \
-              -e "s|^source=(\"\$pkgname-\$pkgver.tar.gz::[^\"]*\"|source=(\"\$pkgname-\$pkgver.tar.gz\"|" \
-              -e "0,/^sha256sums=('[0-9a-f]*'/s//sha256sums=('SKIP'/" PKGBUILD
-          fi
 
       - name: Build
         run: cd /build/shfm && sudo -u builder makepkg -s --noconfirm

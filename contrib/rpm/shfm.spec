@@ -15,7 +15,7 @@
 
 # llama-go pinned to the commit shfm's patches in third_party/llama-go target,
 # and the llama.cpp commit that llama-go's submodule points at; the same as
-# contrib/fetch-llama-go.sh and contrib/arch/shfm/PKGBUILD
+# contrib/fetch-llama-go.sh and contrib/arch/shfm/PKGBUILD.in
 %global llamago 992bbf8cfdc7484d4b3d724fa9133c5a87d6310d
 %global llamago_sha256 6fd78f62efb2bd36bbd370f1be3fdda25b33cb7ee8076a9b5296fea4e513339c
 %global llamacpp 90c26fcd4b2114b4aa39d09d69318cb8f438d27a

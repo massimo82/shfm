@@ -617,8 +617,11 @@ binaries (base build, no semantic search):
 - **Arch, Artix, Manjaro and derivatives** (x86_64):
   `sudo pacman -U shfm-VERSION-1-x86_64.pkg.tar.zst`. The release's
   `shfm-PKGBUILD.tar.gz` builds it again with `makepkg -si`
-  (`_native=1 makepkg -si` for this machine's CPU only); it's
-  `contrib/arch/shfm/` here.
+  (`_native=1 makepkg -si` for this machine's CPU only). Here it's the
+  template `contrib/arch/shfm/PKGBUILD.in`, which
+  `contrib/arch/shfm/mkpkgbuild OUTDIR` turns into the PKGBUILD of the
+  current version, with its source archive's checksum (`--local
+  ARCHIVE` for an archive of your own, such as an untagged tree).
 - **Debian 13+, Ubuntu 24.04+ and derivatives** (amd64, arm64):
   `sudo apt install ./shfm_VERSION_amd64.deb`; built from
   `contrib/debian/` (see the top of `contrib/debian/rules`).
@@ -1425,9 +1428,10 @@ vendor/                         Go module dependencies (the default build works 
 The current release is **0.2.12**, shown in the title bar next to "Shell File
 Manager". It lives in a single constant, `Version` in
 `internal/version/version.go`; to cut a new release change it there, and
-the README's title line, `pkgver` in `contrib/arch/shfm/PKGBUILD`, a new entry
-at the top of `contrib/debian/changelog`, and `Version` and a `%changelog`
-entry in `contrib/rpm/shfm.spec`, then push a `vVERSION` tag: the
+the README's title line, a new entry at the top of
+`contrib/debian/changelog`, and `Version` and a `%changelog` entry in
+`contrib/rpm/shfm.spec` (the Arch PKGBUILD is made from its template with
+the version and checksum filled in), then push a `vVERSION` tag: the
 release workflow checks they all agree, and publishes the binaries and the
 packages.
 
