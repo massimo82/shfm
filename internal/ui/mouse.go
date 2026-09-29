@@ -242,7 +242,18 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 				break
 			}
 		}
-	case DialogTaskList, DialogNewChoice, DialogChooseApp, DialogFormatChoose, DialogPickFilter, DialogPickOptions:
+	case DialogChooseApp, DialogAssociations:
+		// Past the rows above the list, and scrolled.
+		top := chooseAppListTop
+		if m.dialog.Kind == DialogAssociations {
+			top = assocListTop
+		}
+		visible := row - top
+		if visible >= 0 && visible < m.dialogListRows() && m.dialog.ListTop+visible < len(m.dialog.Items) {
+			m.dialog.ItemIdx = m.dialog.ListTop + visible
+			m.updateDialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+		}
+	case DialogTaskList, DialogNewChoice, DialogFormatChoose, DialogPickFilter, DialogPickOptions:
 		if row >= 0 && row < len(m.dialog.Items) {
 			m.dialog.ItemIdx = row
 			m.confirmDialog()

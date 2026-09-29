@@ -314,12 +314,11 @@ func (m *Model) applyProperties() tea.Cmd {
 func (m *Model) openWithDefaultApp(e vfs.Entry) {
 	p := m.activePane()
 	fullVfsPath := p.FS.Join(p.Path, e.Name)
-	mimeType := opener.MimeType(e.Name)
 
 	// The local backend has a real path an external app can open directly;
 	// every other source (SMB/NFS/SFTP/MTP) is opened through its FUSE
 	// mount, or a local temp copy where it can't be mounted (see
-	// openremote.go) — set up here and used by both branches below.
+	// openremote.go).
 	var realPath string
 	var remote *remoteOpenTarget
 	if lp, ok := p.FS.(vfs.LocalPath); ok {
@@ -333,33 +332,36 @@ func (m *Model) openWithDefaultApp(e vfs.Entry) {
 		remote = &remoteOpenTarget{fs: p.FS, path: fullVfsPath, name: e.Name}
 	}
 
+	// A name that doesn't tell the type: its content does (see detect.go).
+	mimeType, ok := opener.MimeTypeByName(e.Name)
+	switch {
+	case ok:
+	case remote == nil:
+		mimeType = opener.DetectMimeType(e.Name, readHead(p.FS, fullVfsPath))
+	default:
+		m.setStatus("Recognizing %s\u2026", e.Name)
+		m.detectInBackground(p.FS, fullVfsPath, detectedType{name: e.Name, remote: remote})
+		return
+	}
+	m.openWithType(e.Name, mimeType, realPath, remote)
+}
+
+// openWithType opens the file name, of type mimeType, with its default
+// application — at realPath, or remote — or has the user choose one.
+func (m *Model) openWithType(name, mimeType, realPath string, remote *remoteOpenTarget) {
 	if app, ok := opener.DefaultApp(mimeType); ok {
 		if remote != nil {
 			m.startOpenRemote(remote, app)
 			return
 		}
 		if err := opener.Launch(app, realPath); err != nil {
-			m.setError("Could not open %s: %v", e.Name, err)
+			m.setError("Could not open %s: %v", name, err)
 			return
 		}
-		m.setStatus("Opened %s with %s", e.Name, app.Name)
+		m.setStatus("Opened %s with %s", name, app.Name)
 		return
 	}
-
-	apps := opener.ListApps()
-	if len(apps) == 0 {
-		m.setStatus("%s (%s) \u2014 no application found to open it with", e.Name, humanSize(e.Size))
-		return
-	}
-	items := make([]string, len(apps))
-	for i, a := range apps {
-		items[i] = a.Name
-	}
-	m.dialog = Dialog{
-		Kind: DialogChooseApp, Title: "Open " + e.Name + " with\u2026",
-		Items: items, ChooseApps: apps, ChooseAppMime: mimeType,
-		ChooseAppTarget: realPath, ChooseAppRemote: remote,
-	}
+	m.openAppChooser(mimeType, realPath, remote)
 }
 
 // --- background tasks --------------------------------------------------------------
@@ -865,24 +867,6 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 
 	case DialogSourceMenu:
 		m.selectSourceMenuItem()
-
-	case DialogChooseApp:
-		if d.ItemIdx < 0 || d.ItemIdx >= len(d.ChooseApps) {
-			m.dialog = Dialog{}
-			break
-		}
-		app := d.ChooseApps[d.ItemIdx]
-		m.dialog = Dialog{}
-		_ = opener.SaveDefaultApp(d.ChooseAppMime, app)
-		if d.ChooseAppRemote != nil {
-			m.startOpenRemote(d.ChooseAppRemote, app)
-			break
-		}
-		if err := opener.Launch(app, d.ChooseAppTarget); err != nil {
-			m.setError("Could not launch %s: %v", app.Name, err)
-			break
-		}
-		m.setStatus("Opened with %s (remembered as default for %s)", app.Name, d.ChooseAppMime)
 
 	case DialogProgress:
 		m.dialog = Dialog{}

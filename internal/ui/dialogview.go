@@ -356,18 +356,10 @@ func (m *Model) renderDialogBox() string {
 		return dialogBox(72).Render(b.String())
 
 	case DialogChooseApp:
-		b.WriteString(styleDim.Render("No default application is set for " + d.ChooseAppMime + "."))
-		b.WriteString("\n\n")
-		for i, it := range d.Items {
-			prefix := "  "
-			s := styleFile
-			if i == d.ItemIdx {
-				prefix, s = "\u25b8 ", styleAccent
-			}
-			b.WriteString(prefix + s.Render(it) + "\n")
-		}
-		b.WriteString("\n" + styleDim.Render("The choice is remembered for next time. Esc cancel"))
-		return dialogBox(64).Render(b.String())
+		return m.renderChooseApp(&b)
+
+	case DialogAssociations:
+		return m.renderAssociations(&b)
 
 	case DialogConnecting:
 		b.WriteString(d.Message)

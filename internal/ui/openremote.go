@@ -54,6 +54,10 @@ type openResultMsg struct {
 	editing     bool  // interim: app launched, waiting for it to exit
 	changed     bool  // final: the temp copy was modified before the app exited
 	err         error
+
+	// detected, alone, is a file's type recognized by its content, before
+	// opening it (see detect.go).
+	detected *detectedType
 }
 
 func (m *Model) waitForOpenMsg() tea.Cmd {
@@ -223,6 +227,10 @@ func uploadFromTemp(fs vfs.FileSystem, vfsPath, tempPath string) error {
 }
 
 func (m *Model) handleOpenResult(msg openResultMsg) {
+	if msg.detected != nil {
+		m.handleDetected(*msg.detected)
+		return
+	}
 	if msg.err != nil {
 		m.setError("Could not open %s: %v", msg.name, msg.err)
 		return

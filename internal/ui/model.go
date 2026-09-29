@@ -32,6 +32,7 @@ import (
 	"shfm/internal/archive"
 	"shfm/internal/config"
 	"shfm/internal/fusemount"
+	"shfm/internal/opener"
 	"shfm/internal/semantic"
 	"shfm/internal/vfs"
 	"shfm/internal/wlclip"
@@ -159,6 +160,7 @@ type rect struct{ x0, y0, w, h int }
 // handleKey — see internal/config's KeyMap and config.LoadKeyMap.
 func New(cfg *config.Config, keymap *config.KeyMap, start Start) *Model {
 	dir, names := resolveStart(start)
+	opener.TerminalCommand = cfg.Terminal
 	local0 := vfs.NewLocalFS("Local", dir)
 	local1 := vfs.NewLocalFS("Local", dir)
 	m := &Model{
@@ -425,6 +427,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openProperties()
 	case config.ActionExtract:
 		m.doExtract()
+	case config.ActionAssociations:
+		m.openAssociations()
 	case config.ActionCompress:
 		m.askCreateArchive()
 

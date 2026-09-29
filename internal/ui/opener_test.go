@@ -45,7 +45,7 @@ func TestOpenWithDefaultAppShowsChooserWhenNoAssociation(t *testing.T) {
 	if err := os.MkdirAll(appsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	desktop := "[Desktop Entry]\nName=Fake Editor\nExec=true %f\n"
+	desktop := "[Desktop Entry]\nType=Application\nName=Fake Editor\nExec=true %f\n"
 	if err := os.WriteFile(filepath.Join(appsDir, "fake.desktop"), []byte(desktop), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -64,6 +64,7 @@ const (
 	ActionProperties       Action = "properties"
 	ActionExtract          Action = "extract"
 	ActionCompress         Action = "compress"
+	ActionAssociations     Action = "file-associations"
 	ActionSearch           Action = "search"
 	ActionSemanticSearch   Action = "semantic-search"
 	ActionCancel           Action = "cancel"
@@ -127,6 +128,7 @@ var keybindingDefs = []keybindingDef{
 	{ActionProperties, []string{"i"}, "Entry properties"},
 	{ActionExtract, []string{"x"}, "Extract archive here"},
 	{ActionCompress, []string{"z"}, "Create an archive"},
+	{ActionAssociations, []string{"o"}, "Applications opening file types"},
 
 	{ActionSearch, []string{"/"}, "Search/filter by name"},
 	{ActionSemanticSearch, []string{"ctrl+f"}, "Search file contents"},

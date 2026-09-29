@@ -29,7 +29,9 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
 - Clipboard shared with the desktop (Wayland), both ways.
 - Colored listing, a detail line with permissions, owner and dates, and
   folder sizes.
-- Opening files with the desktop's default application.
+- Opening files with the desktop's default application, and a dialog to
+  see and change which application opens each file type, by extension —
+  shared with GNOME, KDE and the other desktops.
 - Open network sources listed in other applications' file dialogs, in
   GNOME/GTK and KDE.
 - Desktop integration, optional: shfm registers as a file manager like
@@ -161,8 +163,9 @@ to toggle between single- and dual-pane layout.
   place.
 - **Open with the default application**: `Enter`/double-click on a file
   opens it with the desktop's configured default app (via the XDG MIME
-  Applications spec); if none is set, a chooser lists installed
-  applications and remembers the pick for next time. Files on SMB, NFS,
+  Applications spec); if none is set, a chooser lists the installed
+  applications — those declaring the file's type first — and remembers the
+  pick for next time. Files on SMB, NFS,
   SFTP and MTP sources are opened **in place**, through a FUSE mount shfm
   makes of the source (see Notes): a video player starts
   streaming a film on a share or a phone at once, seeking included, and an
@@ -170,6 +173,10 @@ to toggle between single- and dual-pane layout.
   gvfs's mount in other file managers, with no password asked again. Where
   FUSE isn't available, files are opened from a downloaded temp copy
   instead, uploaded back if the app changed it.
+- **File associations** (`o`): see and change which application opens
+  each file type, listed by extension, shared with GNOME, KDE and the
+  other desktops; a file with no extension is recognized by its content.
+  See [File associations](#file-associations).
 - **Properties dialog** (`i`): view type, size, modification date,
   permissions, owner and group (plus any `immutable`/`append-only` `chattr`
   flag, on the local filesystem); on backends that support it (local
@@ -252,6 +259,105 @@ to toggle between single- and dual-pane layout.
   system-wide (`/usr/share/applications`) if run as root, per-user
   (`~/.local/share/applications`) otherwise — but only if neither already
   exists.
+
+## File associations
+
+Which application opens a file (`Enter` or a double click on it) depends
+on the file's type: `o` opens the list of every type, by extension, with
+the application opening it, to see it and change it. shfm keeps no
+associations of its own: it reads and writes the same files as GNOME, KDE
+and the other Linux desktops, so a choice made in shfm holds in them too,
+and theirs in shfm.
+
+### The associations dialog
+
+```
+Showing all file types (Tab switches).
+
+Filter:
+
+  .md                text/markdown                  Kate  · system
+▸ .pdf               application/pdf                Okular
+  .png               image/png                      Gwenview  · system
+```
+
+Each row is a file type: its extensions, its MIME type and the application
+opening it. `· system` (dimmed) marks the system's choice; the others are
+yours. The cursor starts on the type of the file under the cursor in the
+list.
+
+| Key | Action |
+|---|---|
+| typing | filter by extension (`pdf`, `.mkv`), MIME type or application name |
+| `↑` `↓`, `PgUp` `PgDown`, `Home` `End` | move |
+| `Tab` | switch between every type and only those you chose an application for |
+| `Enter` / click | choose the type's application (see below) |
+| `Del` / `Ctrl+R` | reset the type to the system's choice, dropping yours |
+| `Esc` | close |
+
+Typing an extension no application is associated with yet (`.xcf`, say)
+shows a row for its type, to choose one. `j`/`k` type in the filter here,
+like any letter: move with the arrows (or `Ctrl+J`/`Ctrl+K`).
+
+### Choosing an application
+
+The same chooser opens from the associations dialog and when opening a
+file whose type has no application yet. It lists the applications
+installed right now, read afresh each time, so one just installed is
+there: those declaring the type first, the others dimmed (they may still
+open it, but don't say so). `✓ current` marks the type's application.
+
+| Key | Action |
+|---|---|
+| typing | filter by application name |
+| `↑` `↓`, `PgUp` `PgDown`, `Home` `End` | move |
+| `Enter` / click | make it the type's application — and open the file with it, when opening one |
+| `Esc` | back to the associations dialog, or cancel opening the file |
+
+### How a file's type is told
+
+By its name first, from the system's MIME database (shared-mime-info):
+extensions and other name patterns, with their weights, case-sensitive
+ones (`main.C` is C++, `main.c` C), aliases, and literal names
+(`Makefile`). When the name doesn't tell — no extension, or an unknown
+one — by its content: the database's "magic" rules, reading only the
+file's first bytes (as many as the rules look at: under 20 KB with the
+usual database), then plain text or binary, as
+GNOME tells them. An empty file is `application/x-zerosize`. On network
+sources and phones, that read happens in the background, so shfm never
+waits on it.
+
+A type with no application of its own opens with its parent type's: a C
+source file, `text/x-csrc`, with the text editor (`text/plain`).
+
+### The standards it follows
+
+- **Shared MIME-info** (freedesktop.org): the MIME database in each
+  `$XDG_DATA_DIRS/mime` (`globs2`, `magic`, `aliases`, `subclasses`),
+  the user's own (`~/.local/share/mime`) first.
+- **Desktop Entry**: the applications are the `.desktop` files in every
+  `applications` folder of `$XDG_DATA_HOME` and `$XDG_DATA_DIRS`,
+  subfolders included, shown by their name in your language. `Hidden`
+  (an application the user removed), `TryExec` (a program not
+  installed), `NoDisplay`, `OnlyShowIn`/`NotShowIn` are honored; a
+  `Terminal=true` application runs in [the terminal](#the-terminal); the
+  `Exec` line's quoting and field codes are expanded as the spec says.
+- **MIME Applications Associations**: the `mimeapps.list` files in
+  `$XDG_CONFIG_HOME`, `$XDG_CONFIG_DIRS` and the `applications` folders,
+  with each the current desktop's own first (`gnome-mimeapps.list`,
+  `kde-mimeapps.list`, from `$XDG_CURRENT_DESKTOP`). A type's application
+  is the first installed one of its `[Default Applications]`; failing
+  that, of its `[Added Associations]` less `[Removed Associations]`, then
+  of the applications declaring the type.
+
+Choosing an application writes it as GNOME and KDE do, to
+`~/.config/mimeapps.list` (`$XDG_CONFIG_HOME`): the type's
+`[Default Applications]` entry, the application first in its
+`[Added Associations]` and out of its `[Removed Associations]`; a default
+for the type in your desktop's own list (`kde-mimeapps.list`, say), which
+would win over it, is dropped. Resetting drops the type from all three
+sections of your lists. Everything else in the files stays as it was, and
+they're replaced atomically.
 
 ## Archives
 
@@ -523,21 +629,37 @@ already run at startup), or no terminal can open.
 
 ### shfm as a file dialog
 
-The dialog is shfm itself, as usual but with a line of hints below the
-lists:
+When shfm is the portal's file chooser (see above), it is the window an
+application opens to ask for a file or a folder: Firefox's "Save as",
+choosing the download folder, a file to upload. The dialog is shfm itself
+— both panes, every source, search, everything — with a line of hints
+below the lists and three extra shortcuts, which do nothing outside it:
+
+| Key | Action |
+|---|---|
+| `Ctrl+O` | choose: the files selected with `Space` (when the application accepts several), the folder you're in (when it asks for a folder), or, saving, ask for the file's name |
+| `Ctrl+T` | choose the file type among those the application offers ("Images", "PDF"...): files of other types aren't listed |
+| `Ctrl+E` | the application's extra options, if it has any (a "read only" checkbox, an encoding...) |
+| `Esc` (with no search or filter to cancel) / `q` | cancel: the application gets no file |
+
+What `Enter` and `Ctrl+O` do depends on what the application asks for:
 
 - **Choosing files**: `Enter` or a double click on a file chooses it;
   when the application accepts several, select them with `Space` and
-  press `Ctrl+O`. Files of other types than the one chosen with `Ctrl+T`
-  (among those the application offers) aren't listed.
+  press `Ctrl+O`.
 - **Choosing a folder** (e.g. the download folder): only folders are
   listed; `Enter` opens one, `Ctrl+O` chooses the folder you're in (or the
   selected ones, when the application accepts several).
 - **Saving**: `Ctrl+O` asks for the name in the current folder, starting
   from the application's suggestion; `Enter` on an existing file offers
   to replace it. Typing a folder's name opens it.
-- `Ctrl+E` shows the application's extra options, if it has any; `Esc`
-  (with no search or filter to cancel) or `q` cancels.
+
+The file type chosen with `Ctrl+T` is matched as GTK matches it: by the
+file's name, or, on the local filesystem, by its content when the name
+doesn't tell (a PDF saved without extension is listed under "PDF"; see
+[How a file's type is told](#how-a-files-type-is-told)) — not on network
+sources, where reading every file listed would cost too much. A type
+includes its subtypes: a "Text" filter lists C sources and Markdown too.
 
 Only local folders can be chosen: an application given a file on a
 network source's FUSE mount would lose it as soon as shfm exits. The keys
@@ -573,6 +695,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+Alt+M` | paste as an automatic mirror (empty clipboard: list mirrors) |
 | `r`, `m`, `f` | rename, new folder, new file |
 | `i` | properties (permissions, owner, group) |
+| `o` | file associations: the application opening each file type (see [File associations](#file-associations), for the dialog's own keys) |
 | `x` | extract the selected archives here, each into its own new folder |
 | `z` | create an archive of the selected entries, choosing the format |
 | `/` | search/filter the current folder by name |
@@ -582,7 +705,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+B` | background tasks |
 | `Ctrl+Alt+H` / `?` | full list of shortcuts |
 | `q` / `Ctrl+Q` | quit |
-| `Ctrl+O`, `Ctrl+T`, `Ctrl+E` | as a file dialog: choose, file type, options (see [Desktop integration](#desktop-integration)) |
+| `Ctrl+O`, `Ctrl+T`, `Ctrl+E` | only when shfm is another application's file dialog: choose, file type, options (see [shfm as a file dialog](#shfm-as-a-file-dialog)) |
 
 ### Customizing keybindings
 
@@ -1391,7 +1514,7 @@ retrieval quality on its own.
 main.go                       entry point
 internal/vfs/                  filesystem abstraction (Local/SMB/NFS/SFTP/MTP)
 internal/mtp/                   MTP device discovery + thin adapter over go-mtpfs
-internal/opener/                default-app resolution (XDG) and launching
+internal/opener/                file types, applications and their associations (freedesktop.org specs), launching
 internal/fusemount/             FUSE mounts of network sources, for opening remote files in place
 contrib/gio-module/             optional GIO module listing those mounts in GTK file dialogs
 contrib/desktop-integration/    optional desktop entry, D-Bus and portal files registering shfm as a file manager

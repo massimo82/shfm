@@ -72,6 +72,7 @@ const (
 	DialogPickFilter
 	DialogPickOptions
 	DialogCreateArchive
+	DialogAssociations
 )
 
 // Dialog is the state of any currently active modal.
@@ -90,20 +91,40 @@ type Dialog struct {
 	// choice, format filesystem choice...).
 	Items   []string
 	ItemIdx int
+	ListTop int // first item shown, in lists that scroll (see renderScrollList)
 
 	// Context data used by specific dialog kinds.
 	TaskID           int // DialogProgress
 	ConnectRequestID int // DialogConnecting
 
-	ChooseAppMime   string       // DialogChooseApp
-	ChooseAppTarget string       // DialogChooseApp: local path to open (ChooseAppRemote nil)
-	ChooseApps      []opener.App // DialogChooseApp: candidates, parallel to Items
+	// DialogChooseApp: Inputs[0] filters ChooseAppAll (the applications
+	// declaring the type first: ChooseAppFits of them) into ChooseApps,
+	// parallel to Items and ChooseAppDim. ChooseAppSetOnly when there's no
+	// file to open, the chooser coming from DialogAssociations, whose
+	// filter and view (AssocQuery, AssocMine) it restores on the way back.
+	ChooseAppMime    string
+	ChooseAppTarget  string // local path to open (ChooseAppRemote nil)
+	ChooseApps       []opener.App
+	ChooseAppAll     []opener.App
+	ChooseAppFits    int
+	ChooseAppDim     []bool
+	ChooseAppCurrent string // desktop ID of the type's current application
+	ChooseAppSetOnly bool
 
 	// ChooseAppRemote is set instead of ChooseAppTarget when the entry isn't
 	// on a source with a real local path (SMB/NFS/SFTP/MTP): picking an app
 	// opens the entry through the source's FUSE mount, or a local temp copy
 	// (see startOpenRemote).
 	ChooseAppRemote *remoteOpenTarget
+
+	// DialogAssociations: Inputs[0] filters AssocAll into AssocShown,
+	// parallel to Items and AssocSystem (the system's choice, not the
+	// user's); AssocMine shows only the user's choices.
+	AssocAll    []opener.Association
+	AssocShown  []opener.Association
+	AssocSystem []bool
+	AssocMine   bool
+	AssocQuery  string
 
 	PropsFS    vfs.FileSystem // DialogProperties
 	PropsAttrs []string       // DialogProperties: restricting chattr flags on the entry (immutable, append-only)
@@ -203,6 +224,12 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if d.Kind == DialogAuth {
 		return m.updateAuthDialogKey(msg), true
+	}
+	if d.Kind == DialogAssociations {
+		return m.updateAssociationsKey(msg), true
+	}
+	if d.Kind == DialogChooseApp {
+		return m.updateChooseAppKey(msg), true
 	}
 	if d.Kind == DialogCreateArchive {
 		if cmd, handled := m.updateCreateArchiveKey(msg); handled {

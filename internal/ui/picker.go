@@ -98,16 +98,27 @@ func (ps *pickerState) foldersOnly() bool {
 
 // applyPickFilter makes both panes list only what can be chosen.
 func (m *Model) applyPickFilter() {
-	var f func(vfs.Entry) bool
-	switch ps := m.picker; {
-	case ps.foldersOnly():
-		f = func(e vfs.Entry) bool { return e.IsDir }
-	case ps.filter >= 0:
-		filter := ps.req.Filters[ps.filter]
-		f = func(e vfs.Entry) bool { return e.IsDir || filter.Match(e.Name) }
-	}
 	for _, p := range m.panes {
-		p.EntryFilter = f
+		switch ps := m.picker; {
+		case ps.foldersOnly():
+			p.EntryFilter = func(e vfs.Entry) bool { return e.IsDir }
+		case ps.filter >= 0:
+			// On the local filesystem, a file whose name doesn't tell its
+			// type is recognized by its content (see detect.go).
+			filter := ps.req.Filters[ps.filter]
+			p.EntryFilter = func(e vfs.Entry) bool {
+				switch {
+				case e.IsDir:
+					return true
+				case isLocalFS(p.FS):
+					return filter.MatchFile(e.Name, readHead(p.FS, p.FS.Join(p.Path, e.Name)))
+				default:
+					return filter.Match(e.Name)
+				}
+			}
+		default:
+			p.EntryFilter = nil
+		}
 		if p.Mode == PaneNormal && !p.ShowingSearchResults {
 			cur, hadCur := p.CurrentEntry()
 			p.Load()

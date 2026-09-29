@@ -31,7 +31,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -124,8 +123,17 @@ type Reply struct {
 	Choices map[string]string `json:"choices,omitempty"`
 }
 
-// Match reports whether a file named name passes f.
+// Match reports whether a file named name passes f, its type told by its
+// name.
 func (f Filter) Match(name string) bool {
+	return f.MatchFile(name, nil)
+}
+
+// MatchFile is Match, a file whose name doesn't tell its type recognized
+// by its content when readHead is set (see opener.DetectMimeType) — as GTK
+// does on the local filesystem, not on network ones, where reading every
+// file listed would cost too much.
+func (f Filter) MatchFile(name string, readHead func(n int) ([]byte, error)) bool {
 	lower := strings.ToLower(name)
 	var mimeType string
 	for _, p := range f.Patterns {
@@ -142,9 +150,13 @@ func (f Filter) Match(name string) bool {
 			}
 		case PatternMIME:
 			if mimeType == "" {
-				mimeType = opener.MimeType(name)
+				if readHead != nil {
+					mimeType = opener.DetectMimeType(name, readHead)
+				} else {
+					mimeType = opener.MimeType(name)
+				}
 			}
-			if ok, _ := path.Match(strings.ToLower(p.Pattern), mimeType); ok {
+			if opener.MimeTypeIs(mimeType, p.Pattern) {
 				return true
 			}
 		}

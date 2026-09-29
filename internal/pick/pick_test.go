@@ -20,6 +20,7 @@ package pick
 import (
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -147,5 +148,47 @@ func TestConversationWithdrawnByBackend(t *testing.T) {
 	case <-withdrawn:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the picker never learned the request was withdrawn")
+	}
+}
+
+func TestFilterMatchFileByContent(t *testing.T) {
+	// A sandboxed Shared MIME-info database, not the machine's.
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_DIRS", data)
+	if err := os.MkdirAll(filepath.Join(data, "mime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"globs2":     "50:application/pdf:*.pdf\n50:text/x-csrc:*.c\n",
+		"magic":      "MIME-Magic\x00\n[50:application/pdf]\n>0=\x00\x04%PDF\n",
+		"subclasses": "text/x-csrc text/plain\n",
+	}
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(data, "mime", name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pdf := Filter{Name: "PDF", Patterns: []Pattern{{PatternMIME, "application/pdf"}}}
+	text := Filter{Name: "Text", Patterns: []Pattern{{PatternMIME, "text/plain"}}}
+	head := func(content string) func(int) ([]byte, error) {
+		return func(n int) ([]byte, error) { return []byte(content)[:min(n, len(content))], nil }
+	}
+	for _, tc := range []struct {
+		f        Filter
+		name     string
+		readHead func(int) ([]byte, error)
+		want     bool
+	}{
+		{pdf, "scan", head("%PDF-1.7"), true},
+		{pdf, "scan", nil, false}, // by name only
+		{pdf, "notes", head("hello\n"), false},
+		{text, "notes", head("hello\n"), true},
+		{text, "main.c", nil, true}, // a subclass of text/plain
+		{text, "scan", head("%PDF-1.7"), false},
+	} {
+		if got := tc.f.MatchFile(tc.name, tc.readHead); got != tc.want {
+			t.Errorf("%s.MatchFile(%q, content %v) = %v, want %v", tc.f.Name, tc.name, tc.readHead != nil, got, tc.want)
+		}
 	}
 }
