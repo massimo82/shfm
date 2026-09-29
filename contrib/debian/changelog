@@ -1,3 +1,12 @@
+shfm (0.2.15) unstable; urgency=medium
+
+  * File associations dialog (o): the application opening each file type,
+    by extension, following the freedesktop.org specifications.
+  * Files with no known extension are recognized by their content.
+  * Terminal=true applications open in a terminal.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Tue, 29 Sep 2026 12:00:00 +0200
+
 shfm (0.2.14) unstable; urgency=medium
 
   * NFS: a denied mount from an unprivileged port suggests setcap.
