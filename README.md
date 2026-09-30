@@ -33,7 +33,9 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
   folder sizes.
 - Opening files with the desktop's default application, and a dialog to
   see and change which application opens each file type, by extension —
-  shared with GNOME, KDE and the other desktops.
+  shared with GNOME, KDE and the other desktops. Without a graphical
+  session, text and configuration files open in nano (or vim) in shfm's
+  own terminal.
 - Open network sources listed in other applications' file dialogs, in
   GNOME/GTK and KDE.
 - Desktop integration, optional: shfm registers as a file manager like
@@ -194,6 +196,17 @@ to toggle between single- and dual-pane layout.
   gvfs's mount in other file managers, with no password asked again. Where
   FUSE isn't available, files are opened from a downloaded temp copy
   instead, uploaded back if the app changed it.
+- **Text files without a graphical session**: when neither
+  `WAYLAND_DISPLAY` nor `DISPLAY` is set (the console, SSH without X
+  forwarding), no desktop application could open a window, so text files
+  — `text/*` and every type declared a `text/plain` subtype: configuration
+  files, shell scripts, JSON, YAML, TOML, XML..., files with no extension
+  whose content is text, and empty files — open in a terminal editor
+  instead: `nano` if installed, otherwise `vim`, otherwise `vi`. It takes
+  over shfm's terminal until it exits, then shfm comes back; files on
+  network sources and phones are edited through the FUSE mount, or a temp
+  copy uploaded back if changed. Other files, or text files with none of
+  those editors installed, open as usual.
 - **File associations** (`o`): see and change which application opens
   each file type, listed by extension, shared with GNOME, KDE and the
   other desktops; a file with no extension is recognized by its content.

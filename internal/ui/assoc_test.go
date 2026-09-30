@@ -198,6 +198,7 @@ func TestAppChooserScrolls(t *testing.T) {
 }
 
 func TestNoExtensionRecognizedByContent(t *testing.T) {
+	fakeSession(t, true)
 	_, dir := assocTestEnv(t)
 	m := assocModel(t, dir)
 	for i, e := range m.panes[m.active].Entries {
@@ -242,6 +243,7 @@ func TestNoExtensionRecognizedByContent(t *testing.T) {
 }
 
 func TestDetectedInBackground(t *testing.T) {
+	fakeSession(t, true)
 	_, dir := assocTestEnv(t)
 	m := assocModel(t, dir)
 	remote := &remoteOpenTarget{fs: m.panes[m.active].FS, path: filepath.Join(dir, "notes"), name: "notes"}

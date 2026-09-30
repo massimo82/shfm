@@ -351,8 +351,12 @@ func (m *Model) openWithDefaultApp(e vfs.Entry) {
 }
 
 // openWithType opens the file name, of type mimeType, with its default
-// application — at realPath, or remote — or has the user choose one.
+// application — at realPath, or remote — or has the user choose one;
+// without a graphical session, a text file in a terminal editor.
 func (m *Model) openWithType(name, mimeType, realPath string, remote *remoteOpenTarget) {
+	if m.openInTerminalEditor(name, mimeType, realPath, remote) {
+		return
+	}
 	if app, ok := opener.DefaultApp(mimeType); ok {
 		if remote != nil {
 			m.startOpenRemote(remote, app)

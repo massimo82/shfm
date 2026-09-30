@@ -111,6 +111,10 @@ type Model struct {
 	// temp copy instead. Set by SetMountManager.
 	mounts *fusemount.Manager
 
+	// queued are commands an action wants run, for actions that return
+	// none themselves: Update runs them with its own (see queueCmd).
+	queued []tea.Cmd
+
 	// Background recursive search (see search.go): searchCh delivers
 	// results, searchState (indexed by pane) tracks each pane's own
 	// in-flight walk, if any, so a bare Esc (no dialog open) cancels the
@@ -220,6 +224,10 @@ func (m *Model) setError(format string, args ...interface{}) {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
+	if len(m.queued) > 0 {
+		cmd = tea.Batch(append(m.queued, cmd)...)
+		m.queued = nil
+	}
 	m.keepAuthOnTop()
 	if m.quitting && cmd == nil {
 		// A path that decided to quit (e.g. a choice made in file chooser
@@ -278,6 +286,11 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return nil
 	case elevatedDoneMsg:
 		m.handleElevatedDone(msg)
+		return nil
+	case editorReadyMsg:
+		return m.handleEditorReady(msg)
+	case editorDoneMsg:
+		m.handleEditorDone(msg)
 		return nil
 	case authPromptMsg:
 		m.handleAuthPrompt(msg)
@@ -539,6 +552,9 @@ func (m *Model) setNerdIcons(on bool) {
 		m.setStatus("Nerd Font icons off")
 	}
 }
+
+// queueCmd has Update run cmd once the current message is handled.
+func (m *Model) queueCmd(cmd tea.Cmd) { m.queued = append(m.queued, cmd) }
 
 // SetMountManager sets the manager of the FUSE mounts through which remote
 // entries are opened with external apps (see Model.mounts). The caller

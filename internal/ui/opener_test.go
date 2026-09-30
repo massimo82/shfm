@@ -26,6 +26,7 @@ import (
 )
 
 func TestOpenWithDefaultAppShowsChooserWhenNoAssociation(t *testing.T) {
+	fakeSession(t, true)
 	dataHome := t.TempDir()
 	configHome := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataHome)
