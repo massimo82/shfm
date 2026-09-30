@@ -45,8 +45,9 @@ var xdgUserDirDefaults = map[string]string{
 
 var userDirsLineRe = regexp.MustCompile(`^(XDG_[A-Z]+_DIR)\s*=\s*"(.*)"\s*$`)
 
-// xdgUserDirs returns the set of absolute paths that are the current user's
-// standard XDG user directories, for the given home folder. It honors
+// xdgUserDirs maps the absolute paths of the current user's standard XDG
+// user directories, for the given home folder, to their user-dirs.dirs
+// key ("XDG_MUSIC_DIR"...). It honors
 // $XDG_CONFIG_HOME/user-dirs.dirs (or ~/.config/user-dirs.dirs when
 // XDG_CONFIG_HOME is unset) when present — that's where xdg-user-dirs-update
 // records any localized names (e.g. "Documenti" on an Italian system) or
@@ -55,7 +56,7 @@ var userDirsLineRe = regexp.MustCompile(`^(XDG_[A-Z]+_DIR)\s*=\s*"(.*)"\s*$`)
 // cached: called only when actually browsing home (see xdgEntryNames), so
 // the one extra file read is negligible, and it means a change to
 // user-dirs.dirs takes effect immediately rather than needing a restart.
-func xdgUserDirs(home string) map[string]bool {
+func xdgUserDirs(home string) map[string]string {
 	values := make(map[string]string, len(xdgUserDirDefaults))
 	for k, v := range xdgUserDirDefaults {
 		values[k] = filepath.Join(home, v)
@@ -84,21 +85,21 @@ func xdgUserDirs(home string) map[string]bool {
 		}
 	}
 
-	dirs := make(map[string]bool, len(values))
-	for _, path := range values {
-		dirs[path] = true
+	dirs := make(map[string]string, len(values))
+	for key, path := range values {
+		dirs[path] = key
 	}
 	return dirs
 }
 
-// xdgEntryNames returns, from among entries, the subset of Names that are
-// the user's standard XDG user directories — only when fs is the local
+// xdgEntryNames maps, from among entries, the Names that are the user's
+// standard XDG user directories to their user-dirs.dirs key — only when fs is the local
 // filesystem and dir is the user's home folder, since that's the only place
 // those well-known folders actually live; a folder that merely happens to
 // be named e.g. "Documents" somewhere else in the tree isn't treated
 // specially. Returns nil when none apply, so callers can fall back to plain
 // dirs-first sorting.
-func xdgEntryNames(fs vfs.FileSystem, dir string, entries []vfs.Entry) map[string]bool {
+func xdgEntryNames(fs vfs.FileSystem, dir string, entries []vfs.Entry) map[string]string {
 	if fs.Kind() != vfs.KindLocal {
 		return nil
 	}
@@ -107,15 +108,16 @@ func xdgEntryNames(fs vfs.FileSystem, dir string, entries []vfs.Entry) map[strin
 		return nil
 	}
 	xdgPaths := xdgUserDirs(home)
-	var names map[string]bool
+	var names map[string]string
 	for _, e := range entries {
-		if !e.IsDir || !xdgPaths[fs.Join(dir, e.Name)] {
+		key := xdgPaths[fs.Join(dir, e.Name)]
+		if !e.IsDir || key == "" {
 			continue
 		}
 		if names == nil {
-			names = map[string]bool{}
+			names = map[string]string{}
 		}
-		names[e.Name] = true
+		names[e.Name] = key
 	}
 	return names
 }

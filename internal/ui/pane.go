@@ -65,10 +65,11 @@ type Pane struct {
 
 	// XDGNames holds the Entries names (only ever populated when Path is
 	// the user's home folder on the local filesystem) that are the user's
-	// standard XDG user directories (Desktop, Documents, ...) — set by
-	// Load(), consulted by the renderer to list and color them separately
-	// from the rest. Nil whenever none apply.
-	XDGNames map[string]bool
+	// standard XDG user directories (Desktop, Documents, ...), mapped to
+	// their user-dirs.dirs key — set by Load(), consulted by the renderer
+	// to list, color and pick an icon for them separately from the rest.
+	// Nil whenever none apply.
+	XDGNames map[string]string
 
 	// Filter narrows Load()'s listing of the current folder to names
 	// matching FilterQuery (exact or regex, see FilterRegex): see search.go.
@@ -275,13 +276,13 @@ func sortEntriesDirsFirst(entries []vfs.Entry) {
 // everything else in sortEntriesDirsFirst's usual folders-before-files,
 // alphabetical order. With a nil/empty xdgNames it behaves exactly like
 // sortEntriesDirsFirst.
-func sortEntriesXDGFirst(entries []vfs.Entry, xdgNames map[string]bool) {
+func sortEntriesXDGFirst(entries []vfs.Entry, xdgNames map[string]string) {
 	if len(xdgNames) == 0 {
 		sortEntriesDirsFirst(entries)
 		return
 	}
 	sort.Slice(entries, func(i, j int) bool {
-		xi, xj := xdgNames[entries[i].Name], xdgNames[entries[j].Name]
+		xi, xj := xdgNames[entries[i].Name] != "", xdgNames[entries[j].Name] != ""
 		if xi != xj {
 			return xi
 		}

@@ -20,6 +20,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -168,6 +169,9 @@ func (m *Model) renderSourceRow(p *Pane, g paneGeom) string {
 	value := p.SourceLabel
 	if p.Mode == PaneTrash {
 		value = "Trash (" + p.SourceLabel + ")"
+		if m.cfg.NerdIcons {
+			value = nerdTrash + " " + value
+		}
 	}
 	box := styleFieldBox.Render(padRight(" "+value, g.sourceBoxW))
 	btn := " " + styleFieldButton.Render(padRight(sourceButtonText, g.sourceBtnW))
@@ -274,9 +278,19 @@ func extOf(name string) string {
 // type (standard XDG user dir/folder/symlink/executable/archive/image/
 // media/plain file) and, as a modifier, its permissions (entries with no
 // write permission at all are shown in a fainter variant of their color, as
-// a visual cue). isXDGDir marks e as one of the user's standard XDG user
-// directories (Desktop, Documents, ...) — see Pane.XDGNames.
-func entryIconAndStyle(e vfs.Entry, isXDGDir bool) (string, lipgloss.Style) {
+// a visual cue). special is the XDG key of one of the user's standard XDG
+// user directories (Desktop, Documents, ...; see Pane.XDGNames), or
+// specialTrash for a trash folder, "" otherwise. nerd picks the Nerd Font
+// icons (see icons.go) over the bracketed ones; the color is the same.
+func entryIconAndStyle(e vfs.Entry, special string, nerd bool) (string, lipgloss.Style) {
+	icon, style := plainIconAndStyle(e, strings.HasPrefix(special, "XDG_"))
+	if nerd {
+		icon = nerdEntryIcon(e, special)
+	}
+	return icon, style
+}
+
+func plainIconAndStyle(e vfs.Entry, isXDGDir bool) (string, lipgloss.Style) {
 	var icon string
 	var style lipgloss.Style
 	switch {
@@ -316,7 +330,11 @@ func (m *Model) renderEntryLines(paneIdx int, p *Pane, w, h int) []string {
 	}
 	for i := p.Offset; i < end; i++ {
 		e := p.Entries[i]
-		icon, nameStyle := entryIconAndStyle(e, p.XDGNames[e.Name])
+		special := p.XDGNames[e.Name]
+		if special == "" && e.IsDir && isTrashDir(p.Path, e.Name) {
+			special = specialTrash
+		}
+		icon, nameStyle := entryIconAndStyle(e, special, m.cfg.NerdIcons)
 		mark := " "
 		if p.Selected[e.Name] {
 			mark = "\u2713"
@@ -341,7 +359,7 @@ func (m *Model) renderEntryLines(paneIdx int, p *Pane, w, h int) []string {
 		case e.IsDir:
 			countStr = humanCount(e.ItemCount)
 		}
-		nameW := w - (5 + len(icon) + 8 + 7)
+		nameW := w - (5 + lipgloss.Width(icon) + 8 + 7)
 		if nameW < 1 {
 			nameW = 1
 		}
@@ -377,7 +395,10 @@ func (m *Model) renderTrashLines(p *Pane, w, h int) []string {
 		if it.IsDir {
 			icon = iconDir
 		}
-		nameW := w - (5 + len(icon) + 17)
+		if m.cfg.NerdIcons {
+			icon = nerdEntryIcon(vfs.Entry{Name: filepath.Base(it.OriginalPath), IsDir: it.IsDir}, "")
+		}
+		nameW := w - (5 + lipgloss.Width(icon) + 17)
 		if nameW < 1 {
 			nameW = 1
 		}

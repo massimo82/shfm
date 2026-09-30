@@ -39,6 +39,7 @@ const (
 	ActionAbout            Action = "about"
 	ActionToggleLayout     Action = "toggle-layout"
 	ActionToggleHidden     Action = "toggle-hidden"
+	ActionToggleIcons      Action = "toggle-icons"
 	ActionTaskList         Action = "task-list"
 	ActionCursorUp         Action = "cursor-up"
 	ActionCursorDown       Action = "cursor-down"
@@ -99,6 +100,7 @@ var keybindingDefs = []keybindingDef{
 	{ActionAbout, []string{"ctrl+alt+a"}, "About shfm"},
 	{ActionToggleLayout, []string{"ctrl+l"}, "Single or dual pane"},
 	{ActionToggleHidden, []string{"ctrl+h", "."}, "Show or hide hidden files"},
+	{ActionToggleIcons, []string{"ctrl+alt+n"}, "Toggle Nerd Font icons"},
 	{ActionTaskList, []string{"ctrl+b"}, "Background tasks"},
 
 	{ActionCursorUp, []string{"ctrl+up", "up", "k"}, "Move cursor up"},

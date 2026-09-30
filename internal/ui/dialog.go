@@ -55,6 +55,7 @@ const (
 	DialogProgress
 	DialogTaskList
 	DialogConfirmQuit
+	DialogConfirmIcons
 	DialogProperties
 	DialogFormatChoose
 	DialogFormatConfirm1
@@ -342,7 +343,7 @@ func isYesNoDialog(k DialogKind) bool {
 	switch k {
 	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash,
 		DialogConfirmQuit, DialogFormatConfirm1, DialogMirrorConfirmDelete,
-		DialogPickOverwrite:
+		DialogPickOverwrite, DialogConfirmIcons:
 		return true
 	default:
 		return false

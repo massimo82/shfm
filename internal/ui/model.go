@@ -356,6 +356,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openAbout()
 	case config.ActionToggleLayout:
 		m.toggleLayout()
+	case config.ActionToggleIcons:
+		m.toggleIcons()
 	case config.ActionToggleHidden:
 		m.toggleHidden(listHeight)
 	case config.ActionTaskList:
@@ -499,6 +501,42 @@ func (m *Model) toggleHidden(listHeight int) {
 		m.setStatus("Showing hidden files")
 	} else {
 		m.setStatus("Hiding hidden files")
+	}
+}
+
+// toggleIcons turns the Nerd Font icons off, or asks before turning them
+// on: only once a Nerd Font is found installed, warning that the icons may
+// upset the layout.
+func (m *Model) toggleIcons() {
+	if m.cfg.NerdIcons {
+		m.setNerdIcons(false)
+		return
+	}
+	font := findNerdFont()
+	if font == "" {
+		m.dialog = Dialog{Kind: DialogMessage, Title: "Nerd Font icons",
+			Message: "No Nerd Font found on this system, so the icons stay off.\n\n" +
+				"Install one from https://www.nerdfonts.com/ and make it the " +
+				"terminal's font, then try again."}
+		return
+	}
+	m.dialog = Dialog{Kind: DialogConfirmIcons, Title: "Nerd Font icons",
+		Message: "Found the Nerd Font \"" + font + "\".\n\n" +
+			"The icons show up only if the terminal uses a Nerd Font, and they " +
+			"may cause some layout problems in the TUI: depending on the " +
+			"terminal and the font, an icon can spill over into the next " +
+			"cell and shift the columns.\n\nTurn them on?"}
+}
+
+// setNerdIcons turns the Nerd Font icons on or off, remembering the
+// choice in the config.
+func (m *Model) setNerdIcons(on bool) {
+	m.cfg.NerdIcons = on
+	m.cfg.Save()
+	if on {
+		m.setStatus("Nerd Font icons on")
+	} else {
+		m.setStatus("Nerd Font icons off")
 	}
 }
 

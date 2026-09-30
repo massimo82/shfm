@@ -121,6 +121,14 @@ type Config struct {
 	// kitty, ghostty, wezterm, konsole, gnome-terminal... (see
 	// internal/termlaunch).
 	Terminal string `json:"terminal,omitempty"`
+
+	// NerdIcons shows Nerd Font icons (https://www.nerdfonts.com/) for
+	// folders, files by type, links and the trash, in place of the
+	// bracketed "[D]"/"[F]"/"[L]" ones. Off by default: the icons need the
+	// terminal to use a Nerd Font. Turning them on from shfm (Ctrl+Alt+N)
+	// first checks that one is installed; set here, it isn't checked, for
+	// a terminal whose fonts are on another machine (SSH).
+	NerdIcons bool `json:"nerd_icons"`
 }
 
 // Default returns the default configuration.

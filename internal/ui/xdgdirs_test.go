@@ -73,13 +73,13 @@ func TestLoadListsXDGDirsFirstInHome(t *testing.T) {
 	}
 
 	for _, n := range []string{"Desktop", "Documents", "Downloads", "Videos"} {
-		if !p.XDGNames[n] {
-			t.Errorf("expected XDGNames[%q] to be true", n)
+		if p.XDGNames[n] == "" {
+			t.Errorf("expected XDGNames[%q] to be set", n)
 		}
 	}
 	for _, n := range []string{"Alpha", "Zeta", "notes.txt"} {
-		if p.XDGNames[n] {
-			t.Errorf("expected XDGNames[%q] to be false", n)
+		if p.XDGNames[n] != "" {
+			t.Errorf("expected XDGNames[%q] to be unset", n)
 		}
 	}
 }
@@ -129,17 +129,17 @@ func TestXDGUserDirsHonorsUserDirsDotDirs(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", configDir)
 
 	dirs := xdgUserDirs(home)
-	if !dirs[filepath.Join(home, "Documenti")] {
+	if dirs[filepath.Join(home, "Documenti")] != "XDG_DOCUMENTS_DIR" {
 		t.Errorf("expected Documenti (from user-dirs.dirs) to be recognized: %v", dirs)
 	}
-	if dirs[filepath.Join(home, "Documents")] {
+	if dirs[filepath.Join(home, "Documents")] != "" {
 		t.Errorf("expected the overridden default Documents to NOT be present: %v", dirs)
 	}
-	if !dirs[filepath.Join(home, "Desktop")] {
+	if dirs[filepath.Join(home, "Desktop")] != "XDG_DESKTOP_DIR" {
 		t.Errorf("expected Desktop (explicitly listed) to be recognized: %v", dirs)
 	}
 	// Other vars not present in the file fall back to their defaults.
-	if !dirs[filepath.Join(home, "Downloads")] {
+	if dirs[filepath.Join(home, "Downloads")] != "XDG_DOWNLOAD_DIR" {
 		t.Errorf("expected Downloads (fallback default) to be recognized: %v", dirs)
 	}
 }

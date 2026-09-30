@@ -860,6 +860,10 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		m.quitting = true
 		m.dialog = Dialog{}
 
+	case DialogConfirmIcons:
+		m.dialog = Dialog{}
+		m.setNerdIcons(true)
+
 	case DialogConnectSMB:
 		m.doConnectSMB()
 

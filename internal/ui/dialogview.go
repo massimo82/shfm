@@ -304,6 +304,12 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(styleDim.Render("Enter confirm · Esc cancel"))
 		return dialogBox(64).Render(b.String())
 
+	case DialogConfirmIcons:
+		b.WriteString(d.Message)
+		b.WriteString("\n\n")
+		b.WriteString(styleDim.Render("y / Enter turn on · n / Esc cancel"))
+		return dialogBox(64).Render(b.String())
+
 	case DialogConfirmQuit:
 		b.WriteString(styleWarn.Render(d.Message))
 		b.WriteString("\n\n")

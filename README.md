@@ -17,6 +17,8 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
 
 - Single or dual pane, switched with `Ctrl+L`.
 - Hidden files shown or hidden with `Ctrl+H` (or `.`).
+- Optional [Nerd Font](https://www.nerdfonts.com/) icons, turned on or
+  off with `Ctrl+Alt+N`.
 - Keyboard shortcuts without function keys, full mouse support and
   drag&drop.
 - Multi-selection.
@@ -146,6 +148,25 @@ to toggle between single- and dual-pane layout.
 - **Colored listing** by file type (folders, symlinks, executables,
   archives, images, media) and by permissions (read-only entries are
   shown in a fainter shade).
+- **Nerd Font icons** (off by default): monochrome
+  [Nerd Font](https://www.nerdfonts.com/) icons, in the color of the
+  entry's name, replace the bracketed `[D]`/`[F]`/`[L]` ones: folders,
+  the standard user folders (Desktop, Documents, Downloads, Music,
+  Pictures, Videos, Templates, Public) each with its own, links to a
+  folder and to a file, trash folders (the trash view's source too), and
+  files by type (documents, images, audio, video, archives, packages,
+  some 40 programming and markup languages, data and configuration
+  files, and files known by name such as `Makefile`, `Dockerfile` or
+  `.gitignore`);
+  a file of any other type gets the generic file icon. `Ctrl+Alt+N`
+  turns them on or off, remembered as `nerd_icons` in `config.json`.
+  Before turning them on, shfm checks that a Nerd Font is installed (a
+  font file in the font folders, or a family `fc-list` reports) and
+  warns that the icons may cause some layout problems: the terminal
+  must use a Nerd Font, and depending on the terminal and the font an
+  icon can spill over into the next cell. With no Nerd Font found the
+  icons stay off; `"nerd_icons": true` set by hand isn't checked, for a
+  terminal whose fonts are on another machine (SSH).
 - **Per-pane detail line**: permissions (`rwx` for user/group/others,
   followed by `[immutable]` / `[append-only]` when the entry carries such a
   `chattr` flag), owner, group, and modification/creation dates for whichever entry is
@@ -686,6 +707,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+S` / click SOURCE | open the source picker |
 | `Ctrl+L` / click title | toggle single/dual pane |
 | `Ctrl+H` / `.` | show/hide hidden files (dotfiles, and `lost+found` at a drive's root); remembered as `show_hidden` in `config.json` |
+| `Ctrl+Alt+N` | Nerd Font icons on/off, after checking a Nerd Font is installed; remembered as `nerd_icons` in `config.json` |
 | `Space`, `a`, `A` | multi-selection |
 | `Ctrl+C` | copy to clipboard |
 | `Ctrl+V` | paste (as a copy) |
