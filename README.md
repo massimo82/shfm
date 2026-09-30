@@ -244,7 +244,8 @@ to toggle between single- and dual-pane layout.
   external devices, restore (`R`), empty (`e` in the trash view, opened
   with `T`).
 - **Source picker** (`Ctrl+S`, or a click on the SOURCE field/`[...]`
-  button): lists, live, local disks, **removable USB/SD devices** (even
+  button): lists, live, local disks (the one holding the home folder
+  opens there, the others at their root), **removable USB/SD devices** (even
   unmounted ones — mounted automatically, preferring the system's
   **udisks2** D-Bus service, the same mechanism GNOME/Nautilus/Thunar
   use, so a regular local user can mount/unmount without root; falls back

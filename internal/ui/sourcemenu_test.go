@@ -17,7 +17,13 @@
 
 package ui
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"shfm/internal/drives"
+)
 
 func TestDriveDisplayName(t *testing.T) {
 	cases := []struct{ vendor, model, want string }{
@@ -64,5 +70,70 @@ func TestSourceMenuRowsNoSeparatorForSingleGroup(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("row[%d] = %d, want %d", i, got[i], want[i])
 		}
+	}
+}
+
+// TestSelectLocalDriveOpensHome: choosing the local drive the home folder
+// is on opens the home folder; any other drive, one whose mount point
+// merely contains a drive with the home on it included, opens its root.
+func TestSelectLocalDriveOpensHome(t *testing.T) {
+	root := t.TempDir()
+	homeDrive := filepath.Join(root, "home")
+	home := filepath.Join(homeDrive, "user")
+	other := t.TempDir()
+	for _, d := range []string{home, other} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("HOME", home)
+	local := func(mount string) sourceMenuEntry {
+		return sourceMenuEntry{kind: "local", local: drives.LocalDrive{MountPoint: mount}}
+	}
+
+	for _, tc := range []struct {
+		desc    string
+		entries []sourceMenuEntry
+		pick    int
+		want    string
+	}{
+		{"home on the only drive", []sourceMenuEntry{local(root)}, 0, home},
+		{"home on its own drive", []sourceMenuEntry{local(root), local(homeDrive)}, 1, home},
+		{"the drive above the home's", []sourceMenuEntry{local(root), local(homeDrive)}, 0, root},
+		{"another drive", []sourceMenuEntry{local(root), local(other)}, 1, other},
+	} {
+		m := newTestModel()
+		m.sourceMenuEntries = tc.entries
+		m.dialog = Dialog{Kind: DialogSourceMenu, ItemIdx: tc.pick}
+		m.selectSourceMenuItem()
+		if got := m.activePane().Path; got != tc.want {
+			t.Errorf("%s: opened %s, want %s", tc.desc, got, tc.want)
+		}
+	}
+}
+
+// TestHomeOnDriveThroughSymlink: a home reached through a symlink is on
+// the drive it resolves to.
+func TestHomeOnDriveThroughSymlink(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "var", "home", "user")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "home")
+	if err := os.Symlink(filepath.Join(root, "var", "home"), link); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", filepath.Join(link, "user"))
+	varDrive := filepath.Join(root, "var")
+	entries := []sourceMenuEntry{
+		{kind: "local", local: drives.LocalDrive{MountPoint: root}},
+		{kind: "local", local: drives.LocalDrive{MountPoint: varDrive}},
+	}
+	if got, ok := homeOnDrive(varDrive, entries); !ok || got != real {
+		t.Errorf("homeOnDrive(%s) = %q, %v; want %q", varDrive, got, ok, real)
+	}
+	if got, ok := homeOnDrive(root, entries); ok {
+		t.Errorf("homeOnDrive(%s) = %q, want none: the home resolves onto %s", root, got, varDrive)
 	}
 }

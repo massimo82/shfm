@@ -20,6 +20,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -519,6 +520,38 @@ func paneSide(idx int) string {
 	return "right"
 }
 
+// homeOnDrive returns the user's home folder when it's on the local drive
+// mounted at mount: of the local drives in entries, the one with the
+// longest mount point holding it (with / and /home both listed, the home
+// is on /home's). A home reached through a symlink (/home -> /var/home)
+// is on the drive it resolves to, and opened there.
+func homeOnDrive(mount string, entries []sourceMenuEntry) (string, bool) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "", false
+	}
+	h := filepath.Clean(home)
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		h = resolved
+	}
+	best := ""
+	for _, e := range entries {
+		if e.kind == "local" && within(h, e.local.MountPoint) && len(e.local.MountPoint) > len(best) {
+			best = e.local.MountPoint
+		}
+	}
+	if best == "" || filepath.Clean(best) != filepath.Clean(mount) {
+		return "", false
+	}
+	return h, true
+}
+
+// within tells whether path is dir or inside it.
+func within(path, dir string) bool {
+	rel, err := filepath.Rel(filepath.Clean(dir), path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
+}
+
 func (m *Model) selectSourceMenuItem() {
 	idx := m.dialog.ItemIdx
 	if idx < 0 || idx >= len(m.sourceMenuEntries) {
@@ -529,9 +562,13 @@ func (m *Model) selectSourceMenuItem() {
 	switch entry.kind {
 	case "local":
 		fs := vfs.NewLocalFS(entry.local.MountPoint, entry.local.MountPoint)
-		m.replaceActiveFS(fs, fs.Root())
+		path := fs.Root()
+		if home, ok := homeOnDrive(entry.local.MountPoint, m.sourceMenuEntries); ok {
+			path = home
+		}
+		m.replaceActiveFS(fs, path)
 		m.dialog = Dialog{}
-		m.setStatus("Opened %s", entry.local.MountPoint)
+		m.setStatus("Opened %s", path)
 	case "removable-mounted":
 		fs := vfs.NewLocalFS(entry.removable.MountPoint, entry.removable.MountPoint)
 		m.replaceActiveFS(fs, fs.Root())
