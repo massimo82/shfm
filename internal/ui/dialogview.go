@@ -26,6 +26,7 @@ import (
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/fileops"
+	"shfm/internal/version"
 )
 
 // helpEntry is one "key — action" row in the compact help dialog.
@@ -536,6 +537,21 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("press any key to close"))
 		return dialogBox(w).Render(b.String())
+
+	case DialogAbout:
+		b.WriteString(styleAccent.Render("Shell File Manager v"+version.Version) + "\n")
+		b.WriteString("\n")
+		// The box's width wraps the description onto several lines.
+		b.WriteString("shfm is a file manager for the terminal. It browses and " +
+			"manages files on local disks, removable drives, phones and " +
+			"cameras (MTP) and network shares (SMB, NFS, SFTP) from a single " +
+			"interface, driven by keyboard or mouse, in one pane or two side " +
+			"by side.\n\n")
+		b.WriteString("Website: https://massimo82.github.io/shfm/\n\n")
+		b.WriteString("Designed by Massimo Cavalleri in Milan, Italy :)")
+		b.WriteString("\n\n")
+		b.WriteString(styleDim.Render("press any key to close"))
+		return dialogBox(64).Render(b.String())
 
 	case DialogMessage:
 		b.WriteString(d.Message)

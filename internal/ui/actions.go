@@ -216,6 +216,10 @@ func (m *Model) openHelp() {
 	m.dialog = Dialog{Kind: DialogHelp, Title: "Help"}
 }
 
+func (m *Model) openAbout() {
+	m.dialog = Dialog{Kind: DialogAbout, Title: "About"}
+}
+
 // --- properties (permissions, owner, group) ---------------------------------------
 
 func (m *Model) openProperties() {

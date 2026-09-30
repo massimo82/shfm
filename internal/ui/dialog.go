@@ -48,6 +48,7 @@ const (
 	DialogConnectNFS
 	DialogConnectSFTP
 	DialogHelp
+	DialogAbout
 	DialogMessage
 	DialogSourceMenu
 	DialogChooseApp
@@ -314,7 +315,7 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 	}
 
-	if d.Kind == DialogMessage || d.Kind == DialogHelp {
+	if d.Kind == DialogMessage || d.Kind == DialogHelp || d.Kind == DialogAbout {
 		m.dialog = Dialog{}
 		return nil, true
 	}

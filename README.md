@@ -704,6 +704,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `T`, `R`, `e` | open/close trash, restore (`R` refreshes outside the trash), empty the trash (in the trash view) |
 | `Ctrl+B` | background tasks |
 | `Ctrl+Alt+H` / `?` | full list of shortcuts |
+| `Ctrl+Alt+A` | about shfm: name, version, description, website and author |
 | `q` / `Ctrl+Q` | quit |
 | `Ctrl+O`, `Ctrl+T`, `Ctrl+E` | only when shfm is another application's file dialog: choose, file type, options (see [shfm as a file dialog](#shfm-as-a-file-dialog)) |
 

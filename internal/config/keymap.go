@@ -36,6 +36,7 @@ type Action string
 const (
 	ActionQuit             Action = "quit"
 	ActionHelp             Action = "help"
+	ActionAbout            Action = "about"
 	ActionToggleLayout     Action = "toggle-layout"
 	ActionToggleHidden     Action = "toggle-hidden"
 	ActionTaskList         Action = "task-list"
@@ -95,6 +96,7 @@ type keybindingDef struct {
 var keybindingDefs = []keybindingDef{
 	{ActionQuit, []string{"q", "ctrl+q"}, "Quit the application"},
 	{ActionHelp, []string{"ctrl+alt+h", "?"}, "Show shortcuts help"},
+	{ActionAbout, []string{"ctrl+alt+a"}, "About shfm"},
 	{ActionToggleLayout, []string{"ctrl+l"}, "Single or dual pane"},
 	{ActionToggleHidden, []string{"ctrl+h", "."}, "Show or hide hidden files"},
 	{ActionTaskList, []string{"ctrl+b"}, "Background tasks"},

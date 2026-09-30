@@ -352,6 +352,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// --- help and layout ---
 	case config.ActionHelp:
 		m.openHelp()
+	case config.ActionAbout:
+		m.openAbout()
 	case config.ActionToggleLayout:
 		m.toggleLayout()
 	case config.ActionToggleHidden:

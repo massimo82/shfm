@@ -268,7 +268,7 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 		if row >= 0 && row < len(m.dialog.Items) {
 			m.dialog.ItemIdx = row
 		}
-	case DialogHelp:
+	case DialogHelp, DialogAbout:
 		m.dialog = Dialog{}
 	case DialogConnectSMB, DialogConnectNFS, DialogConnectSFTP, DialogProperties:
 		if row >= 0 && row < len(m.dialog.Inputs) {
