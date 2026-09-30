@@ -1,3 +1,11 @@
+shfm (0.3.0) unstable; urgency=medium
+
+  * Optional Nerd Font icons (Ctrl+Alt+N): folders, standard user folders,
+    links to folders and files, the trash, and files by type.
+  * Before turning them on, shfm checks that a Nerd Font is installed.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Wed, 30 Sep 2026 12:00:00 +0200
+
 shfm (0.2.16) unstable; urgency=medium
 
   * About dialog (Ctrl+Alt+A): version, description, website and author.
