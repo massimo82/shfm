@@ -1,3 +1,9 @@
+shfm (0.2.16) unstable; urgency=medium
+
+  * About dialog (Ctrl+Alt+A): version, description, website and author.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Wed, 30 Sep 2026 12:00:00 +0200
+
 shfm (0.2.15) unstable; urgency=medium
 
   * File associations dialog (o): the application opening each file type,

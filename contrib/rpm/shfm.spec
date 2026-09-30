@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.2.15
+Version:        0.2.16
 Release:        1%{?dist}
 Summary:        Terminal file manager with SMB/NFS/SFTP/MTP support and local semantic search
 License:        GPL-3.0-or-later AND MIT
@@ -139,6 +139,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Wed Sep 30 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.2.16-1
+- About dialog (Ctrl+Alt+A): version, description, website and author.
+
 * Tue Sep 29 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.2.15-1
 - File associations dialog (o): the application opening each file type,
   by extension, following the freedesktop.org specifications.
