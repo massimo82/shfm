@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.3.0
+Version:        0.3.1
 Release:        1%{?dist}
 Summary:        Terminal file manager with SMB/NFS/SFTP/MTP support and local semantic search
 License:        GPL-3.0-or-later AND MIT
@@ -139,6 +139,11 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Thu Oct 01 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.3.1-1
+- Without a graphical session, text and configuration files open in nano
+  (or vim) in shfm's own terminal.
+- Choosing the local drive holding the home folder opens the home folder.
+
 * Wed Sep 30 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.3.0-1
 - Optional Nerd Font icons (Ctrl+Alt+N): folders, standard user folders,
   links to folders and files, the trash, and files by type.
