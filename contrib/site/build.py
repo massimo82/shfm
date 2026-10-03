@@ -94,11 +94,25 @@ def relink(lines, name, where):
         kind = "tree" if (ROOT / target).is_dir() else "blob"
         return f"{text}({REPO}/{kind}/main/{target})"
 
-    out, fenced = [], False
+    # Each run of lines outside code blocks at once, so that a link whose
+    # text wraps onto the next line is found too.
+    out, block, fenced = [], [], False
+
+    def flush():
+        if block:
+            out.extend(LINK.sub(fix, "\n".join(block)).split("\n"))
+            block.clear()
+
     for line in lines:
         if FENCE.match(line):
+            flush()
             fenced = not fenced
-        out.append(line if fenced else LINK.sub(fix, line))
+            out.append(line)
+        elif fenced:
+            out.append(line)
+        else:
+            block.append(line)
+    flush()
     return out
 
 
