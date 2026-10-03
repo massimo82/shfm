@@ -523,7 +523,9 @@ func (m *Model) askDeleteMirror(pair config.MirrorPair) {
 		return
 	}
 	remove := "Delete the copy permanently"
-	if dst.FS.SupportsTrash() {
+	if st, ok := dst.FS.(vfs.ServiceTrash); ok {
+		remove = "Move the copy to the " + st.TrashName()
+	} else if dst.FS.SupportsTrash() {
 		remove = "Move the copy to the trash"
 	}
 	d.Kind = DialogMirrorDeleteCopy

@@ -23,6 +23,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"shfm/internal/cloud"
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/fileops"
@@ -348,19 +349,35 @@ func (m *Model) renderDialogBox() string {
 		return dialogBox(64).Render(b.String())
 
 	case DialogSourceMenu:
-		for i, it := range d.Items {
-			if i > 0 && sourceMenuGroup(m.sourceMenuEntries[i].kind) != sourceMenuGroup(m.sourceMenuEntries[i-1].kind) {
+		for _, l := range sourceMenuLayout(m.sourceMenuEntries) {
+			switch {
+			case l.title != "":
+				b.WriteString(styleSourceSection.Render(l.title) + "\n")
+			case l.entry < 0:
 				b.WriteString("\n")
+			default:
+				prefix := "  "
+				s := styleFile
+				if l.entry == d.ItemIdx {
+					prefix, s = "\u25b8 ", styleAccent
+				}
+				b.WriteString(prefix + s.Render(d.Items[l.entry]) + "\n")
 			}
-			prefix := "  "
-			s := styleFile
-			if i == d.ItemIdx {
-				prefix, s = "\u25b8 ", styleAccent
-			}
-			b.WriteString(prefix + s.Render(it) + "\n")
 		}
-		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click select · Esc cancel"))
+		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click select · x remove saved · Esc cancel"))
 		return dialogBox(72).Render(b.String())
+
+	case DialogConfirmRemoveSource:
+		b.WriteString(d.Message)
+		b.WriteString("\n\n")
+		b.WriteString(styleDim.Render("y / Enter remove · n / Esc cancel"))
+		return dialogBox(64).Render(b.String())
+
+	case DialogConnectCloud:
+		return m.renderCloudAccountForm(&b)
+
+	case DialogCloudAuth:
+		return m.renderCloudAuth(&b)
 
 	case DialogChooseApp:
 		return m.renderChooseApp(&b)
@@ -427,7 +444,11 @@ func (m *Model) renderDialogBox() string {
 			kind = "Symlink"
 		}
 		b.WriteString(fmt.Sprintf("Type:      %s\n", kind))
-		b.WriteString(fmt.Sprintf("Size:      %s\n", humanSize(e.Size)))
+		if e.SizeUnknown {
+			b.WriteString("Size:      unknown until read (exported on the fly)\n")
+		} else {
+			b.WriteString(fmt.Sprintf("Size:      %s\n", humanSize(e.Size)))
+		}
 		b.WriteString(fmt.Sprintf("Modified:  %s\n", e.ModTime.Format("2006-01-02 15:04:05")))
 		if len(d.PropsAttrs) > 0 {
 			b.WriteString(fmt.Sprintf("Attributes: %s\n", styleErr.Render(strings.Join(d.PropsAttrs, ", "))))
@@ -548,9 +569,13 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(styleAccent.Render("Shell File Manager v"+version.Version) + "\n")
 		b.WriteString("\n")
 		// The box's width wraps the description onto several lines.
+		where := "and network shares (SMB, NFS, SFTP)"
+		if cloud.Available {
+			where = "network shares (SMB, NFS, SFTP) and cloud storage (Google Drive, Dropbox, Microsoft OneDrive)"
+		}
 		b.WriteString("shfm is a file manager for the terminal. It browses and " +
 			"manages files on local disks, removable drives, phones and " +
-			"cameras (MTP) and network shares (SMB, NFS, SFTP) from a single " +
+			"cameras (MTP) " + where + " from a single " +
 			"interface, driven by keyboard or mouse, in one pane or two side " +
 			"by side.\n\n")
 		b.WriteString("Website: https://massimo82.github.io/shfm/\n\n")

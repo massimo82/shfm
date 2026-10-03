@@ -30,9 +30,10 @@ Suggests: shfm-models | shfm-models-4b,
           pandoc, libreoffice
 Description: terminal file manager with SMB/NFS/SFTP/MTP support
  Two-pane file manager for the terminal, talking directly to removable
- media, MTP devices and SMB, NFS and SFTP shares, with background tasks,
- archives, a clipboard shared with the desktop and local semantic search
- on file contents with Vulkan GPU acceleration.
+ media, MTP devices, SMB, NFS and SFTP shares and Google Drive, Dropbox
+ and Microsoft OneDrive accounts, with background tasks, archives, a
+ clipboard shared with the desktop and local semantic search on file
+ contents with Vulkan GPU acceleration.
  .
  Registers with the desktop as a file manager next to the others (opening
  folders, "Show in folder", the file chooser portal) and lists its network

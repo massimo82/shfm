@@ -26,6 +26,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/archive"
+	"shfm/internal/cloud"
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/opener"
@@ -75,6 +76,9 @@ const (
 	DialogPickOptions
 	DialogCreateArchive
 	DialogAssociations
+	DialogConnectCloud
+	DialogCloudAuth
+	DialogConfirmRemoveSource
 )
 
 // Dialog is the state of any currently active modal.
@@ -150,6 +154,22 @@ type Dialog struct {
 	Auth polkitagent.Prompt // DialogAuth: Inputs[0] is the answer
 
 	PickPaths []string // DialogPickOverwrite: the choice to confirm
+
+	// DialogConnectCloud (Inputs: client ID, client secret) and
+	// DialogCloudAuth (Inputs[0]: the pasted redirect address or code;
+	// ConnectRequestID: the authorization's connection attempt): see
+	// cloudsource.go. CloudSource is the account authorized again, if it's
+	// not a new one.
+	CloudProvider cloud.ProviderInfo
+	CloudSource   config.CloudSource
+	CloudAuth     *cloud.Authorization
+	CloudBrowser  bool // DialogCloudAuth: the authorization page was opened in the browser
+
+	// DialogConfirmRemoveSource: the saved remote source or cloud account
+	// to forget (a sourceMenuEntry of kind "remote" or "cloud"), and the
+	// pane single-pane mode hides that's open on it (-1 if none).
+	RemoveSource     sourceMenuEntry
+	RemoveHiddenPane int
 
 	// DialogCreateArchive: Inputs[0] is the archive's name, Items the
 	// formats' labels, parallel to ArchiveKinds and ArchiveNeeds (what to
@@ -236,6 +256,17 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if d.Kind == DialogCreateArchive {
 		if cmd, handled := m.updateCreateArchiveKey(msg); handled {
 			return cmd, false
+		}
+	}
+	if d.Kind == DialogCloudAuth {
+		if cmd, handled := m.updateCloudAuthKey(msg); handled {
+			return cmd, true
+		}
+	}
+	if d.Kind == DialogSourceMenu {
+		if k := msg.String(); k == "x" || k == "delete" {
+			m.askRemoveSavedSource()
+			return nil, true
 		}
 	}
 	if d.Kind == DialogMirrorList {
@@ -342,7 +373,7 @@ func hasListNav(k DialogKind) bool {
 func isYesNoDialog(k DialogKind) bool {
 	switch k {
 	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash,
-		DialogConfirmQuit, DialogFormatConfirm1, DialogMirrorConfirmDelete,
+		DialogConfirmQuit, DialogFormatConfirm1, DialogMirrorConfirmDelete, DialogConfirmRemoveSource,
 		DialogPickOverwrite, DialogConfirmIcons:
 		return true
 	default:

@@ -28,6 +28,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/applog"
+	"shfm/internal/cloud"
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/fileops"
@@ -120,6 +121,12 @@ func (m *Model) askDelete(useTrash bool) {
 		return
 	}
 	what := deleteTargetLabel(names)
+	if st, ok := p.FS.(vfs.ServiceTrash); ok {
+		// Whichever the key, the service keeps what's deleted.
+		m.dialog = Dialog{Kind: DialogConfirmTrash, Title: "Move to trash",
+			Message: fmt.Sprintf("Move %s to the %s?\nIt can be restored from there.", what, st.TrashName())}
+		return
+	}
 	if useTrash {
 		m.dialog = Dialog{Kind: DialogConfirmTrash, Title: "Move to trash",
 			Message: fmt.Sprintf("Move %s to the trash?", what)}
@@ -329,7 +336,7 @@ func (m *Model) openWithDefaultApp(e vfs.Entry) {
 	if lp, ok := p.FS.(vfs.LocalPath); ok {
 		rp, ok := lp.LocalPath(fullVfsPath)
 		if !ok {
-			m.setStatus("%s (%s)", e.Name, humanSize(e.Size))
+			m.setStatus("%s (%s)", e.Name, sizeLabel(e))
 			return
 		}
 		realPath = rp
@@ -383,21 +390,26 @@ func (m *Model) openTaskList() {
 	m.dialog = Dialog{Kind: DialogTaskList, Title: "Background tasks", Items: items}
 }
 
-// --- sources: local, removable, MTP, SMB, NFS, SFTP --------------------------------
+// --- sources: local (disks, removable, MTP), remote (SMB, NFS, SFTP), cloud ---------
 
 type sourceMenuEntry struct {
 	label     string
-	kind      string // "local" | "removable-mounted" | "removable-unmounted" | "format-request" | "mtp" | "remote" | "new-smb" | "new-nfs" | "new-sftp"
+	kind      string // "local" | "removable-mounted" | "removable-unmounted" | "format-request" | "mtp" | "remote" | "new-smb" | "new-nfs" | "new-sftp" | "cloud" | "new-cloud"
 	local     drives.LocalDrive
 	remote    config.RemoteSource
 	removable drives.RemovableDevice
 	mtpDevice mtp.DeviceInfo
+
+	// Cloud entries only (see cloudsource.go).
+	cloud    config.CloudSource
+	provider cloud.ProviderInfo
 }
 
 // sourceMenuGroup buckets a sourceMenuEntry.kind into a coarser category,
 // so the source picker can show a blank separator line between categories
 // (local disks / removable devices / MTP / remote sources / "new
-// connection" actions) instead of one dense, undifferentiated list.
+// connection" actions / cloud accounts / "new account" actions) instead
+// of one dense, undifferentiated list.
 func sourceMenuGroup(kind string) int {
 	switch kind {
 	case "local":
@@ -408,25 +420,67 @@ func sourceMenuGroup(kind string) int {
 		return 2
 	case "remote":
 		return 3
-	default: // "new-smb", "new-nfs", "new-sftp"
+	case "new-smb", "new-nfs", "new-sftp":
 		return 4
+	case "cloud":
+		return 5
+	default: // "new-cloud"
+		return 6
 	}
 }
 
-// sourceMenuRows maps each entry's index to the row it's rendered on once a
-// blank separator line is inserted between groups (see sourceMenuGroup) —
-// shared by renderDialogBox and handleDialogMouse so the two always agree
-// on the layout; a mouse click on a row not present in this mapping (i.e.
-// on a separator) simply hits nothing.
+// sourceMenuSection is the titled section of the source picker a group
+// belongs to: what's attached to this machine, what's reached over the
+// network, and cloud storage accounts.
+func sourceMenuSection(kind string) string {
+	switch g := sourceMenuGroup(kind); {
+	case g <= 2:
+		return "Local"
+	case g <= 4:
+		return "Remote"
+	default:
+		return "Cloud"
+	}
+}
+
+// sourceMenuLine is one rendered line of the source picker: a section's
+// title, a blank separator (title "" and entry -1), or an entry.
+type sourceMenuLine struct {
+	title string
+	entry int // index in the entries, -1 for a title or a separator
+}
+
+// sourceMenuLayout lays the entries out: each section under its title
+// (a blank line before every title but the first), with a blank line
+// between the groups within a section (see sourceMenuGroup). Shared by
+// renderDialogBox and handleDialogMouse so the two always agree on the
+// layout.
+func sourceMenuLayout(entries []sourceMenuEntry) []sourceMenuLine {
+	var lines []sourceMenuLine
+	for i, e := range entries {
+		switch {
+		case i == 0 || sourceMenuSection(e.kind) != sourceMenuSection(entries[i-1].kind):
+			if i > 0 {
+				lines = append(lines, sourceMenuLine{entry: -1})
+			}
+			lines = append(lines, sourceMenuLine{title: sourceMenuSection(e.kind), entry: -1})
+		case sourceMenuGroup(e.kind) != sourceMenuGroup(entries[i-1].kind):
+			lines = append(lines, sourceMenuLine{entry: -1})
+		}
+		lines = append(lines, sourceMenuLine{entry: i})
+	}
+	return lines
+}
+
+// sourceMenuRows maps each entry's index to the row it's rendered on (see
+// sourceMenuLayout); a mouse click on a row not present in this mapping
+// (a title or a separator) simply hits nothing.
 func sourceMenuRows(entries []sourceMenuEntry) []int {
 	rows := make([]int, len(entries))
-	row := 0
-	for i, e := range entries {
-		if i > 0 && sourceMenuGroup(e.kind) != sourceMenuGroup(entries[i-1].kind) {
-			row++
+	for row, l := range sourceMenuLayout(entries) {
+		if l.entry >= 0 {
+			rows[l.entry] = row
 		}
-		rows[i] = row
-		row++
 	}
 	return rows
 }
@@ -504,6 +558,7 @@ func (m *Model) openSourceMenu() {
 	entries = append(entries, sourceMenuEntry{label: iconSourceAdd + " New SMB connection\u2026", kind: "new-smb"})
 	entries = append(entries, sourceMenuEntry{label: iconSourceAdd + " New NFS mount\u2026", kind: "new-nfs"})
 	entries = append(entries, sourceMenuEntry{label: iconSourceAdd + " New SFTP connection\u2026", kind: "new-sftp"})
+	entries = append(entries, m.cloudMenuEntries()...)
 
 	m.sourceMenuEntries = entries
 	items := make([]string, len(entries))
@@ -597,6 +652,10 @@ func (m *Model) selectSourceMenuItem() {
 		m.dialog = newConnectDialog(DialogConnectNFS)
 	case "new-sftp":
 		m.dialog = newConnectDialog(DialogConnectSFTP)
+	case "cloud":
+		m.connectSavedCloud(entry.cloud)
+	case "new-cloud":
+		m.openCloudAccountForm(entry.provider, config.CloudSource{}, "")
 	}
 }
 
@@ -779,6 +838,86 @@ func (m *Model) doConnectSFTP() {
 	})
 }
 
+// askRemoveSavedSource asks to forget the saved remote source or cloud
+// account highlighted in the source picker.
+func (m *Model) askRemoveSavedSource() {
+	idx := m.dialog.ItemIdx
+	if idx < 0 || idx >= len(m.sourceMenuEntries) {
+		return
+	}
+	e := m.sourceMenuEntries[idx]
+	var label string
+	switch e.kind {
+	case "remote":
+		label, _ = savedSourceDialer(e.remote)
+	case "cloud":
+		label, _ = cloudSourceDialer(e.cloud)
+	}
+	// Open in a pane on screen, it must be switched away from first; in
+	// the pane single-pane mode hides, which counts as closed, it's
+	// switched to the home folder along with the removal.
+	hidden := -1
+	for i, p := range m.panes {
+		if label == "" || p.FS.Kind() == vfs.KindLocal || p.FS.Label() != label {
+			continue
+		}
+		if i == m.active || m.dualPane {
+			m.setError("%s is open in the %s pane: switch that pane to another source, or close it (%s, single pane)",
+				label, paneSide(i), m.firstKey(config.ActionToggleLayout))
+			return
+		}
+		hidden = i
+	}
+	var msg string
+	switch e.kind {
+	case "remote":
+		msg = fmt.Sprintf("Remove the saved source %s?\n\nIts saved password is deleted too.", e.remote.Name)
+	case "cloud":
+		msg = m.cloudRemovalMessage(e.cloud)
+	default:
+		m.setStatus("Only saved sources and accounts can be removed")
+		return
+	}
+	if hidden >= 0 {
+		msg += fmt.Sprintf("\n\nThe hidden %s pane, open on it, goes back to your home folder.", paneSide(hidden))
+	}
+	m.dialog = Dialog{Kind: DialogConfirmRemoveSource, Title: "Remove saved source", Message: msg,
+		RemoveSource: e, RemoveHiddenPane: hidden}
+}
+
+// removeSavedSource forgets what askRemoveSavedSource asked about, then
+// goes back to the source picker.
+func (m *Model) removeSavedSource(e sourceMenuEntry, hiddenPane int) {
+	if hiddenPane >= 0 {
+		home := homeOrRoot()
+		m.replaceFS(hiddenPane, vfs.NewLocalFS("Local", home), home)
+	}
+	switch e.kind {
+	case "remote":
+		m.removeRemoteSource(e.remote)
+	case "cloud":
+		m.removeCloudSource(e.cloud)
+	}
+	status, isErr := m.status, m.statusErr
+	m.openSourceMenu()
+	m.status, m.statusErr = status, isErr
+}
+
+// removeRemoteSource deletes a saved remote source, password included.
+func (m *Model) removeRemoteSource(r config.RemoteSource) {
+	for i, existing := range m.cfg.RemoteSources {
+		if existing == r {
+			m.cfg.RemoteSources = append(m.cfg.RemoteSources[:i], m.cfg.RemoteSources[i+1:]...)
+			if err := m.cfg.Save(); err != nil {
+				m.setError("Could not save the configuration: %v", err)
+				return
+			}
+			m.setStatus("Removed %s", r.Name)
+			return
+		}
+	}
+}
+
 func (m *Model) saveRemoteSource(r config.RemoteSource) {
 	for _, existing := range m.cfg.RemoteSources {
 		if existing.Kind == r.Kind && existing.Host == r.Host && existing.Share == r.Share &&
@@ -914,6 +1053,12 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 	case DialogConnectSFTP:
 		m.doConnectSFTP()
 
+	case DialogConnectCloud:
+		m.startCloudAuthorization()
+
+	case DialogCloudAuth:
+		m.submitCloudAuth()
+
 	case DialogSourceMenu:
 		m.selectSourceMenuItem()
 
@@ -999,6 +1144,9 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 
 	case DialogMirrorConfirmDelete:
 		m.deleteMirror(d.MirrorPairID, false)
+
+	case DialogConfirmRemoveSource:
+		m.removeSavedSource(d.RemoveSource, d.RemoveHiddenPane)
 
 	case DialogMirrorDeleteCopy:
 		m.deleteMirror(d.MirrorPairID, d.ItemIdx == 1)

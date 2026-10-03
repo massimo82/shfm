@@ -196,6 +196,11 @@ func typeOf(e vfs.Entry) uint32 {
 type node struct {
 	fs.Inode
 	m *mountFS
+
+	// sizeUnknown is the entry's vfs.Entry.SizeUnknown as last seen: such
+	// a file is opened in direct I/O mode, so the kernel reads it up to
+	// EOF instead of stopping at its reported (zero) size.
+	sizeUnknown atomic.Bool
 }
 
 var (
@@ -242,6 +247,7 @@ func (n *node) stat(p string) (vfs.Entry, syscall.Errno) {
 func (n *node) newChild(ctx context.Context, e vfs.Entry, out *fuse.EntryOut) (*node, *fs.Inode) {
 	child := &node{m: n.m}
 	n.m.fillAttr(e, &out.Attr)
+	child.sizeUnknown.Store(e.SizeUnknown)
 	return child, n.NewInode(ctx, child, fs.StableAttr{Mode: typeOf(e)})
 }
 
@@ -259,6 +265,7 @@ func (n *node) Getattr(ctx context.Context, fh fs.FileHandle, out *fuse.AttrOut)
 	if errno != 0 {
 		return errno
 	}
+	n.sizeUnknown.Store(e.SizeUnknown)
 	n.m.fillAttr(e, &out.Attr)
 	return 0
 }
@@ -368,6 +375,9 @@ func (n *node) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, s
 	h, errno := n.openHandle(n.path(), openFlags(flags), 0)
 	if errno != 0 {
 		return nil, 0, errno
+	}
+	if n.sizeUnknown.Load() {
+		return h, fuse.FOPEN_DIRECT_IO, 0
 	}
 	return h, 0, 0
 }

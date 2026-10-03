@@ -72,6 +72,9 @@ var (
 
 	styleDialogBox = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colAccent).Padding(1, 2)
 
+	// styleSourceSection titles the source picker's sections.
+	styleSourceSection = lipgloss.NewStyle().Foreground(colDim).Bold(true).Underline(true)
+
 	styleHelpKey  = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
 	styleHelpDesc = lipgloss.NewStyle().Foreground(colFile)
 
@@ -100,6 +103,9 @@ const (
 	iconSourceNFS       = "[NFS]"
 	iconSourceSFTP      = "[SFTP]"
 	iconSourceMTP       = "[MTP]"
+	iconSourceGDrive    = "[GDR]"
+	iconSourceDropbox   = "[DBX]"
+	iconSourceOneDrive  = "[ODR]"
 	iconSourceAdd       = "[ + ]"
 	iconSourceFormat    = "[FMT]"
 )

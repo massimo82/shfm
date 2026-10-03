@@ -16,6 +16,7 @@ require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.10
 	charm.land/lipgloss/v2 v2.0.6
+	github.com/dropbox/dropbox-sdk-go-unofficial/v6 v6.4.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gokrazy/rsync v0.3.8
 	github.com/hanwen/go-fuse/v2 v2.11.0
@@ -29,6 +30,7 @@ require (
 	github.com/tmc/langchaingo v0.1.14
 	github.com/vmware/go-nfs-client v0.0.0-20190605212624-d43b92724c1b
 	golang.org/x/crypto v0.57.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sys v0.48.0
 )
 

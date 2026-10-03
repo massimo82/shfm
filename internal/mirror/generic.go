@@ -216,9 +216,10 @@ func mirrorFile(src, dst Side, rel string, s vfs.Entry, old, next manifest, res 
 
 // needsCopy reports whether the destination file d is stale: its size
 // differs from the source's, or either side changed since the manifest
-// recorded them.
+// recorded them. A source file of unknown size (a Google Docs document,
+// exported on the fly) is compared by the manifest alone.
 func needsCopy(s, d vfs.Entry, old manifest, rel string) bool {
-	if d.IsDir || s.Size != d.Size {
+	if d.IsDir || (s.Size != d.Size && !s.SizeUnknown) {
 		return true
 	}
 	st, ok := old[rel]

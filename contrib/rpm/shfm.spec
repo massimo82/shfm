@@ -68,9 +68,10 @@ Suggests:       libreoffice
 
 %description
 Two-pane file manager for the terminal, talking directly to removable media,
-MTP devices and SMB, NFS and SFTP shares, with background tasks, archives, a
-clipboard shared with the desktop and local semantic search on file contents
-with Vulkan GPU acceleration.
+MTP devices, SMB, NFS and SFTP shares and Google Drive, Dropbox and Microsoft
+OneDrive accounts, with background tasks, archives, a clipboard shared with the
+desktop and local semantic search on file contents with Vulkan GPU
+acceleration.
 
 Registers with the desktop as a file manager next to the others (opening
 folders, "Show in folder", the file chooser portal) and lists its network
@@ -117,7 +118,7 @@ go work init . ./third_party/llama-go
 )
 
 export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_CXXFLAGS="$CXXFLAGS" CGO_LDFLAGS="$LDFLAGS"
-go build -buildmode=pie -trimpath -ldflags=-linkmode=external -tags 'semantic vulkan' -o shfm .
+go build -buildmode=pie -trimpath -ldflags=-linkmode=external -tags 'semantic vulkan cloud' -o shfm .
 
 make -C contrib/gio-module
 make -C contrib/desktop-integration SHFM=%{_bindir}/shfm

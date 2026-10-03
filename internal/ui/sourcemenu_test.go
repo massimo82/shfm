@@ -20,6 +20,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"shfm/internal/drives"
@@ -42,15 +43,17 @@ func TestDriveDisplayName(t *testing.T) {
 
 func TestSourceMenuRowsInsertsSeparatorsBetweenGroups(t *testing.T) {
 	entries := []sourceMenuEntry{
-		{kind: "local"},             // row 0
-		{kind: "local"},             // row 1
-		{kind: "removable-mounted"}, // row 3 (blank at 2)
-		{kind: "format-request"},    // row 4 (same group as removable-mounted)
-		{kind: "mtp"},               // row 6 (blank at 5)
-		{kind: "new-smb"},           // row 8 (blank at 7)
-		{kind: "new-nfs"},           // row 9 (same group as new-smb)
+		{kind: "local"},             // row 1 (title "Local" at 0)
+		{kind: "local"},             // row 2
+		{kind: "removable-mounted"}, // row 4 (blank at 3)
+		{kind: "format-request"},    // row 5 (same group as removable-mounted)
+		{kind: "mtp"},               // row 7 (blank at 6)
+		{kind: "new-smb"},           // row 10 (blank at 8, title "Remote" at 9)
+		{kind: "new-nfs"},           // row 11 (same group as new-smb)
+		{kind: "cloud"},             // row 14 (blank at 12, title "Cloud" at 13)
+		{kind: "new-cloud"},         // row 16 (blank at 15)
 	}
-	want := []int{0, 1, 3, 4, 6, 8, 9}
+	want := []int{1, 2, 4, 5, 7, 10, 11, 14, 16}
 	got := sourceMenuRows(entries)
 	if len(got) != len(want) {
 		t.Fatalf("got %v, want %v", got, want)
@@ -60,12 +63,21 @@ func TestSourceMenuRowsInsertsSeparatorsBetweenGroups(t *testing.T) {
 			t.Errorf("row[%d] = %d, want %d (full: %v)", i, got[i], want[i], got)
 		}
 	}
+	var titles []string
+	for _, l := range sourceMenuLayout(entries) {
+		if l.title != "" {
+			titles = append(titles, l.title)
+		}
+	}
+	if strings.Join(titles, ",") != "Local,Remote,Cloud" {
+		t.Errorf("section titles = %v", titles)
+	}
 }
 
 func TestSourceMenuRowsNoSeparatorForSingleGroup(t *testing.T) {
 	entries := []sourceMenuEntry{{kind: "local"}, {kind: "local"}, {kind: "local"}}
 	got := sourceMenuRows(entries)
-	want := []int{0, 1, 2}
+	want := []int{1, 2, 3} // under the "Local" title
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("row[%d] = %d, want %d", i, got[i], want[i])

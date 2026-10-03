@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - { arch: amd64, runner: ubuntu-latest }
+          - { arch: amd64, runner: ubuntu-24.04 }
           - { arch: arm64, runner: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v5
@@ -33,10 +33,14 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Everything the Debian package builds with (see contrib/debian/rules):
+      # libusb for MTP, Vulkan and a C++ toolchain for llama.cpp (semantic
+      # search), GLib for the GIO module.
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev
+          sudo apt-get install -y --no-install-recommends build-essential g++ cmake curl pkgconf \
+            libusb-1.0-0-dev libglib2.0-dev libvulkan-dev glslc spirv-headers
 
       # Version is a const shown in the UI, so it can't be injected at link
       # time: the tag has to agree with the source instead, the packages'
@@ -53,15 +57,45 @@ jobs:
             fi
           done
 
-      # Base build (no semantic search), built natively on each architecture
-      # because of cgo/libusb. It links libusb and glibc dynamically, so it
-      # runs on distributions at least as recent as this runner's.
+      # shfm with every feature, as the packages: semantic search with
+      # Vulkan GPU acceleration and cloud storage, built natively on each
+      # architecture (Ubuntu 24.04 runners). It links glibc, libstdc++,
+      # libusb and the Vulkan loader dynamically, so it runs on
+      # distributions at least as recent, with those installed. llama.cpp
+      # is built as in contrib/debian/rules (keep them in step): for a
+      # generic CPU of the architecture, on amd64 with AVX2/FMA/F16C.
       - name: Build
         run: |
+          contrib/fetch-llama-go.sh
+          cmake_args=-DGGML_NATIVE=OFF
+          if [ "${{ matrix.arch }}" = amd64 ]; then
+            cmake_args="$cmake_args -DGGML_SSE42=ON -DGGML_AVX=ON -DGGML_AVX2=ON -DGGML_BMI2=ON -DGGML_FMA=ON -DGGML_F16C=ON"
+          fi
+          (cd third_party/llama-go && CMAKE_ARGS="$cmake_args" UNAME_M=generic BUILD_TYPE=vulkan \
+            CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) make libbinding.a)
+          go work init . ./third_party/llama-go
+          go build -trimpath -tags 'semantic vulkan cloud' -ldflags "-s -w" -o shfm .
+          make -C contrib/gio-module
+
+      # The archive holds what the packages install, laid out as in the
+      # source tree so that README "Complete installation" applies as is:
+      # the binary, the GIO module (built) and the desktop integration
+      # files (made into services at install time, for where the binary
+      # ends up). The models for semantic search are the shfm-models
+      # packages' (or README "Optional: semantic (content) search").
+      - name: Package
+        run: |
           name="shfm-$GITHUB_REF_NAME-linux-${{ matrix.arch }}"
-          mkdir -p "dist/$name"
-          go build -trimpath -ldflags "-s -w" -o "dist/$name/shfm" .
-          cp LICENSE README.md "dist/$name/"
+          d="dist/$name"
+          mkdir -p "$d/contrib/gio-module" "$d/contrib/desktop-integration"
+          ./shfm --help >/dev/null
+          cp shfm LICENSE README.md shfm.desktop "$d/"
+          cp contrib/gio-module/Makefile contrib/gio-module/shfm-volume-monitor.c "$d/contrib/gio-module/"
+          cp -p contrib/gio-module/libshfm-volume-monitor.so "$d/contrib/gio-module/"
+          cp contrib/desktop-integration/Makefile contrib/desktop-integration/*.service.in \
+            contrib/desktop-integration/shfm.portal "$d/contrib/desktop-integration/"
+          # Built after its source: make won't try to build it again
+          touch "$d/contrib/gio-module/libshfm-volume-monitor.so"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
 

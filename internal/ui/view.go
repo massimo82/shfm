@@ -358,6 +358,10 @@ func (m *Model) renderEntryLines(paneIdx int, p *Pane, w, h int) []string {
 			countStr = "?"
 		case e.IsDir:
 			countStr = humanCount(e.ItemCount)
+		case e.SizeUnknown:
+			// Only known once read (a Google Docs document, exported on
+			// the fly): not "0B".
+			sizeStr = ""
 		}
 		nameW := w - (5 + lipgloss.Width(icon) + 8 + 7)
 		if nameW < 1 {

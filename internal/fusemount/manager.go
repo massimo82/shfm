@@ -275,15 +275,28 @@ func (mg *Manager) mountDirLocked(src vfs.FileSystem) (string, error) {
 	}
 }
 
+// cloudServices names the cloud storage services by their sources' label
+// scheme (see internal/cloud).
+var cloudServices = map[string]string{
+	"gdrive":   "Google Drive",
+	"dropbox":  "Dropbox",
+	"onedrive": "Microsoft OneDrive",
+}
+
 // dirName turns a source label into the name of its mount point, which is
 // also the name other applications' file dialogs show for the mount (KDE's
 // shows nothing else): "smb://nas/video" → "video on nas",
 // "nfs://10.0.0.2/srv/nfs/" → "nfs on 10.0.0.2", "sftp://max@host" →
-// "max@host", "mtp://Pixel 7" → "Pixel 7".
+// "max@host", "mtp://Pixel 7" → "Pixel 7", "gdrive://me@example.com" →
+// "Google Drive of me@example.com".
 func dirName(label string) string {
 	rest := label
 	if i := strings.Index(rest, "://"); i >= 0 {
-		rest = rest[i+len("://"):]
+		if service, ok := cloudServices[rest[:i]]; ok {
+			rest = service + " of " + rest[i+len("://"):]
+		} else {
+			rest = rest[i+len("://"):]
+		}
 	}
 	host, path, _ := strings.Cut(strings.Trim(rest, "/"), "/")
 	name := host

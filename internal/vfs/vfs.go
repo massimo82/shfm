@@ -52,6 +52,12 @@ type Entry struct {
 	// when unknown or not applicable for this backend).
 	Owner string
 	Group string
+
+	// SizeUnknown marks a file whose content length the backend can't tell
+	// before reading it all (a Google Docs document, exported on the fly to
+	// an OpenDocument file): Size is then meaningless (zero), and a reader
+	// must go on until EOF rather than stop after Size bytes.
+	SizeUnknown bool
 }
 
 // Kind identifies the backend type.
@@ -63,6 +69,7 @@ const (
 	KindNFS
 	KindMTP
 	KindSFTP
+	KindCloud
 )
 
 func (k Kind) String() string {
@@ -77,14 +84,18 @@ func (k Kind) String() string {
 		return "mtp"
 	case KindSFTP:
 		return "sftp"
+	case KindCloud:
+		return "cloud"
 	default:
 		return "?"
 	}
 }
 
 // FileSystem is the interface implemented by every backend (local, SMB,
-// NFS, MTP). Paths passed to its methods are always "absolute" paths within
-// the backend itself, separated by '/', rooted at "/".
+// NFS, MTP, SFTP and, built with the "cloud" tag, the cloud storage
+// services of internal/cloud). Paths passed to its methods are always
+// "absolute" paths within the backend itself, separated by '/', rooted at
+// "/".
 type FileSystem interface {
 	// Kind returns the backend type.
 	Kind() Kind
@@ -259,6 +270,14 @@ type SpaceReporter interface {
 // the FUSE mount needs for touch(1), cp -p or rsync -t.
 type TimesSetter interface {
 	Chtimes(path string, atime, mtime time.Time) error
+}
+
+// ServiceTrash is an optional interface a backend implements when Remove
+// doesn't delete for good, but moves into the service's own trash, where
+// the item can be restored from (the cloud storage services). TrashName
+// names that trash for the UI, e.g. "Google Drive trash".
+type ServiceTrash interface {
+	TrashName() string
 }
 
 // ErrNotSupported indicates the operation isn't natively supported by the backend.

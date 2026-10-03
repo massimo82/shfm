@@ -18,10 +18,12 @@ $(MODULE): shfm-volume-monitor.c
 # (a package manager does this itself, e.g. pacman's gio-querymodules hook;
 # with DESTDIR set, leave it to it).
 install: $(MODULE)
+	@test -n "$(GIO_MODULE_DIR)" || { echo "GIO's module folder is unknown: install GLib's development files (pkg-config gio-2.0), or set GIO_MODULE_DIR (gio-querymodules --help shows it, e.g. /usr/lib/x86_64-linux-gnu/gio/modules)" >&2; exit 1; }
 	install -Dm755 $(MODULE) $(DESTDIR)$(GIO_MODULE_DIR)/$(MODULE)
 	if [ -z "$(DESTDIR)" ]; then gio-querymodules $(GIO_MODULE_DIR); fi
 
 uninstall:
+	@test -n "$(GIO_MODULE_DIR)" || { echo "GIO's module folder is unknown: set GIO_MODULE_DIR" >&2; exit 1; }
 	rm -f $(DESTDIR)$(GIO_MODULE_DIR)/$(MODULE)
 	if [ -z "$(DESTDIR)" ]; then gio-querymodules $(GIO_MODULE_DIR); fi
 

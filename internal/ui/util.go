@@ -17,7 +17,20 @@
 
 package ui
 
-import "fmt"
+import (
+	"fmt"
+
+	"shfm/internal/vfs"
+)
+
+// sizeLabel is an entry's size, for messages: humanSize, or "size
+// unknown" for an entry whose size is only known once read.
+func sizeLabel(e vfs.Entry) string {
+	if e.SizeUnknown {
+		return "size unknown"
+	}
+	return humanSize(e.Size)
+}
 
 func humanSize(n int64) string {
 	units := []string{"B", "K", "M", "G", "T", "P"}

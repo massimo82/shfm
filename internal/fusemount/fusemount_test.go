@@ -416,14 +416,16 @@ func TestCleanupStaleRemovesDeadProcessFolders(t *testing.T) {
 
 func TestDirName(t *testing.T) {
 	for label, want := range map[string]string{
-		"smb://nas/video":         "video on nas",
-		"sftp://max@host":         "max@host",
-		"nfs://10.0.0.2/srv/nfs/": "nfs on 10.0.0.2",
-		"mtp://Pixel 7":           "Pixel 7",
-		"smb://nas/.hidden":       "hidden on nas",
-		"mtp://..":                "source",
-		"mtp://a\nb":              "a-b",
-		"://":                     "source",
+		"smb://nas/video":           "video on nas",
+		"sftp://max@host":           "max@host",
+		"nfs://10.0.0.2/srv/nfs/":   "nfs on 10.0.0.2",
+		"mtp://Pixel 7":             "Pixel 7",
+		"smb://nas/.hidden":         "hidden on nas",
+		"mtp://..":                  "source",
+		"mtp://a\nb":                "a-b",
+		"://":                       "source",
+		"gdrive://me@example.com":   "Google Drive of me@example.com",
+		"onedrive://me@outlook.com": "Microsoft OneDrive of me@outlook.com",
 	} {
 		if got := dirName(label); got != want {
 			t.Errorf("dirName(%q) = %q, want %q", label, got, want)

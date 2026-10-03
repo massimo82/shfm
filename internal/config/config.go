@@ -52,6 +52,30 @@ func (r RemoteSource) DecryptedPassword() (string, error) {
 	return secret.Decrypt(r.EncryptedPassword)
 }
 
+// CloudSource is a cloud storage account (Google Drive, Dropbox, Microsoft
+// OneDrive — see internal/cloud) saved by the user once authorized. Kept
+// apart from RemoteSource: an account has no host or password, only an
+// OAuth authorization, whose token is stored by internal/cloud itself
+// (encrypted, in a file of its own) since the service may replace it at
+// any time.
+type CloudSource struct {
+	Name     string `json:"name"`
+	Provider string `json:"provider"` // "gdrive" | "dropbox" | "onedrive"
+	User     string `json:"user"`     // the account's e-mail address, naming it in the source's label
+	Account  string `json:"account"`  // identifies the account's token in internal/cloud's token store
+
+	// ClientID and EncryptedClientSecret are the OAuth client the account
+	// was authorized with, when the user registered their own; empty for
+	// the client built into shfm, so that a newer build's takes over.
+	ClientID              string `json:"client_id,omitempty"`
+	EncryptedClientSecret string `json:"encrypted_client_secret,omitempty"`
+}
+
+// DecryptedClientSecret decrypts EncryptedClientSecret, if present.
+func (c CloudSource) DecryptedClientSecret() (string, error) {
+	return secret.Decrypt(c.EncryptedClientSecret)
+}
+
 // MirrorEndpoint identifies one end of a mirror independently of where,
 // or whether, its source is mounted/connected right now.
 type MirrorEndpoint struct {
@@ -83,6 +107,7 @@ type Config struct {
 	DualPane      bool           `json:"dual_pane"`
 	ShowHidden    bool           `json:"show_hidden"`
 	RemoteSources []RemoteSource `json:"remote_sources"`
+	CloudSources  []CloudSource  `json:"cloud_sources,omitempty"`
 	MirrorPairs   []MirrorPair   `json:"mirror_pairs,omitempty"`
 
 	// LogLevel controls the verbosity of shfm's own diagnostic log (see

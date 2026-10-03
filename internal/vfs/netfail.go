@@ -43,6 +43,13 @@ func IsConnectionFailure(err error) bool {
 	if errors.Is(err, sftp.ErrSSHFxConnectionLost) {
 		return true
 	}
+	// A backend error that knows which kind it is (the cloud backends'
+	// API errors: an HTTP answer from the service is never a lost
+	// connection, even when it's a failure).
+	var classified interface{ ConnectionFailure() bool }
+	if errors.As(err, &classified) {
+		return classified.ConnectionFailure()
+	}
 
 	var smbStatus *smb.NTStatusError
 	if errors.As(err, &smbStatus) {

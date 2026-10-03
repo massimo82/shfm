@@ -25,7 +25,8 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
 - Copy, move, delete, rename, new file and new folder, even between
   different sources.
 - Sources: local disks, removable USB/SD drives (mounted automatically),
-  MTP devices, SMB, NFS and SFTP.
+  MTP devices, SMB, NFS and SFTP — and, optionally, cloud storage:
+  Google Drive, Dropbox and Microsoft OneDrive.
 - Background tasks with progress, and desktop notifications when they
   finish.
 - Clipboard shared with the desktop (Wayland), both ways.
@@ -256,8 +257,12 @@ to toggle between single- and dual-pane layout.
   created from the same menu; SMB and SFTP passwords, if entered, are
   saved **encrypted at rest** (AES-256-GCM, key derived from the
   machine/user — see `internal/secret`) instead of being discarded or
-  stored in plain text. SFTP host keys are verified/recorded via
-  `~/.ssh/known_hosts` (trust-on-first-use, like OpenSSH). Connecting to
+  stored in plain text. A saved source is removed, its password with it,
+  with `x` (or `Delete`) on it in the menu — once no pane on screen is
+  open on it (the pane single-pane mode hides counts as closed: it goes
+  back to the home folder). SFTP host keys are
+  verified/recorded via `~/.ssh/known_hosts` (trust-on-first-use, like
+  OpenSSH). Connecting to
   MTP/SMB/NFS/SFTP always happens **in the background**: a "Connecting…"
   placeholder appears immediately and the rest of shfm stays fully
   responsive no matter how long the USB/network I/O takes (a slow or
@@ -592,6 +597,109 @@ connection. Qt applications that don't use KDE's file dialogs don't list
 the source, as they don't list gvfs's or KDE's either. MTP devices aren't
 listed this way: desktops list phones themselves.
 
+## Cloud storage
+
+Built with the `cloud` tag (see [Building](#building)), shfm also opens
+**Google Drive**, **Dropbox** and **Microsoft OneDrive** accounts as
+sources: browsed, copied to and from, mirrored and opened in other
+applications like any other source. They're listed in their own **Cloud**
+section of the source picker (`Ctrl+S`), below the local and remote ones;
+without the tag, there's no trace of them.
+
+To add an account, choose **New Google Drive account…** (or Dropbox, or
+Microsoft OneDrive): shfm asks for the OAuth client to authorize it with
+(see below), then opens the service's authorization page in the browser.
+Once you allow shfm access there, the browser comes back to shfm, which
+opens the account in the pane and saves it in the Cloud section. Over SSH,
+or without a graphical session, shfm shows the page's address instead:
+open it in a browser anywhere, and paste back the address the browser
+ends up on (it fails to load, since it points at the machine shfm runs
+on: that's expected) — or, for Dropbox, the code it shows.
+
+shfm never sees your password: it gets an OAuth token, kept encrypted in
+`~/.config/shfm/cloud-tokens.json` (see `internal/secret` in
+[Notes](#notes)). When an account's authorization is revoked or expires,
+choosing it opens the form to authorize it again. To remove an account,
+press `x` (or `Delete`) on it in the source picker, once no pane on screen
+is open on it: shfm deletes its token and forgets it. The authorization itself stays valid with the service
+until you revoke it there, in the account's security settings (Google:
+"Third-party apps & services"; Dropbox: "Connected apps"; Microsoft:
+"Apps and services").
+
+### Registering shfm with the services
+
+Each service wants applications to identify themselves with an OAuth
+client. A build can carry its own (see [Building](#building)); otherwise
+register one yourself, free, and enter it when adding the account:
+
+- **Google Drive**: in the [Google Cloud console](https://console.cloud.google.com/),
+  create a project, enable the **Google Drive API**, then set up the
+  **OAuth consent screen** (External, with the scope
+  `https://www.googleapis.com/auth/drive`) and **publish it to
+  production** — while it's in testing, Google expires its authorizations
+  after 7 days. A personal client needs no verification by Google: its
+  authorization page just warns that the application isn't verified.
+  Then, under **Credentials**, create an **OAuth client ID** of type
+  **Desktop app**: enter its client ID and its client secret (Google
+  requires both).
+- **Dropbox**: in the [App Console](https://www.dropbox.com/developers/apps),
+  create an app with **Scoped access** and **Full Dropbox**; under
+  **Permissions** tick `files.metadata.read`, `files.metadata.write`,
+  `files.content.read`, `files.content.write` and `account_info.read`;
+  under **OAuth 2 → Redirect URIs** add `http://localhost:53682/` (the
+  same as rclone's, so an app registered for rclone works too). Enter its
+  **App key** as the client ID; the secret isn't needed.
+- **Microsoft OneDrive**: in the [Microsoft Entra admin center](https://entra.microsoft.com/),
+  under **App registrations**, register an application for **Accounts in
+  any organizational directory and personal Microsoft accounts**, with a
+  **Mobile and desktop applications** redirect URI `http://localhost`, and
+  **Allow public client flows** turned on; under **API permissions** add
+  Microsoft Graph's delegated `Files.ReadWrite.All`, `User.Read` and
+  `offline_access`. Enter its **Application (client) ID**; no secret.
+
+### What to expect
+
+- **Google Drive** isn't a filesystem: a folder can hold several files
+  with the same name (the most recently modified one is the one shfm
+  opens), and a name may contain `/`, shown as the look-alike `／`.
+  Google's own documents are listed with the extension of the format
+  they're read as — Docs `.odt`, Sheets `.ods`, Slides `.odp`, Drawings
+  `.svg`, Apps Script `.json` — read-only, with no size until read; Forms,
+  Sites, My Maps and the other Google types can't be exported at all,
+  and aren't listed. Shortcuts are shown as links to their target.
+  The account opens in **My Drive**; its root, one level up, also holds
+  **Shared drives** (a folder for each shared drive the account is a
+  member of) and **Shared with me** (what others shared with it).
+- **Microsoft OneDrive**: the account opens in **My files**. A shared
+  folder added to My files from OneDrive's website ("Add shortcut to My
+  files") is a link there, which opens the shared folder — on any
+  account. Work and school accounts also have **Shared**, one level up:
+  what others shared from their OneDrive, found through Microsoft Search.
+  Personal accounts don't: Microsoft has deprecated the API listing the
+  items shared with an account (Graph's `sharedWithMe`, already degraded,
+  then retired) with no replacement for them, so add the shared folders
+  you use to My files. Moving between your files and a shared folder
+  copies and deletes, as Graph doesn't move between drives. OneNote
+  notebooks are listed as folders.
+- The places at the root (My Drive, Shared drives, Shared with me, My
+  files, Shared), the shared drives and the items shared with you can't
+  be renamed, moved or removed from shfm — that would act on other
+  people's files — but what's inside them can, as far as the account is
+  allowed to. Removing a link in My files removes the link, not the
+  shared folder.
+- **Dropbox** keeps a file's modification time only as given when it's
+  uploaded: it can't be changed afterwards.
+- Deleting moves items to the service's own trash (recycle bin, deleted
+  files), from which they can be restored on the service's website.
+- Applications opening a cloud file in place (through the FUSE mount, see
+  [Network sources in other applications](#network-sources-in-other-applications))
+  read it straight from the service, but their changes are saved to it
+  when they close the file: no service can change part of a file in
+  place.
+- Each operation is one or more requests to the service, so browsing is
+  slower than on a local network; shfm retries the requests a service
+  throttles, waiting as long as it asks.
+
 ## Desktop integration
 
 shfm can register with the desktop as a file manager like any other,
@@ -770,9 +878,9 @@ reflects the current file, since both read from the same configuration.
 
 Each [release](https://github.com/massimo82/shfm/releases) comes with
 packages of shfm with every feature — semantic search with Vulkan GPU
-acceleration, the [desktop integration](#desktop-integration) and the
-[GIO module](#network-sources-in-other-applications) — next to the plain
-binaries (base build, no semantic search):
+acceleration, [cloud storage](#cloud-storage), the [desktop
+integration](#desktop-integration) and the [GIO
+module](#network-sources-in-other-applications):
 
 - **Arch, Artix, Manjaro and derivatives** (x86_64):
   `sudo pacman -U shfm-VERSION-1-x86_64.pkg.tar.zst`. The release's
@@ -790,8 +898,21 @@ binaries (base build, no semantic search):
   `shfm-VERSION-1.fc44.src.rpm` builds it again with `rpmbuild --rebuild`
   (`--with native` for this machine's CPU only); it's
   `contrib/rpm/shfm.spec` here.
+- **Any other distribution** (amd64, arm64):
+  `shfm-VERSION-linux-ARCH.tar.gz` holds the same shfm, with every
+  feature, plus the GIO module (built) and the desktop integration files,
+  laid out as in the source tree: install it following [Complete
+  installation](#complete-installation) from step 2, run from the
+  archive's folder. It needs a distribution at least as recent as Ubuntu
+  24.04 (glibc 2.39, libstdc++), with libusb-1.0 and the Vulkan loader installed
+  (`libusb-1.0-0` and `libvulkan1` on Debian/Ubuntu, `libusb` and
+  `vulkan-icd-loader` on Arch), and GLib for the GIO module — whose
+  `make install` also wants `pkg-config` and GLib's development files to
+  find GIO's module folder, or `GIO_MODULE_DIR=...` set by hand. The
+  models for semantic search: the shfm-models packages' files, or see
+  [Optional: semantic (content) search](#optional-semantic-content-search).
 
-All of them set the NFS capability (see [Notes](#notes)) on install and on every
+The packages set the NFS capability (see [Notes](#notes)) on install and on every
 upgrade, and register shfm as a file manager next to the others without
 taking over: see [Choosing shfm explicitly](#choosing-shfm-explicitly).
 Semantic search on x86_64 needs a CPU with AVX2 (2013 onwards), as
@@ -842,10 +963,29 @@ shfm --filemanager1          org.freedesktop.FileManager1 service (see Desktop i
 shfm --portal                xdg-desktop-portal file chooser backend (see Desktop integration)
 ```
 
-This is the base build: everything except semantic (content) search. For
-a build with **every feature enabled**, including semantic search with
-Vulkan GPU acceleration, see [Full build](#full-build-every-feature-vulkan-gpu-acceleration)
+This is the base build: everything except semantic (content) search and
+cloud storage. For a build with **every feature enabled**, including
+semantic search with Vulkan GPU acceleration, see [Full build](#full-build-every-feature-vulkan-gpu-acceleration)
 below.
+
+[Cloud storage](#cloud-storage) (Google Drive, Dropbox, Microsoft
+OneDrive) is a module of its own, added with the `cloud` tag — it needs
+nothing besides Go, its dependencies are vendored like the others:
+
+```sh
+go build -tags cloud -o shfm .
+```
+
+A build can carry OAuth clients registered for it (see [Registering shfm
+with the services](#registering-shfm-with-the-services)), so its users
+don't have to register their own; each is optional:
+
+```sh
+go build -tags cloud -o shfm -ldflags "\
+  -X shfm/internal/cloud.googleClientID=... -X shfm/internal/cloud.googleClientSecret=... \
+  -X shfm/internal/cloud.dropboxAppKey=... \
+  -X shfm/internal/cloud.oneDriveClientID=..." .
+```
 
 To connect to NFS exports that require a privileged source port (see
 [Notes](#notes)), optionally run this after building:
@@ -884,9 +1024,9 @@ cp -an "$UP"/. third_party/llama-go/ && rm -rf "$UP"
 #    (about 5 minutes with 8 jobs; cmake builds serially unless told otherwise)
 
 # 2. Workspace pointing at it (skip if go.work already exists), then shfm
-#    with semantic search and the Vulkan libraries linked in
+#    with semantic search, the Vulkan libraries linked in, and cloud storage
 go work init . && go work use ./third_party/llama-go
-go build -tags "semantic vulkan" -o shfm .
+go build -tags "semantic vulkan cloud" -o shfm .
 
 # 3. Allow NFS exports that require a privileged source port
 #    (repeat after every rebuild)
@@ -933,13 +1073,16 @@ Only steps 1 and 2 are needed to use shfm; each of the others adds one
 optional piece, and says what it changes. Commands run from the source
 folder.
 
-1. **Build.** The base build (everything but semantic search):
+1. **Build** (skip it with a release's `shfm-VERSION-linux-ARCH.tar.gz`,
+   already built: see [Packages](#packages)). The base build (everything
+   but semantic search and cloud storage):
 
    ```sh
    go build -o shfm .
    ```
 
-   or the full build with semantic search and GPU acceleration: follow
+   or with cloud storage, `go build -tags cloud -o shfm .`, or the full
+   build with every feature: follow
    [Full build](#full-build-every-feature-vulkan-gpu-acceleration), then
    provide the models (steps 3 and 4 of
    [Optional: semantic (content) search](#optional-semantic-content-search)).
@@ -1550,6 +1693,7 @@ retrieval quality on its own.
 ```
 main.go                       entry point
 internal/vfs/                  filesystem abstraction (Local/SMB/NFS/SFTP/MTP)
+internal/cloud/                 optional cloud storage sources (Google Drive, Dropbox, Microsoft OneDrive): OAuth, REST/SDK backends
 internal/mtp/                   MTP device discovery + thin adapter over go-mtpfs
 internal/opener/                file types, applications and their associations (freedesktop.org specs), launching
 internal/fusemount/             FUSE mounts of network sources, for opening remote files in place
@@ -1570,7 +1714,7 @@ internal/archive/               archive formats: detection, reading entries, cre
 internal/mirror/                one-way mirrors: rsync (local) and generic engine
 internal/wlclip/                Wayland clipboard client (data-control protocol)
 internal/drives/                local disks, removable device mount/format (udisks2)
-internal/secret/                at-rest encryption for saved passwords
+internal/secret/                at-rest encryption for saved passwords, client secrets and cloud tokens
 internal/desktopfile/           first-run .desktop launcher installation
 internal/config/                persistent preferences (JSON) and keybindings
 internal/applog/                diagnostic log ($XDG_CACHE_HOME/shfm/logs/shfm.log)
@@ -1609,7 +1753,8 @@ packages.
   dependencies and to fix `--delete` (see
   [`SHFM-PATCHES.md`](third_party/gokrazy-rsync/SHFM-PATCHES.md)).
   Mirrors only run while shfm is open.
-- Password encryption for saved SMB/SFTP sources (`internal/secret`) uses
+- Password encryption for saved SMB/SFTP sources, and for cloud
+  accounts' OAuth tokens and client secrets (`internal/secret`), uses
   a key derived (HKDF-SHA256) from a local seed and the machine's
   identity: it protects against accidental disclosure of the
   configuration file, not against an attacker with full access to this

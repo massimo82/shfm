@@ -64,7 +64,17 @@ jobs:
       - name: go test
         run: go test -race ./...
 
+      # The cloud storage module (build tag "cloud") is pure Go: checked in
+      # the same way, its own tests running against fake services.
+      - name: go vet (cloud)
+        run: go vet -tags cloud ./...
+
+      - name: go test (cloud)
+        run: go test -race -tags cloud ./...
+
       # The semantic (content search) variant is not built here: it needs the
       # llama-go static libraries, see README "Full build".
       - name: go build
-        run: go build -o shfm .
+        run: |
+          go build -o shfm .
+          go build -tags cloud -o shfm-cloud .

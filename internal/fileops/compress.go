@@ -221,7 +221,30 @@ func (c *compressor) add(put archive.PutFunc, srcFS vfs.FileSystem, srcPath, nam
 	}
 	defer r.Close()
 	e.Type = archive.TypeFile
-	return put(e, cancelReader{c.prog.cancelled, r})
+	var content io.Reader = r
+	if st.SizeUnknown {
+		// The archive's header declares the size before the content
+		// (a Google Docs document, exported on the fly): spool it first.
+		tmp, err := os.CreateTemp("", "shfm-archive-entry-*")
+		if err != nil {
+			return err
+		}
+		defer os.Remove(tmp.Name())
+		defer tmp.Close()
+		n, err := io.Copy(tmp, cancelReader{c.prog.cancelled, r})
+		if err != nil {
+			if errors.Is(err, errCancelled) {
+				return err
+			}
+			c.skipped = append(c.skipped, fmt.Sprintf("%s: %v", name, err))
+			return nil
+		}
+		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		e.Size, content = n, tmp
+	}
+	return put(e, cancelReader{c.prog.cancelled, content})
 }
 
 // cancelReader fails reads once the user cancelled, so archiving a huge

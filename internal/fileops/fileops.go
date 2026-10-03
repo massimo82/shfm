@@ -247,11 +247,12 @@ func uniqueName(fs vfs.FileSystem, destDir, name, suffix string) string {
 }
 
 // openDest opens a writer on the destination, using CreateSized when the
-// backend requires it (currently only MTP, which must declare the object's
-// size before the data phase) and the source size is known; otherwise falls
-// back to plain Create.
+// backend requires it (MTP, which must declare the object's size before
+// the data phase, and Microsoft OneDrive's upload sessions) and the source
+// size is known (size >= 0); otherwise falls back to plain Create, which
+// such a backend serves by spooling the content first.
 func openDest(destFS vfs.FileSystem, destPath string, size int64) (io.WriteCloser, error) {
-	if sc, ok := destFS.(vfs.SizedCreator); ok {
+	if sc, ok := destFS.(vfs.SizedCreator); ok && size >= 0 {
 		return sc.CreateSized(destPath, size)
 	}
 	return destFS.Create(destPath)
@@ -292,7 +293,11 @@ func copyRecursive(srcFS vfs.FileSystem, srcPath string, destFS vfs.FileSystem, 
 		return err
 	}
 	defer r.Close()
-	w, err := openDest(destFS, destPath, entry.Size)
+	size := entry.Size
+	if entry.SizeUnknown {
+		size = -1
+	}
+	w, err := openDest(destFS, destPath, size)
 	if err != nil {
 		return err
 	}

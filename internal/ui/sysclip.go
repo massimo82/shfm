@@ -199,6 +199,15 @@ func (m *Model) resolveURI(u string, local vfs.FileSystem) (extSource, string, e
 			return extSource{label: label, dial: dial}, path, nil
 		}
 	}
+	for _, c := range m.cfg.CloudSources {
+		label, dial := cloudSourceDialer(c)
+		if dial == nil {
+			continue
+		}
+		if path, ok := pathUnder(label, scheme, rest); ok {
+			return extSource{label: label, dial: dial}, path, nil
+		}
+	}
 	if scheme == "mtp" {
 		devices, _ := mtp.DiscoverDevices()
 		for _, d := range devices {

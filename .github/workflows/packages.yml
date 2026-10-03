@@ -1,7 +1,8 @@
 name: Packages
 
 # The Arch, Debian/Ubuntu and Fedora packages: shfm with every feature
-# (semantic search with Vulkan, desktop integration, GIO module), from
+# (semantic search with Vulkan, cloud storage, desktop integration, GIO
+# module), from
 # contrib/arch/shfm, contrib/debian and contrib/rpm/shfm.spec, and the models
 # for its semantic search, from contrib/arch/shfm-models*,
 # contrib/debian-models and contrib/rpm/shfm-models.spec. Called by release.yml,

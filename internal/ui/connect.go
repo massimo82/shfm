@@ -87,7 +87,8 @@ func (m *Model) startConnect(paneIndex int, label string, dial func() (vfs.FileS
 // showing THIS specific attempt (the user may have long since dismissed it
 // or started a different one).
 func (m *Model) handleConnectResult(msg connectResultMsg) {
-	showingThis := m.dialog.Kind == DialogConnecting && m.dialog.ConnectRequestID == msg.requestID
+	showingThis := (m.dialog.Kind == DialogConnecting || m.dialog.Kind == DialogCloudAuth) &&
+		m.dialog.ConnectRequestID == msg.requestID
 
 	if msg.err != nil {
 		if showingThis {

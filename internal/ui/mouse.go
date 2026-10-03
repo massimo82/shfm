@@ -229,12 +229,12 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 
 	switch m.dialog.Kind {
 	case DialogSourceMenu:
-		// Unlike the other list dialogs below, this one has a blank
-		// separator line between groups (local disks/removable/MTP/remote/
-		// "new connection"), so a rendered row doesn't map 1:1 to an item
-		// index — sourceMenuRows (shared with renderDialogBox) gives the
-		// row each entry actually landed on; clicking a separator's row
-		// simply matches nothing.
+		// Unlike the other list dialogs below, this one has section titles
+		// (Local/Remote/Cloud) and blank separator lines between groups, so
+		// a rendered row doesn't map 1:1 to an item index — sourceMenuRows
+		// (shared with renderDialogBox) gives the row each entry actually
+		// landed on; clicking a title's or a separator's row simply
+		// matches nothing.
 		for i, r := range sourceMenuRows(m.sourceMenuEntries) {
 			if r == row {
 				m.dialog.ItemIdx = i
@@ -270,7 +270,7 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 		}
 	case DialogHelp, DialogAbout:
 		m.dialog = Dialog{}
-	case DialogConnectSMB, DialogConnectNFS, DialogConnectSFTP, DialogProperties:
+	case DialogConnectSMB, DialogConnectNFS, DialogConnectSFTP, DialogConnectCloud, DialogProperties:
 		if row >= 0 && row < len(m.dialog.Inputs) {
 			m.dialog.Inputs[m.dialog.FocusIdx].Blur()
 			m.dialog.FocusIdx = row

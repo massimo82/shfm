@@ -152,3 +152,27 @@ func TestGenericMirrorCancel(t *testing.T) {
 		t.Fatalf("got %+v, want cancelled with nothing done", res)
 	}
 }
+
+// TestNeedsCopyUnknownSize: a source file of unknown size (a Google Docs
+// document) isn't copied again at every run because its reported size
+// differs from its copy's, only when it changed.
+func TestNeedsCopyUnknownSize(t *testing.T) {
+	t1 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	t2 := t1.Add(time.Hour)
+	s := vfs.Entry{Name: "doc.odt", SizeUnknown: true, ModTime: t1}
+	d := vfs.Entry{Name: "doc.odt", Size: 4096, ModTime: t2}
+	old := manifest{"doc.odt": {SrcSize: 0, SrcMod: t1, DstSize: 4096, DstMod: t2}}
+	if needsCopy(s, d, old, "doc.odt") {
+		t.Error("an unchanged document is copied again")
+	}
+	if !needsCopy(s, d, manifest{}, "doc.odt") {
+		t.Error("a document not in the manifest isn't copied")
+	}
+	s.ModTime = t2
+	if !needsCopy(s, d, old, "doc.odt") {
+		t.Error("a changed document isn't copied")
+	}
+	if !needsCopy(vfs.Entry{Size: 1, ModTime: t1}, d, old, "doc.odt") {
+		t.Error("a file of known, different size isn't copied")
+	}
+}
