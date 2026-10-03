@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.5.0
+Version:        0.5.1
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -141,6 +141,13 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Sun Oct 04 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.1-1
+- Mounting a removable drive without udisks2 installed says so, and to
+  install it, instead of reporting an unrecognized filesystem; formatting
+  one does too.
+- When mounting falls back to mount(2), a lack of privileges, a busy
+  device or a device gone is reported as such.
+
 * Sat Oct 03 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.0-1
 - Encrypted vaults (optional module, build tag vault): folders on any
   source whose files and names are encrypted in the standard age format,

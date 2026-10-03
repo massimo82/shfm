@@ -1,3 +1,13 @@
+shfm (0.5.1) unstable; urgency=medium
+
+  * Mounting a removable drive without udisks2 installed says so, and to
+    install it, instead of reporting an unrecognized filesystem; formatting
+    one does too.
+  * When mounting falls back to mount(2), a lack of privileges, a busy
+    device or a device gone is reported as such.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Sun, 04 Oct 2026 12:00:00 +0200
+
 shfm (0.5.0) unstable; urgency=medium
 
   * Encrypted vaults (optional module, build tag vault): folders on any
