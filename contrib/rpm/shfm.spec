@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -141,6 +141,22 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Sat Oct 03 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.0-1
+- Encrypted vaults (optional module, build tag vault): folders on any
+  source whose files and names are encrypted in the standard age format,
+  recoverable without shfm (RECOVERY.txt in every vault).
+- Creating a vault from the New… menu, with a recovery key shown once;
+  unlocking by entering its folder, with the password or the recovery key.
+- Vaults are locked from the source picker, with Ctrl+Alt+L, or after
+  vault_auto_lock_minutes without activity; the password can be changed
+  and the recovery key shown again.
+- Files in a vault open in other applications through FUSE, read and
+  write, decrypted in memory only.
+- Split vaults: a vault stored on three folders of three sources, none of
+  which holds a whole file; any two are enough to read it, and a repair
+  rebuilds a lost part.
+- The release archives and packages include encrypted vaults.
+
 * Sat Oct 03 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.4.0-1
 - Cloud storage sources: Google Drive (My Drive, shared drives, Shared
   with me), Dropbox and Microsoft OneDrive (My files with links to shared
