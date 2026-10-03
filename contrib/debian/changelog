@@ -1,3 +1,17 @@
+shfm (0.4.0) unstable; urgency=medium
+
+  * Cloud storage sources: Google Drive (My Drive, shared drives, Shared
+    with me), Dropbox and Microsoft OneDrive (My files with links to shared
+    folders, and Shared for work or school accounts), authorized with OAuth
+    in the browser.
+  * The source picker groups sources under Local, Remote and Cloud.
+  * Saved remote sources and cloud accounts can be removed from the source
+    picker (x or Delete).
+  * The release archives have every feature too: semantic search, cloud
+    storage, the GIO module and the desktop integration files.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Sat, 03 Oct 2026 12:00:00 +0200
+
 shfm (0.3.1) unstable; urgency=medium
 
   * Without a graphical session, text and configuration files open in nano

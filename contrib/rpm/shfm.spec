@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.3.1
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Terminal file manager with SMB/NFS/SFTP/MTP support and local semantic search
 License:        GPL-3.0-or-later AND MIT
@@ -140,6 +140,17 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Sat Oct 03 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.4.0-1
+- Cloud storage sources: Google Drive (My Drive, shared drives, Shared
+  with me), Dropbox and Microsoft OneDrive (My files with links to shared
+  folders, and Shared for work or school accounts), authorized with OAuth
+  in the browser.
+- The source picker groups sources under Local, Remote and Cloud.
+- Saved remote sources and cloud accounts can be removed from the source
+  picker (x or Delete).
+- The release archives have every feature too: semantic search, cloud
+  storage, the GIO module and the desktop integration files.
+
 * Thu Oct 01 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.3.1-1
 - Without a graphical session, text and configuration files open in nano
   (or vim) in shfm's own terminal.
