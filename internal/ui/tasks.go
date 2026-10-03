@@ -39,6 +39,7 @@ const (
 	TaskMirror
 	TaskExtract
 	TaskCompress
+	TaskRepair
 )
 
 func (k TaskKind) String() string {
@@ -57,6 +58,8 @@ func (k TaskKind) String() string {
 		return "Extract"
 	case TaskCompress:
 		return "Compress"
+	case TaskRepair:
+		return "Repair"
 	default:
 		return "Task"
 	}

@@ -46,7 +46,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev \
-            libarchive-tools 7zip xz-utils zstd bzip2 lzip lz4
+            libarchive-tools 7zip xz-utils zstd bzip2 lzip lz4 jq
 
       # First-party code only: third_party/ is vendored upstream code.
       - name: gofmt
@@ -72,9 +72,25 @@ jobs:
       - name: go test (cloud)
         run: go test -race -tags cloud ./...
 
+      # The encrypted vaults module (build tag "vault") is pure Go too. Its
+      # tests also recover vaults with the age command line tool, as
+      # RECOVERY.txt tells users to: built at the version shfm uses (the
+      # distribution's is too old for post-quantum keys).
+      - name: Install age
+        run: |
+          go install filippo.io/age/cmd/age@v1.3.2
+          echo "SHFM_TEST_AGE=$(go env GOPATH)/bin/age" >> "$GITHUB_ENV"
+
+      - name: go vet (vault)
+        run: go vet -tags vault ./...
+
+      - name: go test (vault)
+        run: go test -race -tags vault ./...
+
       # The semantic (content search) variant is not built here: it needs the
       # llama-go static libraries, see README "Full build".
       - name: go build
         run: |
           go build -o shfm .
           go build -tags cloud -o shfm-cloud .
+          go build -tags vault -o shfm-vault .

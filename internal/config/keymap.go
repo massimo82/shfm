@@ -72,6 +72,7 @@ const (
 	ActionCancel           Action = "cancel"
 	ActionSourceMenu       Action = "source-menu"
 	ActionEditPath         Action = "edit-path"
+	ActionLockVaults       Action = "lock-vaults"
 	ActionToggleTrashView  Action = "toggle-trash-view"
 	ActionRestoreOrRefresh Action = "restore-or-refresh"
 	ActionEmptyTrash       Action = "empty-trash"
@@ -140,6 +141,7 @@ var keybindingDefs = []keybindingDef{
 
 	{ActionSourceMenu, []string{"ctrl+s"}, "Open source picker"},
 	{ActionEditPath, []string{"ctrl+p"}, "Edit current path"},
+	{ActionLockVaults, []string{"ctrl+alt+l"}, "Lock encrypted vaults"},
 
 	{ActionToggleTrashView, []string{"T"}, "Toggle trash view"},
 	{ActionRestoreOrRefresh, []string{"R"}, "Restore or refresh"},

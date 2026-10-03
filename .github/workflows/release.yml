@@ -58,12 +58,12 @@ jobs:
           done
 
       # shfm with every feature, as the packages: semantic search with
-      # Vulkan GPU acceleration and cloud storage, built natively on each
-      # architecture (Ubuntu 24.04 runners). It links glibc, libstdc++,
-      # libusb and the Vulkan loader dynamically, so it runs on
-      # distributions at least as recent, with those installed. llama.cpp
-      # is built as in contrib/debian/rules (keep them in step): for a
-      # generic CPU of the architecture, on amd64 with AVX2/FMA/F16C.
+      # Vulkan GPU acceleration, cloud storage and encrypted vaults, built
+      # natively on each architecture (Ubuntu 24.04 runners). It links
+      # glibc, libstdc++, libusb and the Vulkan loader dynamically, so it
+      # runs on distributions at least as recent, with those installed.
+      # llama.cpp is built as in contrib/debian/rules (keep them in step):
+      # for a generic CPU of the architecture, on amd64 with AVX2/FMA/F16C.
       - name: Build
         run: |
           contrib/fetch-llama-go.sh
@@ -74,7 +74,7 @@ jobs:
           (cd third_party/llama-go && CMAKE_ARGS="$cmake_args" UNAME_M=generic BUILD_TYPE=vulkan \
             CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) make libbinding.a)
           go work init . ./third_party/llama-go
-          go build -trimpath -tags 'semantic vulkan cloud' -ldflags "-s -w" -o shfm .
+          go build -trimpath -tags 'semantic vulkan cloud vault' -ldflags "-s -w" -o shfm .
           make -C contrib/gio-module
 
       # The archive holds what the packages install, laid out as in the

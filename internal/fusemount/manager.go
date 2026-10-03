@@ -108,6 +108,9 @@ func isSingleSession(src vfs.FileSystem) bool {
 }
 
 func sourceKey(src vfs.FileSystem) string {
+	if k, ok := src.(vfs.SourceKeyer); ok {
+		return k.SourceKey()
+	}
 	return src.Kind().String() + "|" + src.Label()
 }
 
@@ -391,6 +394,18 @@ func (mg *Manager) Busy() bool {
 // application still using a file on one loses access to it: a mount that
 // is busy is detached lazily (fusermount3 -u -z), and the connection
 // serving it closes with shfm.
+// Unmount unmounts src's mount, if it has one: when the source must no
+// longer be reachable from other applications (an encrypted vault being
+// locked). An application with a file open on it then gets errors.
+func (mg *Manager) Unmount(src vfs.FileSystem) {
+	mg.mu.Lock()
+	defer mg.mu.Unlock()
+	key := sourceKey(src)
+	if mnt, ok := mg.mounts[key]; ok {
+		mg.unmountLocked(key, mnt)
+	}
+}
+
 func (mg *Manager) UnmountAll() {
 	mg.mu.Lock()
 	defer mg.mu.Unlock()

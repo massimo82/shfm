@@ -36,6 +36,7 @@ import (
 	"shfm/internal/opener"
 	"shfm/internal/secret"
 	"shfm/internal/trash"
+	"shfm/internal/vault"
 	"shfm/internal/vfs"
 )
 
@@ -90,13 +91,28 @@ func (m *Model) startTransfer(srcFS vfs.FileSystem, srcDir string, names []strin
 	if copyMode {
 		kind = TaskCopy
 	}
+	intoVault := destFS.Kind() == vfs.KindVault
+	if intoVault {
+		if p := topLevelVault(items); p != "" {
+			m.setError("%v", vaultInVaultError(p))
+			return
+		}
+	}
 	t := m.startTask(kind, len(items), func(prog *fileops.Progress) *fileops.Result {
+		if intoVault {
+			if res := refuseVaultInVault(items, prog); res != nil {
+				return res
+			}
+		}
 		if copyMode {
 			return fileops.Copy(items, destFS, destDir, prog)
 		}
 		return fileops.Move(items, destFS, destDir, prog)
 	})
 	m.dialog = Dialog{Kind: DialogProgress, Title: t.Kind.String(), TaskID: t.ID}
+	if srcFS.Kind() == vfs.KindVault && destFS.Kind() != vfs.KindVault {
+		m.setStatus("Decrypting out of the vault: the copies in %s are not encrypted", destDir)
+	}
 }
 
 // --- delete ----------------------------------------------------------------------
@@ -183,7 +199,11 @@ func (m *Model) askNewFolder() {
 // openNewItemChoice is triggered by the "[+]" button next to the PATH
 // field: lets the user pick between a new file and a new folder.
 func (m *Model) openNewItemChoice() {
-	m.dialog = Dialog{Kind: DialogNewChoice, Title: "New...", Items: []string{"New file", "New folder"}}
+	items := []string{"New file", "New folder"}
+	if vault.Available && !m.inVault() {
+		items = append(items, "New encrypted vault")
+	}
+	m.dialog = Dialog{Kind: DialogNewChoice, Title: "New...", Items: items}
 }
 
 // --- trash (Freedesktop.org Trash Specification) ---------------------------------
@@ -403,6 +423,11 @@ type sourceMenuEntry struct {
 	// Cloud entries only (see cloudsource.go).
 	cloud    config.CloudSource
 	provider cloud.ProviderInfo
+
+	// "vault-lock" entries only (see vault.go): the vault's session key.
+	vaultKey string
+	// "split-vault" entries only (see splitvault.go).
+	split config.SplitVault
 }
 
 // sourceMenuGroup buckets a sourceMenuEntry.kind into a coarser category,
@@ -424,8 +449,14 @@ func sourceMenuGroup(kind string) int {
 		return 4
 	case "cloud":
 		return 5
-	default: // "new-cloud"
+	case "new-cloud":
 		return 6
+	case "vault-password", "vault-key", "split-repair":
+		return 7
+	case "vault-lock", "vault-lock-all":
+		return 8
+	default: // "split-vault", "new-vault"
+		return 9
 	}
 }
 
@@ -438,8 +469,10 @@ func sourceMenuSection(kind string) string {
 		return "Local"
 	case g <= 4:
 		return "Remote"
-	default:
+	case g <= 6:
 		return "Cloud"
+	default:
+		return "Vaults"
 	}
 }
 
@@ -559,6 +592,7 @@ func (m *Model) openSourceMenu() {
 	entries = append(entries, sourceMenuEntry{label: iconSourceAdd + " New NFS mount\u2026", kind: "new-nfs"})
 	entries = append(entries, sourceMenuEntry{label: iconSourceAdd + " New SFTP connection\u2026", kind: "new-sftp"})
 	entries = append(entries, m.cloudMenuEntries()...)
+	entries = append(entries, m.vaultMenuEntries()...)
 
 	m.sourceMenuEntries = entries
 	items := make([]string, len(entries))
@@ -656,6 +690,8 @@ func (m *Model) selectSourceMenuItem() {
 		m.connectSavedCloud(entry.cloud)
 	case "new-cloud":
 		m.openCloudAccountForm(entry.provider, config.CloudSource{}, "")
+	case "vault-password", "vault-key", "vault-lock", "vault-lock-all", "split-vault", "new-vault", "split-repair":
+		m.selectVaultMenuItem(entry)
 	}
 }
 
@@ -715,6 +751,10 @@ func focusConnectField(d *Dialog, idx int) {
 // connection attempt completes the user may well have switched panes.
 func (m *Model) replaceFS(idx int, fs vfs.FileSystem, path string) {
 	old := m.panes[idx].FS
+	if exit := m.panes[idx].VaultExit; exit != nil {
+		// A vault's FS doesn't own its backend: the pane does.
+		old = exit.FS
+	}
 	m.panes[idx] = NewPane(fs, path, m.cfg.ShowHidden, idx, m.sizeCh)
 	if old != nil && old != fs {
 		m.closeFSWhenUnused(old)
@@ -874,6 +914,8 @@ func (m *Model) askRemoveSavedSource() {
 		msg = fmt.Sprintf("Remove the saved source %s?\n\nIts saved password is deleted too.", e.remote.Name)
 	case "cloud":
 		msg = m.cloudRemovalMessage(e.cloud)
+	case "split-vault":
+		msg = fmt.Sprintf("Forget the split vault %s?\n\nIts files stay on its three parts: create a split vault with the same three folders (New encrypted vault…, Ctrl+T) to add it back.", e.split.Name)
 	default:
 		m.setStatus("Only saved sources and accounts can be removed")
 		return
@@ -897,6 +939,8 @@ func (m *Model) removeSavedSource(e sourceMenuEntry, hiddenPane int) {
 		m.removeRemoteSource(e.remote)
 	case "cloud":
 		m.removeCloudSource(e.cloud)
+	case "split-vault":
+		m.removeSplitVault(e.split)
 	}
 	status, isErr := m.status, m.statusErr
 	m.openSourceMenu()
@@ -1015,11 +1059,27 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		m.performCreateArchive()
 
 	case DialogNewChoice:
-		if d.ItemIdx == 0 {
+		switch d.ItemIdx {
+		case 0:
 			m.askNewFile()
-		} else {
+		case 1:
 			m.askNewFolder()
+		default:
+			m.askNewVault()
 		}
+
+	case DialogVaultUnlock:
+		return m.submitUnlockVault(), true
+	case DialogNewVault:
+		return m.submitNewVault(), true
+	case DialogVaultPassword:
+		return m.submitVaultPassword(), true
+	case DialogVaultShowKey:
+		return m.submitVaultShowKey(), true
+	case DialogNewSplitVault:
+		return m.submitNewSplitVault(), true
+	case DialogVaultRecoveryKey:
+		m.closeRecoveryKey()
 
 	case DialogConfirmTrash:
 		m.performDelete(true)

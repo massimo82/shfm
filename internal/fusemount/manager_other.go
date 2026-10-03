@@ -49,6 +49,8 @@ func (mg *Manager) Release(src vfs.FileSystem) bool { return false }
 
 func (mg *Manager) Session(kind vfs.Kind, label string) vfs.FileSystem { return nil }
 
+func (mg *Manager) Unmount(src vfs.FileSystem) {}
+
 func (mg *Manager) UnmountAll() {}
 
 func (mg *Manager) Close() {}

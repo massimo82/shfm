@@ -1,9 +1,19 @@
 # shfm — Shell File Manager v0.4.0
 
 shfm is a file manager for the terminal. It browses and manages files
-on local disks, removable drives, phones and cameras (MTP) and network
-shares (SMB, NFS, SFTP) from a single interface, driven by keyboard or
-mouse, in one pane or two side by side.
+on local disks, removable drives, phones and cameras (MTP), network
+shares (SMB, NFS, SFTP) and cloud storage (Google Drive, Dropbox,
+Microsoft OneDrive) from a single interface, driven by keyboard or mouse,
+in one pane or two side by side.
+
+Besides copying, moving and deleting in the background, it handles
+archives, the trash, automatic mirrors and file associations, formats
+removable drives, and searches by name or — fully locally — by content.
+It keeps encrypted vaults in the standard age format, even split across
+three sources, and opens files in other applications in place, network
+ones included. It also works as the desktop's file manager and file
+dialog. Cloud storage, semantic search and encrypted vaults are optional
+modules, all included in the [release packages](#packages).
 
 <!-- site:skip -->
 Website: **<https://massimo82.github.io/shfm/>** — this README, page by
@@ -25,8 +35,9 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
 - Copy, move, delete, rename, new file and new folder, even between
   different sources.
 - Sources: local disks, removable USB/SD drives (mounted automatically),
-  MTP devices, SMB, NFS and SFTP — and, optionally, cloud storage:
-  Google Drive, Dropbox and Microsoft OneDrive.
+  MTP devices, [remote sources](#remote-sources) (SMB, NFS, SFTP) and —
+  as an optional module — [cloud storage](#cloud-storage) (Google Drive,
+  Dropbox, Microsoft OneDrive).
 - Background tasks with progress, and desktop notifications when they
   finish.
 - Clipboard shared with the desktop (Wayland), both ways.
@@ -54,6 +65,8 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
 - Automatic one-way mirrors (rsync or generic engine) that never touch
   the source.
 - Formatting removable drives (exFAT, FAT32, ext4, XFS).
+- Optional module: [encrypted vaults](#encrypted-vaults), folders on any
+  source whose files and names are encrypted (standard age format).
 - Desktop launcher entry installed on first run.
 
 ## Overview
@@ -88,7 +101,8 @@ your shell's.
 ## Layout
 
 Each pane shows, top to bottom: the **SOURCE** field (the active source —
-local disk, removable device, MTP, SMB, NFS or SFTP) with a `[...]` button
+local disk, removable device, MTP, remote source, cloud account or
+encrypted vault) with a `[...]` button
 to change it and a `[T]` button to toggle the trash view; the **PATH**
 field (the current path, directly editable) with a `[..]` button to go up
 one folder and a `[+]` button to create a new file or folder; the file
@@ -252,18 +266,12 @@ to toggle between single- and dual-pane layout.
   use, so a regular local user can mount/unmount without root; falls back
   to a direct `mount(2)` syscall if udisks2 is unavailable), **MTP
   devices** (detected and driven over USB via `github.com/hanwen/go-mtpfs`,
-  see [Notes](#notes)), and saved **SMB**/
-  **NFS**/**SFTP** sources. New SMB, NFS or SFTP connections can be
-  created from the same menu; SMB and SFTP passwords, if entered, are
-  saved **encrypted at rest** (AES-256-GCM, key derived from the
-  machine/user — see `internal/secret`) instead of being discarded or
-  stored in plain text. A saved source is removed, its password with it,
-  with `x` (or `Delete`) on it in the menu — once no pane on screen is
-  open on it (the pane single-pane mode hides counts as closed: it goes
-  back to the home folder). SFTP host keys are
-  verified/recorded via `~/.ssh/known_hosts` (trust-on-first-use, like
-  OpenSSH). Connecting to
-  MTP/SMB/NFS/SFTP always happens **in the background**: a "Connecting…"
+  see [Notes](#notes)), the saved [remote sources](#remote-sources) (SMB,
+  NFS, SFTP) and, with the optional modules, the
+  [cloud accounts](#cloud-storage) and the **Vaults** section (split
+  vaults, locking: see [Encrypted vaults](#encrypted-vaults)), each group
+  under its own title. Opening an MTP device or a network
+  source always happens **in the background**: a "Connecting…"
   placeholder appears immediately and the rest of shfm stays fully
   responsive no matter how long the USB/network I/O takes (a slow or
   unresponsive device can never freeze the UI); dismissing it (Esc) just
@@ -558,10 +566,50 @@ On top of that, a sync never deletes anything when the source can't be
 read: a missing or unreadable source root fails the run, and an
 unreadable subfolder's counterpart is left alone (see [Notes](#notes)).
 
+## Remote sources
+
+**SMB** (Windows and Samba shares), **NFS** exports and **SFTP** servers,
+in every build: shfm talks to them directly, in Go — no `mount`,
+`smbclient` or `ssh` involved, nor root. They're listed in the **Remote**
+section of the source picker (`Ctrl+S`).
+
+### Connecting
+
+Choose **New SMB connection…**, **New NFS mount…** or **New SFTP
+connection…** in the source picker, and fill in the form:
+
+- **SMB**: host, share, domain, user and password (no user: as a guest);
+- **NFS**: host and export path, with the UID and GID the server sees;
+- **SFTP**: host, port, user, password and the folder to start in.
+
+Once connected, the source opens in the pane and is **saved** in the
+Remote section, to open again with a click. SMB and SFTP passwords, if
+entered, are saved **encrypted at rest** (AES-256-GCM, with a key derived
+from the machine and the user — see `internal/secret` in
+[Notes](#notes)), never in plain text. A saved source is removed, its
+password with it, with `x` (or `Delete`) on it in the source picker — once
+no pane on screen is open on it (the pane single-pane mode hides counts as
+closed: it goes back to the home folder).
+
+### What to expect
+
+- **SFTP** host keys are verified and recorded in `~/.ssh/known_hosts`,
+  trust on first use, as OpenSSH does.
+- **NFS** exports that only accept privileged source ports need a
+  capability on the shfm binary (see [Building](#building) and
+  [Notes](#notes)).
+- A connection that drops (a server or a router closing it after hours
+  of inactivity) is reopened by itself on the next operation.
+- Remote sources can be browsed from other applications' file dialogs
+  while shfm has them open, and their files open in other applications in
+  place: see
+  [Network sources in other applications](#network-sources-in-other-applications).
+
 ## Network sources in other applications
 
-While shfm has an SMB, NFS or SFTP source open, other applications can
-browse it too, from their own file dialogs — to attach a file on the NAS
+While shfm has a [remote source](#remote-sources) (SMB, NFS, SFTP) or,
+with the optional module, a [cloud account](#cloud-storage) open, other
+applications can browse it too, from their own file dialogs — to attach a file on the NAS
 in a mail client, for instance — as they can with a share opened in
 Nautilus, Thunar or Dolphin. shfm mounts the source as soon as it's
 opened (see the FUSE mounts in [Notes](#notes)), and the mount stays until
@@ -599,9 +647,14 @@ listed this way: desktops list phones themselves.
 
 ## Cloud storage
 
-Built with the `cloud` tag (see [Building](#building)), shfm also opens
-**Google Drive**, **Dropbox** and **Microsoft OneDrive** accounts as
-sources: browsed, copied to and from, mirrored and opened in other
+**An optional module**, not part of the base build: cloud storage exists
+only in a shfm built with the `cloud` tag (see
+[Building with cloud storage](#building-with-cloud-storage)) — as the
+release packages and archives are, with every feature (see
+[Packages](#packages)).
+
+shfm opens **Google Drive**, **Dropbox** and **Microsoft OneDrive**
+accounts as sources: browsed, copied to and from, mirrored and opened in other
 applications like any other source. They're listed in their own **Cloud**
 section of the source picker (`Ctrl+S`), below the local and remote ones;
 without the tag, there's no trace of them.
@@ -625,6 +678,29 @@ is open on it: shfm deletes its token and forgets it. The authorization itself s
 until you revoke it there, in the account's security settings (Google:
 "Third-party apps & services"; Dropbox: "Connected apps"; Microsoft:
 "Apps and services").
+
+### Building with cloud storage
+
+The module is pure Go, its dependencies vendored like the others:
+
+```sh
+go build -tags cloud -o shfm .
+```
+
+A build can carry OAuth clients registered for it (see [Registering shfm
+with the services](#registering-shfm-with-the-services)), so its users
+don't have to register their own; each is optional:
+
+```sh
+go build -tags cloud -o shfm -ldflags "\
+  -X shfm/internal/cloud.googleClientID=... -X shfm/internal/cloud.googleClientSecret=... \
+  -X shfm/internal/cloud.dropboxAppKey=... \
+  -X shfm/internal/cloud.oneDriveClientID=..." .
+```
+
+Tags combine with the others, e.g. `-tags "cloud vault"`, or
+`-tags "semantic vulkan cloud vault"` for the
+[full build](#full-build-every-feature-vulkan-gpu-acceleration).
 
 ### Registering shfm with the services
 
@@ -699,6 +775,176 @@ register one yourself, free, and enter it when adding the account:
 - Each operation is one or more requests to the service, so browsing is
   slower than on a local network; shfm retries the requests a service
   throttles, waiting as long as it asks.
+
+## Encrypted vaults
+
+**An optional module**, not part of the base build: encrypted vaults
+exist only in a shfm built with the `vault` tag (see
+[Building with vaults](#building-with-vaults)) — as the release packages
+and archives are, with every feature (see [Packages](#packages)). Without it, the
+**New encrypted vault** choice isn't offered, and a vault's folder opens
+as a plain folder of encrypted files, saying so.
+
+A vault is a folder, on any source — a local disk, a USB drive, SMB, NFS,
+SFTP, an MTP device or a cloud account — holding only encrypted files,
+which shfm shows in clear once it's unlocked with its password. Every
+file in it is a standard [age](https://age-encryption.org) file, so a
+vault can always be recovered without shfm (see
+[Recovering a vault without shfm](#recovering-a-vault-without-shfm)).
+
+### Building with vaults
+
+The module is pure Go, its library ([age](https://github.com/FiloSottile/age))
+vendored like the other dependencies:
+
+```sh
+go build -tags vault -o shfm .
+```
+
+Tags combine with the others, e.g. `go build -tags "cloud vault" -o shfm .`,
+or `-tags "semantic vulkan cloud vault"` for the
+[full build](#full-build-every-feature-vulkan-gpu-acceleration).
+
+### Creating a vault
+
+Choose **New encrypted vault** in the **New…** menu (the `[+]` button next
+to the path), or **New encrypted vault…** in the **Vaults** section of the
+source picker (`Ctrl+S`). By default the vault is created in the pane's
+current folder — `Ctrl+T` in the form switches to a
+[split vault](#split-vaults), and back. A vault can't be created inside
+another (from inside one, only a split vault, which takes its place in
+the pane; see also [Using a vault](#using-a-vault)). shfm asks for:
+
+- the **name** of the vault's folder, created in the current folder;
+- a **password**, at least 8 characters, with a rough strength indicator;
+- whether **file names** are encrypted (the default, `Ctrl+N` to switch)
+  or visible;
+- whether the key is **post-quantum** (`Ctrl+K`, off by default).
+
+shfm then shows the vault's **recovery key** once: it opens the vault
+without the password, and decrypts its files with the age tools. Keep it
+somewhere safe, away from the vault (on paper, in a password manager): if
+both the password and the recovery key are lost, nobody can recover the
+files.
+
+### Using a vault
+
+Entering a vault's folder (`Enter`, or a double click) asks for its
+password — `Ctrl+R` switches to the recovery key. The pane then shows the
+vault's content in clear, its SOURCE marked `[VLT]`: copy, move, rename,
+delete and open files as anywhere else; `..` at the vault's root goes
+back to the folder holding it.
+
+- **Copying or moving out of a vault decrypts** the files: shfm says so
+  in the status line. Copying into a vault encrypts them.
+- **No vault inside a vault**: one can't be created there, nor copied,
+  moved or mirrored into one — not even inside a folder, nor by another
+  application through FUSE, nor extracted from an archive.
+- **Deleting is final**: a vault's files never go to the trash.
+- **Opening a file with an application** goes through the vault's FUSE
+  mount (see [Network sources in other applications](#network-sources-in-other-applications)),
+  read and write: an edited file is saved encrypted when the application
+  closes it, its working copy kept in memory (`$XDG_RUNTIME_DIR`), never
+  on a disk. Without FUSE, shfm decrypts a temporary copy there instead;
+  without `$XDG_RUNTIME_DIR`, it doesn't open the file at all.
+- **Not available inside a vault**: semantic search (it doesn't index
+  vaults), and the file dialog mode (see
+  [shfm as a file dialog](#shfm-as-a-file-dialog)), which shows a vault's
+  encrypted files only.
+
+The **Vaults** section of the source picker (`Ctrl+S`), from inside a
+vault, changes its **password** — instantly, as only the vault's key file
+is re-encrypted, and the old password stops working at once — and shows
+its **recovery key** again, after asking for the password.
+
+### Split vaults
+
+A **split vault** is stored on three folders of three sources at once —
+for instance three cloud accounts, or a NAS, a USB drive and a cloud
+account: every file is split into three shards, one per folder, so that
+**no source holds a whole file** (not even its encrypted form), and
+**any two folders are enough** to read the vault. One source may be lost,
+closed or unreachable without losing anything.
+
+Open the new vault form (see [Creating a vault](#creating-a-vault)) and
+press `Ctrl+T` to split it: a name, then for each of the three parts its
+source (`Ctrl+←`/`Ctrl+→`: the local disk, a saved remote source, a cloud
+account) and its folder — created if missing, otherwise it must be
+empty — and the password, as for a vault in a folder. Three folders that
+already hold a split vault add it back instead, with its password only
+(after it was forgotten, or on another machine).
+The vault is saved in the same section; choosing it connects to its three
+sources and shows it in the pane, in place of the source the pane had.
+
+- With a source unreachable, the vault opens **read-only** (shfm says
+  which part is missing): reading needs two parts, any change all three.
+- **Repair the parts of…**, in the same section while the vault is open,
+  makes the three parts whole again once they're all reachable: it
+  rebuilds the shards a part lacks — after it was unreachable, or replaced
+  by an empty folder — and removes the leftovers of interrupted writes.
+- Every write gives the file's three shards a new generation in their
+  names (`<name>.<gen>.a`, `.b`, `.c0`/`.c1`): a write interrupted
+  half-way never mixes two versions of a file.
+- Space: one and a half times the vault's size in all (half on each
+  part).
+- The pane's source changes for the vault: locking it takes the pane back
+  to the home folder. Forgetting a split vault (`x` in the source picker)
+  leaves its files on the parts: the same form adds it back.
+
+### Locking
+
+A vault stays unlocked for the session — entering it again asks nothing —
+until it's locked:
+
+- from the **Vaults** section of the source picker, one vault at a time;
+- with `Ctrl+Alt+L`, every vault (rebindable as `lock-vaults`, see
+  [Customizing keybindings](#customizing-keybindings));
+- on its own, after `vault_auto_lock_minutes` minutes without a key press
+  or a click in shfm (in `config.json`: 15 by default, `0` never) — not
+  while a copy or move is still running;
+- by quitting shfm.
+
+Locking takes the panes showing the vault back to the folder holding it,
+unmounts it for other applications, and empties shfm's clipboard of its
+entries.
+
+### Security
+
+- **Encryption**: each file has its own random key and is encrypted with
+  ChaCha20-Poly1305, in authenticated 64 KiB chunks — damaged, truncated
+  or tampered content is reported, never read as wrong data. The file
+  keys are encrypted to the vault's X25519 identity, itself protected by
+  the password with scrypt (about a second, once per unlock).
+- **Post-quantum**: a hybrid ML-KEM-768 + X25519 identity instead, safe
+  against future quantum computers.
+- **Names**: when encrypted, files and folders are stored under random
+  names, and each folder's names, sizes and dates are kept in its own
+  encrypted index (`.index.age`, with the previous version as
+  `.index.age.bak`). When visible, files are stored as `name.ext.age` in
+  plain folders — easier to recover, but anyone with access to the source
+  reads the names and the folder structure.
+- **What stays visible** on the source: each file's approximate size, the
+  number of files, and their modification times.
+- Go can't guarantee that the keys are wiped from memory once a vault is
+  locked, only that shfm no longer holds them.
+
+### Recovering a vault without shfm
+
+Every vault holds a `RECOVERY.txt` with the exact commands. In short:
+`age -d -o key.txt identity.age` turns the password into a key file (or
+write the recovery key in `key.txt`), then `age -d -i key.txt` decrypts
+any file; with encrypted names, each folder's `.index.age`, decrypted the
+same way (and read with jq), maps the stored names to the real ones, and
+`RECOVERY.txt` includes a shell script restoring the whole vault. A
+post-quantum vault needs age 1.3.0 or later — or, with rage or an older
+age, the age-plugin-pq plugin, after converting the key with
+`age-plugin-pq -identity`.
+
+A split vault is put back together first: each of its folders holds a
+`RECOVERY.txt` in clear, with a Python 3 script that rebuilds the vault
+from any two of the three folders (with parts 1 and 2, a file is simply
+`cat NAME.GEN.a NAME.GEN.b`). The result is a regular vault, recovered as
+above.
 
 ## Desktop integration
 
@@ -878,9 +1124,9 @@ reflects the current file, since both read from the same configuration.
 
 Each [release](https://github.com/massimo82/shfm/releases) comes with
 packages of shfm with every feature — semantic search with Vulkan GPU
-acceleration, [cloud storage](#cloud-storage), the [desktop
-integration](#desktop-integration) and the [GIO
-module](#network-sources-in-other-applications):
+acceleration, [cloud storage](#cloud-storage), [encrypted
+vaults](#encrypted-vaults), the [desktop integration](#desktop-integration)
+and the [GIO module](#network-sources-in-other-applications):
 
 - **Arch, Artix, Manjaro and derivatives** (x86_64):
   `sudo pacman -U shfm-VERSION-1-x86_64.pkg.tar.zst`. The release's
@@ -963,29 +1209,15 @@ shfm --filemanager1          org.freedesktop.FileManager1 service (see Desktop i
 shfm --portal                xdg-desktop-portal file chooser backend (see Desktop integration)
 ```
 
-This is the base build: everything except semantic (content) search and
-cloud storage. For a build with **every feature enabled**, including
+This is the base build: everything except semantic (content) search,
+cloud storage and encrypted vaults. For a build with **every feature enabled**, including
 semantic search with Vulkan GPU acceleration, see [Full build](#full-build-every-feature-vulkan-gpu-acceleration)
 below.
 
-[Cloud storage](#cloud-storage) (Google Drive, Dropbox, Microsoft
-OneDrive) is a module of its own, added with the `cloud` tag — it needs
-nothing besides Go, its dependencies are vendored like the others:
-
-```sh
-go build -tags cloud -o shfm .
-```
-
-A build can carry OAuth clients registered for it (see [Registering shfm
-with the services](#registering-shfm-with-the-services)), so its users
-don't have to register their own; each is optional:
-
-```sh
-go build -tags cloud -o shfm -ldflags "\
-  -X shfm/internal/cloud.googleClientID=... -X shfm/internal/cloud.googleClientSecret=... \
-  -X shfm/internal/cloud.dropboxAppKey=... \
-  -X shfm/internal/cloud.oneDriveClientID=..." .
-```
+[Cloud storage](#cloud-storage) is an optional module, added with the
+`cloud` tag: see [Building with cloud storage](#building-with-cloud-storage).
+[Encrypted vaults](#encrypted-vaults) are another optional module, added
+with the `vault` tag: see [Building with vaults](#building-with-vaults).
 
 To connect to NFS exports that require a privileged source port (see
 [Notes](#notes)), optionally run this after building:
@@ -1024,9 +1256,10 @@ cp -an "$UP"/. third_party/llama-go/ && rm -rf "$UP"
 #    (about 5 minutes with 8 jobs; cmake builds serially unless told otherwise)
 
 # 2. Workspace pointing at it (skip if go.work already exists), then shfm
-#    with semantic search, the Vulkan libraries linked in, and cloud storage
+#    with semantic search, the Vulkan libraries linked in, cloud storage and
+#    encrypted vaults
 go work init . && go work use ./third_party/llama-go
-go build -tags "semantic vulkan cloud" -o shfm .
+go build -tags "semantic vulkan cloud vault" -o shfm .
 
 # 3. Allow NFS exports that require a privileged source port
 #    (repeat after every rebuild)
@@ -1075,7 +1308,7 @@ folder.
 
 1. **Build** (skip it with a release's `shfm-VERSION-linux-ARCH.tar.gz`,
    already built: see [Packages](#packages)). The base build (everything
-   but semantic search and cloud storage):
+   but semantic search, cloud storage and encrypted vaults):
 
    ```sh
    go build -o shfm .
@@ -1715,6 +1948,7 @@ internal/mirror/                one-way mirrors: rsync (local) and generic engin
 internal/wlclip/                Wayland clipboard client (data-control protocol)
 internal/drives/                local disks, removable device mount/format (udisks2)
 internal/secret/                at-rest encryption for saved passwords, client secrets and cloud tokens
+internal/vault/                 optional encrypted vaults (build tag vault): age-format storage, CryptFS decorator over any backend, split (2-of-3) storage
 internal/desktopfile/           first-run .desktop launcher installation
 internal/config/                persistent preferences (JSON) and keybindings
 internal/applog/                diagnostic log ($XDG_CACHE_HOME/shfm/logs/shfm.log)

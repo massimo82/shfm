@@ -27,6 +27,8 @@ import (
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/fileops"
+	"shfm/internal/semantic"
+	"shfm/internal/vault"
 	"shfm/internal/version"
 )
 
@@ -569,20 +571,17 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString(styleAccent.Render("Shell File Manager v"+version.Version) + "\n")
 		b.WriteString("\n")
 		// The box's width wraps the description onto several lines.
-		where := "and network shares (SMB, NFS, SFTP)"
-		if cloud.Available {
-			where = "network shares (SMB, NFS, SFTP) and cloud storage (Google Drive, Dropbox, Microsoft OneDrive)"
-		}
-		b.WriteString("shfm is a file manager for the terminal. It browses and " +
-			"manages files on local disks, removable drives, phones and " +
-			"cameras (MTP) " + where + " from a single " +
-			"interface, driven by keyboard or mouse, in one pane or two side " +
-			"by side.\n\n")
+		b.WriteString(aboutDescription() + "\n\n")
 		b.WriteString("Website: https://massimo82.github.io/shfm/\n\n")
 		b.WriteString("Designed by Massimo Cavalleri in Milan, Italy :)")
 		b.WriteString("\n\n")
 		b.WriteString(styleDim.Render("press any key to close"))
 		return dialogBox(64).Render(b.String())
+
+	case DialogVaultUnlock, DialogNewVault, DialogVaultRecoveryKey, DialogVaultPassword, DialogVaultShowKey:
+		return m.renderVaultDialog(&b)
+	case DialogNewSplitVault:
+		return m.renderNewSplitVault(&b)
 
 	case DialogMessage:
 		b.WriteString(d.Message)
@@ -591,6 +590,30 @@ func (m *Model) renderDialogBox() string {
 		return dialogBox(64).Render(b.String())
 	}
 	return dialogBox(64).Render(b.String())
+}
+
+// aboutDescription describes shfm as this build is: the optional modules
+// (cloud storage, semantic search, encrypted vaults) only when built in.
+func aboutDescription() string {
+	where := " and network shares (SMB, NFS, SFTP)"
+	if cloud.Available {
+		where = ", network shares (SMB, NFS, SFTP) and cloud storage (Google Drive, Dropbox, Microsoft OneDrive)"
+	}
+	search := "searches by name"
+	if semantic.Available {
+		search = "searches by name or, fully locally, by content"
+	}
+	text := "shfm is a file manager for the terminal. It browses and " +
+		"manages files on local disks, removable drives, phones and " +
+		"cameras (MTP)" + where + " from a single interface, driven by " +
+		"keyboard or mouse, in one pane or two side by side.\n\n" +
+		"Besides copying, moving and deleting in the background, it " +
+		"handles archives, the trash, automatic mirrors and file " +
+		"associations, formats removable drives, and " + search + "."
+	if vault.Available {
+		text += " It keeps encrypted vaults in the standard age format, even split across three sources."
+	}
+	return text + " It also works as the desktop's file manager and file dialog."
 }
 
 // dialogBox is styleDialogBox for a box whose content area plus padding is

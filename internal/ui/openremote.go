@@ -28,8 +28,11 @@ import (
 	"shfm/internal/applog"
 	"shfm/internal/fusemount"
 	"shfm/internal/opener"
+	"shfm/internal/vault"
 	"shfm/internal/vfs"
 )
+
+var errNoVaultSpool = errors.New("no $XDG_RUNTIME_DIR to hold a decrypted copy in memory, and a vault's files are never decrypted to disk")
 
 // remoteOpenTarget identifies an entry on a source with no real local path
 // (SMB/NFS/SFTP/MTP): opening it with an external app requires either the
@@ -174,9 +177,18 @@ func fileChanged(before os.FileInfo, path string) bool {
 
 // downloadToTemp copies the entry at vfsPath (within fs) into a freshly
 // created temp directory, under its original name so extension-based
-// MIME/app detection by the target application still works.
+// MIME/app detection by the target application still works. A file from an
+// encrypted vault, decrypted, only goes to vault.SpoolDir (memory, never a
+// disk): without one it isn't copied at all.
 func downloadToTemp(fs vfs.FileSystem, vfsPath, name string) (string, error) {
-	dir, err := os.MkdirTemp("", "shfm-open-*")
+	base := ""
+	if fs.Kind() == vfs.KindVault {
+		var ok bool
+		if base, ok = vault.SpoolDir(); !ok {
+			return "", errNoVaultSpool
+		}
+	}
+	dir, err := os.MkdirTemp(base, "shfm-open-*")
 	if err != nil {
 		return "", err
 	}

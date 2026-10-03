@@ -34,6 +34,7 @@ import (
 	"shfm/internal/drives"
 	"shfm/internal/fileops"
 	"shfm/internal/mirror"
+	"shfm/internal/vault"
 	"shfm/internal/vfs"
 )
 
@@ -111,10 +112,19 @@ func (m *Model) checkMirrors() {
 	}
 }
 
+// sourceID identifies a non-local source: its label, or its SourceKey when
+// the label isn't enough (an encrypted vault: see vfs.SourceKeyer).
+func sourceID(fs vfs.FileSystem) string {
+	if k, ok := fs.(vfs.SourceKeyer); ok {
+		return k.SourceKey()
+	}
+	return fs.Label()
+}
+
 // endpointFor builds the stable identity of path on fs.
 func endpointFor(fs vfs.FileSystem, path string) config.MirrorEndpoint {
 	if fs.Kind() != vfs.KindLocal {
-		return config.MirrorEndpoint{Source: fs.Label(), Path: path, Label: fs.Label() + path}
+		return config.MirrorEndpoint{Source: sourceID(fs), Path: path, Label: fs.Label() + path}
 	}
 	ep := config.MirrorEndpoint{Source: "local", Path: path, Label: path}
 	if mt, ok := drives.MountOf(path); ok && mt.UUID != "" {
@@ -145,7 +155,7 @@ func (m *Model) resolveEndpoint(ep config.MirrorEndpoint) (mirror.Side, bool) {
 		return side, true
 	}
 	for _, p := range m.panes {
-		if p.FS.Kind() != vfs.KindLocal && p.FS.Label() == ep.Source {
+		if p.FS.Kind() != vfs.KindLocal && sourceID(p.FS) == ep.Source {
 			return mirror.Side{FS: p.FS, Path: ep.Path}, true
 		}
 	}
@@ -323,9 +333,23 @@ func (m *Model) doMirrorPaste() tea.Cmd {
 		c.lines = append(c.lines, line)
 	}
 
+	if p.FS.Kind() == vfs.KindVault {
+		for i := range c.srcs {
+			if vault.IsVault(c.srcs[i].FS, c.srcs[i].Path) {
+				m.setError("Can't mirror into a vault: %v", vaultInVaultError(c.srcs[i].Path))
+				return nil
+			}
+		}
+	}
 	check := func(cancelled func() bool) mirrorCheckMsg {
 		c.results = make([]error, len(c.srcs))
 		for i := range c.srcs {
+			if c.dsts[i].FS.Kind() == vfs.KindVault {
+				if found := findVault(c.srcs[i].FS, c.srcs[i].Path, 0); found != "" {
+					c.results[i] = vaultInVaultError(found)
+					continue
+				}
+			}
 			c.results[i] = mirror.Overlap(c.srcs[i], c.dsts[i], cancelled)
 		}
 		return c
@@ -373,6 +397,10 @@ func (m *Model) finishMirrorPaste(c mirrorCheckMsg) {
 	for i, err := range c.results {
 		if errors.Is(err, mirror.ErrOverlap) {
 			m.setError("Can't mirror %s: %s already holds its data (%v)", c.srcs[i].Path, c.dsts[i].Path, err)
+			return
+		}
+		if errors.Is(err, vault.ErrVaultInVault) {
+			m.setError("Can't mirror %s: %v", c.srcs[i].Path, err)
 			return
 		}
 		if err != nil {

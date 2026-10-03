@@ -101,6 +101,11 @@ type Pane struct {
 	// SourceLabel is shown in the pane's SOURCE row.
 	SourceLabel string
 
+	// VaultExit is set while the pane shows an encrypted vault (FS is the
+	// vault's): ".." at its root goes back to the folder holding it (see
+	// vault.go).
+	VaultExit *vaultExit
+
 	// RangeAnchor is the index a range selection (Shift+click) starts from.
 	RangeAnchor int
 
@@ -237,7 +242,7 @@ func (p *Pane) Load() {
 		p.DirSizesSupported = false
 	}
 
-	if p.FS.Dir(p.Path) != p.Path {
+	if p.FS.Dir(p.Path) != p.Path || (p.VaultExit != nil && !p.VaultExit.Standalone) {
 		filtered = append([]vfs.Entry{{Name: parentEntryName, IsDir: true}}, filtered...)
 	}
 	p.Entries = filtered
@@ -519,6 +524,10 @@ func (p *Pane) Activate() bool {
 func (p *Pane) GoUp() bool {
 	parent := p.FS.Dir(p.Path)
 	if parent == p.Path {
+		if p.VaultExit != nil && !p.VaultExit.Standalone {
+			p.leaveVault()
+			return true
+		}
 		return false
 	}
 	prevBase := p.FS.Base(p.Path)
@@ -535,6 +544,24 @@ func (p *Pane) GoUp() bool {
 		}
 	}
 	return true
+}
+
+// leaveVault goes back from the vault the pane shows to the folder holding
+// it, the cursor on the vault.
+func (p *Pane) leaveVault() {
+	e := p.VaultExit
+	p.FS, p.SourceLabel, p.VaultExit = e.FS, e.Label, nil
+	p.Path = e.FS.Dir(e.Dir)
+	p.Cursor, p.Offset = 0, 0
+	p.DeselectAll()
+	p.FilterQuery, p.FilterActive = "", false
+	p.Load()
+	for i, en := range p.Entries {
+		if en.Name == e.FS.Base(e.Dir) {
+			p.Cursor = i
+			break
+		}
+	}
 }
 
 // BeginPathEdit activates direct editing of the PATH field (Ctrl+P or a

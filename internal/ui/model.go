@@ -153,6 +153,13 @@ type Model struct {
 	// picker is set when shfm runs as a file chooser: see picker.go.
 	picker *pickerState
 
+	// Encrypted vaults unlocked this session, by vaultKey (see vault.go);
+	// lastInput is the last key press or click, for their auto-lock, whose
+	// periodic check is running when vaultTicking.
+	vaults       map[string]*vaultSession
+	lastInput    time.Time
+	vaultTicking bool
+
 	quitting bool
 }
 
@@ -181,6 +188,8 @@ func New(cfg *config.Config, keymap *config.KeyMap, start Start) *Model {
 		semanticEngine:   semantic.New(),
 		semanticCh:       make(chan semanticMsg, 8),
 		semanticIndexing: map[string]bool{},
+
+		vaults: map[string]*vaultSession{},
 	}
 	m.panes[0] = NewPane(local0, dir, cfg.ShowHidden, 0, m.sizeCh)
 	m.panes[1] = NewPane(local1, dir, cfg.ShowHidden, 1, m.sizeCh)
@@ -248,11 +257,31 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		}
 		return nil
 	case tea.KeyPressMsg:
+		m.lastInput = time.Now()
 		_, cmd := m.handleKey(msg)
 		return cmd
 	case tea.MouseMsg:
+		m.lastInput = time.Now()
 		_, cmd := m.handleMouse(msg)
 		return cmd
+	case vaultUnlockMsg:
+		return m.handleVaultUnlock(msg)
+	case vaultCreatedMsg:
+		return m.handleVaultCreated(msg)
+	case vaultPasswordMsg:
+		m.handleVaultPassword(msg)
+		return nil
+	case vaultShowKeyMsg:
+		m.handleVaultShowKey(msg)
+		return nil
+	case vaultTickMsg:
+		return m.handleVaultTick()
+	case splitOpenedMsg:
+		m.handleSplitOpened(msg)
+		return nil
+	case splitCreatedMsg:
+		m.handleSplitCreated(msg)
+		return nil
 	case taskMsg:
 		m.handleTaskMsg(msg)
 		return m.waitForTaskMsg()
@@ -419,6 +448,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.toggleHidden(listHeight)
 	case config.ActionTaskList:
 		m.openTaskList()
+	case config.ActionLockVaults:
+		m.lockVaultsAction()
 
 	// --- cursor / pane navigation ---
 	case config.ActionCursorUp:
@@ -647,6 +678,9 @@ func (m *Model) enterOrOpen() {
 	p := m.activePane()
 	if p.Mode == PaneTrash {
 		m.restoreTrashCurrent()
+		return
+	}
+	if m.enterVault() {
 		return
 	}
 	if p.Activate() {

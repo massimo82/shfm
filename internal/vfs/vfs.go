@@ -70,6 +70,14 @@ const (
 	KindMTP
 	KindSFTP
 	KindCloud
+	// KindVault is an encrypted vault (internal/vault) opened on top of
+	// another backend: its paths are never local paths, whatever the
+	// backend underneath.
+	KindVault
+	// KindDispersed is a set of folders on three sources holding every
+	// file in shards, two of which are enough to read it (see
+	// internal/vault's split vaults).
+	KindDispersed
 )
 
 func (k Kind) String() string {
@@ -86,6 +94,10 @@ func (k Kind) String() string {
 		return "sftp"
 	case KindCloud:
 		return "cloud"
+	case KindVault:
+		return "vault"
+	case KindDispersed:
+		return "dispersed"
 	default:
 		return "?"
 	}
@@ -226,6 +238,14 @@ type RandomAccessFile interface {
 	io.Closer
 }
 
+// WriteBacker is an optional interface of a RandomAccessFile whose writes
+// only reach the source later (worked on in a local copy): WriteBack sends
+// them now. The FUSE mount calls it when an application closes the file or
+// asks for fsync(2).
+type WriteBacker interface {
+	WriteBack() error
+}
+
 // RandomAccessOpener is an optional interface a network backend may
 // implement to open files for random access, which the FUSE mount
 // (internal/fusemount) needs to let external applications read and write
@@ -248,6 +268,14 @@ type RandomAccessOpener interface {
 // reconnect after the network drops.
 type Redialer interface {
 	Redial() (FileSystem, error)
+}
+
+// SourceKeyer is an optional interface a backend implements when its Kind
+// and Label don't tell it apart from every other source (two encrypted
+// vaults may share a folder name): SourceKey is then what identifies it,
+// e.g. for its FUSE mount.
+type SourceKeyer interface {
+	SourceKey() string
 }
 
 // SingleSession is an optional interface a backend implements when it can't

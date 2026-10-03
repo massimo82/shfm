@@ -314,6 +314,11 @@ func (m *Model) startDialTransfer(g extGroup, destFS vfs.FileSystem, destDir str
 		for i, n := range g.names {
 			items[i] = fileops.Item{FS: srcFS, Path: srcFS.Join(g.dir, n)}
 		}
+		if destFS.Kind() == vfs.KindVault {
+			if res := refuseVaultInVault(items, prog); res != nil {
+				return res
+			}
+		}
 		if copyMode {
 			return fileops.Copy(items, destFS, destDir, prog)
 		}

@@ -17,7 +17,7 @@
 pkgname=shfm
 pkgver=@VERSION@
 pkgrel=1
-pkgdesc='Terminal file manager with SMB/NFS/SFTP/MTP support and local semantic search (Vulkan)'
+pkgdesc='Terminal file manager for local, MTP, network and cloud files, with encrypted vaults and local semantic search (Vulkan)'
 arch=('x86_64' 'aarch64')
 url='https://github.com/massimo82/shfm'
 license=('GPL-3.0-or-later' 'MIT')
@@ -92,7 +92,7 @@ build() {
   export GOPATH="$srcdir/gopath" GOCACHE="$srcdir/gocache"
   export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_CXXFLAGS="$CXXFLAGS" CGO_LDFLAGS="$LDFLAGS"
   export GOFLAGS='-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw'
-  go build -tags 'semantic vulkan cloud' -o shfm .
+  go build -tags 'semantic vulkan cloud vault' -o shfm .
 
   make -C contrib/gio-module
   make -C contrib/desktop-integration SHFM=/usr/bin/shfm

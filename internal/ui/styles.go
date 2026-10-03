@@ -106,6 +106,7 @@ const (
 	iconSourceGDrive    = "[GDR]"
 	iconSourceDropbox   = "[DBX]"
 	iconSourceOneDrive  = "[ODR]"
+	iconSourceVault     = "[VLT]"
 	iconSourceAdd       = "[ + ]"
 	iconSourceFormat    = "[FMT]"
 )

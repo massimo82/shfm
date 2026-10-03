@@ -52,6 +52,22 @@ func (r RemoteSource) DecryptedPassword() (string, error) {
 	return secret.Decrypt(r.EncryptedPassword)
 }
 
+// SplitVault is a saved split encrypted vault (internal/vault): a vault
+// stored on three folders of three sources, two of which are enough to
+// read it.
+type SplitVault struct {
+	Name  string       `json:"name"`
+	Parts [3]VaultPart `json:"parts"`
+}
+
+// VaultPart is one of a split vault's folders: on the local file system
+// ("local"), a saved remote source ("remote:" + its Name) or a cloud
+// account ("cloud:" + its Account).
+type VaultPart struct {
+	Source string `json:"source"`
+	Path   string `json:"path"`
+}
+
 // CloudSource is a cloud storage account (Google Drive, Dropbox, Microsoft
 // OneDrive — see internal/cloud) saved by the user once authorized. Kept
 // apart from RemoteSource: an account has no host or password, only an
@@ -109,6 +125,7 @@ type Config struct {
 	RemoteSources []RemoteSource `json:"remote_sources"`
 	CloudSources  []CloudSource  `json:"cloud_sources,omitempty"`
 	MirrorPairs   []MirrorPair   `json:"mirror_pairs,omitempty"`
+	SplitVaults   []SplitVault   `json:"split_vaults,omitempty"`
 
 	// LogLevel controls the verbosity of shfm's own diagnostic log (see
 	// internal/applog) — one of "debug", "info", "warn" or "error"
@@ -154,11 +171,17 @@ type Config struct {
 	// first checks that one is installed; set here, it isn't checked, for
 	// a terminal whose fonts are on another machine (SSH).
 	NerdIcons bool `json:"nerd_icons"`
+
+	// VaultAutoLockMinutes locks every unlocked encrypted vault (see
+	// internal/vault) after that many minutes without a key press or a
+	// click in shfm; 0 never locks them on its own (Ctrl+Alt+L, or quitting
+	// shfm, still does). Defaults to 15.
+	VaultAutoLockMinutes int `json:"vault_auto_lock_minutes"`
 }
 
 // Default returns the default configuration.
 func Default() *Config {
-	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn", Notifications: true, ShareClipboard: true}
+	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn", Notifications: true, ShareClipboard: true, VaultAutoLockMinutes: 15}
 }
 
 func path() (string, error) {

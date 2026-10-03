@@ -79,6 +79,12 @@ const (
 	DialogConnectCloud
 	DialogCloudAuth
 	DialogConfirmRemoveSource
+	DialogVaultUnlock
+	DialogNewVault
+	DialogVaultRecoveryKey
+	DialogVaultPassword
+	DialogVaultShowKey
+	DialogNewSplitVault
 )
 
 // Dialog is the state of any currently active modal.
@@ -179,6 +185,23 @@ type Dialog struct {
 	ArchiveKinds []archive.Kind
 	ArchiveNeeds []string
 	ArchiveNames []string
+
+	// The encrypted vault dialogs (see vault.go): the vault they're about;
+	// DialogVaultUnlock: the recovery key asked instead of the password;
+	// DialogNewVault: the choices toggled; DialogVaultRecoveryKey: the key
+	// shown, and whether it's right after creating the vault (closing it
+	// then shows the vault).
+	VaultTarget      *vaultTarget
+	VaultUseKey      bool
+	VaultNamesPlain  bool
+	VaultPQ          bool
+	VaultKey         string
+	VaultAfterCreate bool
+
+	// DialogNewSplitVault: the sources offered for the parts, and the one
+	// chosen for each (see splitvault.go).
+	SplitChoices []splitSource
+	SplitChoice  [3]int
 }
 
 func newSingleInputDialog(kind DialogKind, title, placeholder, value string) Dialog {
@@ -260,6 +283,11 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if d.Kind == DialogCloudAuth {
 		if cmd, handled := m.updateCloudAuthKey(msg); handled {
+			return cmd, true
+		}
+	}
+	if isVaultDialog(d.Kind) {
+		if cmd, handled := m.updateVaultDialogKey(msg); handled {
 			return cmd, true
 		}
 	}

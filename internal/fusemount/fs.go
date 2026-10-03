@@ -668,10 +668,28 @@ func (h *handle) Write(ctx context.Context, data []byte, off int64) (uint32, sys
 	return uint32(n), 0
 }
 
-// Flush and Fsync have nothing to do: every write has already been sent to
-// the server by the time it returns.
-func (h *handle) Flush(ctx context.Context) syscall.Errno               { return 0 }
-func (h *handle) Fsync(ctx context.Context, flags uint32) syscall.Errno { return 0 }
+// Flush (on every close(2)) and Fsync have nothing to do for most
+// backends: every write has already been sent to the server by the time it
+// returns. A file the backend works on in a copy (vfs.WriteBacker: an
+// encrypted vault's) is saved now, so that the application's close(2)
+// waits for it and learns if it failed — Release, the last close, comes
+// asynchronously, too late for both.
+func (h *handle) Flush(ctx context.Context) syscall.Errno { return h.sync() }
+func (h *handle) Fsync(ctx context.Context, flags uint32) syscall.Errno {
+	return h.sync()
+}
+
+func (h *handle) sync() syscall.Errno {
+	if !h.writable() {
+		return 0
+	}
+	return h.do(func(f vfs.RandomAccessFile) error {
+		if wb, ok := f.(vfs.WriteBacker); ok {
+			return wb.WriteBack()
+		}
+		return nil
+	})
+}
 
 func (h *handle) Release(ctx context.Context) syscall.Errno {
 	m := h.node.m
