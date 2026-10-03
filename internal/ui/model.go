@@ -298,8 +298,52 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case authWithdrawnMsg:
 		m.handleAuthWithdrawn(msg)
 		return nil
+	case tea.PasteMsg:
+		// Text pasted in the terminal (bracketed paste): a single line,
+		// without the line break copying often takes along.
+		msg.Content = strings.TrimRight(msg.Content, "\r\n")
+		return m.updateFocusedInput(msg)
 	}
-	return nil
+	// Anything else is for the text field being typed in, if any: the
+	// clipboard's content its own paste key (Ctrl+V) fetches, for one.
+	return m.updateFocusedInput(msg)
+}
+
+// updateFocusedInput hands msg to the text field with the focus — the
+// open dialog's, or the PATH field being edited — keeping what depends on
+// its text (a live filter) up to date.
+func (m *Model) updateFocusedInput(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	if d := &m.dialog; d.Kind != DialogNone {
+		if d.FocusIdx < 0 || d.FocusIdx >= len(d.Inputs) {
+			return nil
+		}
+		selected := ""
+		if d.Kind == DialogAssociations && d.ItemIdx >= 0 && d.ItemIdx < len(d.AssocShown) {
+			selected = d.AssocShown[d.ItemIdx].MimeType
+		}
+		before := d.Inputs[d.FocusIdx].Value()
+		d.Inputs[d.FocusIdx], cmd = d.Inputs[d.FocusIdx].Update(msg)
+		if d.Inputs[d.FocusIdx].Value() == before {
+			return cmd
+		}
+		switch d.Kind {
+		case DialogSearch:
+			if !d.SearchRecursive {
+				m.applyLiveFilter()
+			}
+		case DialogAssociations:
+			m.filterAssociations(selected)
+		case DialogChooseApp:
+			d.ItemIdx = -1
+			m.filterAppChooser()
+		}
+		return cmd
+	}
+	if p := m.activePane(); p.PathEditing {
+		p.PathInput, cmd = p.PathInput.Update(msg)
+	}
+	return cmd
 }
 
 // handleKey routes a keyboard event: to the active dialog's fields if one
