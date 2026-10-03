@@ -157,7 +157,7 @@ func FormatDevice(wholeDiskPath string, fsType FSType) (string, error) {
 	// the kind of small removable media this feature targets).
 	call := diskObj.Call(udisksService+".Block.Format", 0, "dos", map[string]dbus.Variant{})
 	if call.Err != nil {
-		return "", fmt.Errorf("creating partition table on %s: %w", wholeDiskPath, call.Err)
+		return "", fmt.Errorf("creating partition table on %s: %w", wholeDiskPath, udisksError(call.Err))
 	}
 
 	// 2. A single primary partition spanning the whole disk (offset=0,
@@ -166,7 +166,7 @@ func FormatDevice(wholeDiskPath string, fsType FSType) (string, error) {
 	call = diskObj.Call(udisksService+".PartitionTable.CreatePartition", 0,
 		uint64(0), uint64(0), "", "", map[string]dbus.Variant{})
 	if call.Err != nil {
-		return "", fmt.Errorf("creating partition on %s: %w", wholeDiskPath, call.Err)
+		return "", fmt.Errorf("creating partition on %s: %w", wholeDiskPath, udisksError(call.Err))
 	}
 	if err := call.Store(&partPath); err != nil {
 		return "", fmt.Errorf("unexpected reply while creating the partition: %w", err)
@@ -185,7 +185,7 @@ func FormatDevice(wholeDiskPath string, fsType FSType) (string, error) {
 	partObj := conn.Object(udisksService, partPath)
 	call = partObj.Call(udisksService+".Block.Format", 0, string(fsType), opts)
 	if call.Err != nil {
-		return "", fmt.Errorf("formatting the new partition as %s: %w", fsType, call.Err)
+		return "", fmt.Errorf("formatting the new partition as %s: %w", fsType, udisksError(call.Err))
 	}
 	return "/dev/" + path.Base(string(partPath)), nil
 }

@@ -21,6 +21,7 @@ package drives
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -243,10 +244,10 @@ func TryAutoMount(devicePath, name string) (string, error) {
 	if directErr == nil {
 		return mp, nil
 	}
-	return "", fmt.Errorf(
-		"udisks2 mount failed (%v); direct mount(2) also failed (%v) — "+
-			"you may need administrator privileges, or udisks2 may not be running",
-		udisksErr, directErr)
+	if errors.Is(udisksErr, ErrUDisks2Missing) {
+		return "", fmt.Errorf("%w (direct mount(2) failed too: %v)", udisksErr, directErr)
+	}
+	return "", fmt.Errorf("udisks2 mount failed (%v); direct mount(2) also failed (%v)", udisksErr, directErr)
 }
 
 // tryDirectMount mounts devicePath by calling the mount(2) syscall directly
@@ -263,14 +264,34 @@ func tryDirectMount(devicePath, name string) (string, error) {
 	}
 	var lastErr error
 	for _, fstype := range fsTypeCandidates() {
-		if err := syscall.Mount(devicePath, mp, fstype, 0, ""); err == nil {
+		err := syscall.Mount(devicePath, mp, fstype, 0, "")
+		if err == nil {
 			return mp, nil
-		} else {
-			lastErr = err
 		}
+		if fatal := directMountFailure(devicePath, err); fatal != nil {
+			os.Remove(mp)
+			return "", fatal
+		}
+		lastErr = err
 	}
 	os.Remove(mp)
 	return "", fmt.Errorf("no recognized filesystem for %s (last error: %v)", devicePath, lastErr)
+}
+
+// directMountFailure tells apart, among mount(2)'s errors, those that no
+// other filesystem type would change — no privileges, a busy or missing
+// device — returning them explained, and nil for the ones meaning "not
+// this filesystem" (ENODEV, EINVAL...), where the next type is tried.
+func directMountFailure(devicePath string, err error) error {
+	switch {
+	case errors.Is(err, syscall.EPERM), errors.Is(err, syscall.EACCES):
+		return fmt.Errorf("mounting %s needs administrator privileges (%v)", devicePath, err)
+	case errors.Is(err, syscall.EBUSY):
+		return fmt.Errorf("%s is busy, already mounted or in use (%v)", devicePath, err)
+	case errors.Is(err, syscall.ENOENT), errors.Is(err, syscall.ENXIO), errors.Is(err, syscall.ENOTBLK):
+		return fmt.Errorf("%s is not there any more (%v)", devicePath, err)
+	}
+	return nil
 }
 
 // Unmount unmounts mountPoint, preferring udisks2 via D-Bus (matching

@@ -20,6 +20,7 @@
 package drives
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -40,6 +41,24 @@ const (
 	udisksService         = "org.freedesktop.UDisks2"
 	udisksFilesystemIface = udisksService + ".Filesystem"
 )
+
+// ErrUDisks2Missing reports that udisks2 isn't installed: the system bus
+// has no UDisks2 service, nor a way to start one ("The name is not
+// activatable"), as when it was removed as an orphan along with GVfs.
+var ErrUDisks2Missing = errors.New("udisks2 is not installed: install it to mount and format removable media without root")
+
+// udisksError explains a failed udisks2 call: a missing daemon is
+// ErrUDisks2Missing rather than the bus's cryptic reply.
+func udisksError(err error) error {
+	var dbusErr dbus.Error
+	if errors.As(err, &dbusErr) {
+		switch dbusErr.Name {
+		case "org.freedesktop.DBus.Error.ServiceUnknown", "org.freedesktop.DBus.Error.NameHasNoOwner":
+			return ErrUDisks2Missing
+		}
+	}
+	return fmt.Errorf("udisks2: %w", err)
+}
 
 // blockObjectPath returns the UDisks2 D-Bus object path for a device like
 // "/dev/sdb1", following udisks2's deterministic naming convention (the
@@ -62,7 +81,7 @@ func MountViaUDisks2(devicePath string) (string, error) {
 	var mountPath string
 	call := obj.Call(udisksFilesystemIface+".Mount", 0, map[string]dbus.Variant{})
 	if call.Err != nil {
-		return "", fmt.Errorf("udisks2: %w", call.Err)
+		return "", udisksError(call.Err)
 	}
 	if err := call.Store(&mountPath); err != nil {
 		return "", fmt.Errorf("udisks2: unexpected reply: %w", err)
@@ -81,7 +100,7 @@ func UnmountViaUDisks2(devicePath string) error {
 	obj := conn.Object(udisksService, blockObjectPath(devicePath))
 	call := obj.Call(udisksFilesystemIface+".Unmount", 0, map[string]dbus.Variant{})
 	if call.Err != nil {
-		return fmt.Errorf("udisks2: %w", call.Err)
+		return udisksError(call.Err)
 	}
 	return nil
 }
