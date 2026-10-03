@@ -29,7 +29,6 @@ import (
 	"shfm/internal/applog"
 	"shfm/internal/config"
 	"shfm/internal/fileops"
-	"shfm/internal/mtp"
 	"shfm/internal/vfs"
 	"shfm/internal/wlclip"
 )
@@ -209,7 +208,7 @@ func (m *Model) resolveURI(u string, local vfs.FileSystem) (extSource, string, e
 		}
 	}
 	if scheme == "mtp" {
-		devices, _ := mtp.DiscoverDevices()
+		devices, _ := discoverMTPDevices()
 		for _, d := range devices {
 			label := "mtp://" + d.Label()
 			if path, ok := pathUnder(label, scheme, rest); ok {

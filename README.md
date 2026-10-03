@@ -1957,7 +1957,7 @@ internal/ui/                    bubbletea interface (panes, dialogs, mouse, task
 internal/semantic/              optional semantic (content) search — see "Building" above
 internal/semantic/extract/      text extraction for it (TXT/MD/LaTeX/PDF/DOCX, archives, pandoc/LibreOffice)
 docs/                           documentation assets (the screenshot above)
-third_party/                    locally patched/vendored libraries (go-nfs-client, go-smb, yaml.v3, x/tools, llama-go, gokrazy-rsync)
+third_party/                    locally patched/vendored libraries (go-nfs-client, go-smb, yaml.v3, x/tools, llama-go, gokrazy-rsync, hanwen-usb)
 vendor/                         Go module dependencies (the default build works offline from here)
 ```
 

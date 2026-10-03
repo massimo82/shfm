@@ -46,6 +46,9 @@ const RootHandle uint32 = 0x00000000
 // FormatAssociation is the PTP object format code for a folder.
 const FormatAssociation uint16 = extmtp.OFC_Association
 
+// errNoUSB: libusb couldn't be initialized, there's no USB bus to look at.
+var errNoUSB = errors.New("mtp: USB is not available (libusb could not be initialized)")
+
 // ErrNotSupported indicates the device replied "operation not supported" to
 // an optional operation (typically rename): the caller can fall back to
 // copy+delete.
@@ -72,6 +75,12 @@ func (d DeviceInfo) Label() string {
 // responders don't expose those without an open USB handle.
 func DiscoverDevices() ([]DeviceInfo, error) {
 	ctx := usb.NewContext()
+	if ctx == nil {
+		// libusb_init failed (no usbfs: a container, WSL, a CI runner):
+		// NewContext doesn't say so, but leaves the context nil, and libusb
+		// would crash using it.
+		return nil, errNoUSB
+	}
 	defer ctx.Exit()
 
 	devs, err := extmtp.FindDevices(ctx)

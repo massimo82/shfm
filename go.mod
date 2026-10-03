@@ -12,6 +12,8 @@ replace github.com/gokrazy/rsync => ./third_party/gokrazy-rsync
 
 replace github.com/jfjallid/go-smb => ./third_party/go-smb
 
+replace github.com/hanwen/usb => ./third_party/hanwen-usb
+
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.10

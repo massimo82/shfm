@@ -120,8 +120,8 @@ github.com/hanwen/go-fuse/v2/splice
 # github.com/hanwen/go-mtpfs v1.0.0
 ## explicit; go 1.12
 github.com/hanwen/go-mtpfs/mtp
-# github.com/hanwen/usb v0.0.0-20141217151552-69aee4530ac7
-## explicit
+# github.com/hanwen/usb v0.0.0-20141217151552-69aee4530ac7 => ./third_party/hanwen-usb
+## explicit; go 1.21
 github.com/hanwen/usb
 # github.com/jfjallid/go-smb v0.12.0 => ./third_party/go-smb
 ## explicit; go 1.24.0
@@ -296,3 +296,4 @@ software.sslmate.com/src/go-pkcs12/internal/rc2
 # golang.org/x/tools => ./third_party/tools
 # github.com/gokrazy/rsync => ./third_party/gokrazy-rsync
 # github.com/jfjallid/go-smb => ./third_party/go-smb
+# github.com/hanwen/usb => ./third_party/hanwen-usb

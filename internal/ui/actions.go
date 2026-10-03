@@ -533,10 +533,18 @@ func driveDisplayName(vendor, model string) string {
 	return name + " "
 }
 
+// The source picker's views of the machine's disks and USB devices:
+// variables, so that tests list none rather than the real ones.
+var (
+	listLocalDrives     = drives.ListLocal
+	listRemovableDrives = drives.ListRemovable
+	discoverMTPDevices  = mtp.DiscoverDevices
+)
+
 func (m *Model) openSourceMenu() {
-	local, _ := drives.ListLocal()
-	removable, _ := drives.ListRemovable()
-	mtpDevices, _ := mtp.DiscoverDevices()
+	local, _ := listLocalDrives()
+	removable, _ := listRemovableDrives()
+	mtpDevices, _ := discoverMTPDevices()
 
 	// Removable devices already mounted are shown in their own section
 	// (with the [USB] icon) rather than among the generic disks, to avoid
