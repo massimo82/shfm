@@ -52,8 +52,12 @@ type sysclipReadyMsg struct {
 	err error
 }
 
-// sysclipFilesMsg reports files another application put on the clipboard.
-type sysclipFilesMsg struct{ uris []string }
+// sysclipFilesMsg reports files another application put on the clipboard,
+// as c saw them.
+type sysclipFilesMsg struct {
+	c    *wlclip.Client
+	uris []string
+}
 
 var clipboardFileTypes = []string{"text/uri-list", "x-special/gnome-copied-files"}
 
@@ -67,9 +71,24 @@ func (m *Model) waitForSysclipMsg() tea.Cmd {
 }
 
 func (m *Model) handleSysclipReady(msg sysclipReadyMsg) {
+	announce := m.sysclipAnnounce
+	m.sysclipAnnounce = false
+	if !m.cfg.ShareClipboard || m.sysclip != nil {
+		// Turned off (or on again) while connecting.
+		if msg.c != nil {
+			msg.c.Close()
+		}
+		return
+	}
 	if msg.err != nil {
 		applog.Info("system clipboard not shared", "error", msg.err)
+		if announce {
+			m.setError("Clipboard sharing unavailable: %v", msg.err)
+		}
 		return
+	}
+	if announce {
+		m.setStatus("Clipboard shared with the desktop")
 	}
 	m.sysclip = msg.c
 	ch := m.sysclipCh
@@ -89,7 +108,7 @@ func (m *Model) handleSysclipReady(msg sysclipReadyMsg) {
 				continue
 			}
 			if uris := parseURIList(data); len(uris) > 0 {
-				ch <- sysclipFilesMsg{uris: uris}
+				ch <- sysclipFilesMsg{c: c, uris: uris}
 				return
 			}
 		}
@@ -99,9 +118,38 @@ func (m *Model) handleSysclipReady(msg sysclipReadyMsg) {
 }
 
 func (m *Model) handleSysclipFiles(msg sysclipFilesMsg) {
+	if m.sysclip == nil || msg.c != m.sysclip {
+		return // from a connection since closed
+	}
 	m.extClip = msg.uris
 	m.useExtClip = true
 	m.setStatus("%d item(s) from the system clipboard ready to paste", len(msg.uris))
+}
+
+// toggleShareClipboard turns the shared clipboard on or off, remembering
+// the choice in the config. Turning it off drops what shfm put on the
+// system clipboard, and files copied elsewhere not pasted yet; shfm's own
+// clipboard stays.
+func (m *Model) toggleShareClipboard() {
+	m.cfg.ShareClipboard = !m.cfg.ShareClipboard
+	m.cfg.Save()
+	if !m.cfg.ShareClipboard {
+		if m.sysclip != nil {
+			m.sysclip.Close()
+			m.sysclip = nil
+		}
+		m.extClip, m.useExtClip = nil, false
+		m.sysclipAnnounce = false
+		m.setStatus("Clipboard no longer shared")
+		return
+	}
+	m.sysclipAnnounce = true
+	m.setStatus("Sharing the clipboard…")
+	m.queueCmd(connectSysclip)
+	if !m.sysclipWaiting {
+		m.sysclipWaiting = true
+		m.queueCmd(m.waitForSysclipMsg())
+	}
 }
 
 // publishClipboard puts shfm's clipboard on the system clipboard.

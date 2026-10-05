@@ -19,6 +19,7 @@ package ui
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -99,5 +100,39 @@ func TestSharedClipboardBothWays(t *testing.T) {
 	m.doCopyToClipboard()
 	if m.useExtClip {
 		t.Fatal("shfm's own copy should replace the external clipboard")
+	}
+}
+
+// TestToggleShareClipboard: the shortcut turns the shared clipboard off
+// and on, remembering it; off, files copied elsewhere are dropped, and a
+// connection or files arriving late are ignored.
+func TestToggleShareClipboard(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", dir)
+	m := newTestModel()
+	m.extClip, m.useExtClip = []string{"file:///elsewhere"}, true
+
+	m.toggleShareClipboard()
+	if m.cfg.ShareClipboard || m.useExtClip || m.extClip != nil {
+		t.Fatalf("off: share %v, useExtClip %v, extClip %v", m.cfg.ShareClipboard, m.useExtClip, m.extClip)
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, "shfm", "config.json")); err != nil ||
+		!strings.Contains(string(data), `"share_clipboard": false`) {
+		t.Errorf("the choice isn't saved: %s, %v", data, err)
+	}
+	m.handleSysclipFiles(sysclipFilesMsg{uris: []string{"file:///late"}})
+	if m.useExtClip {
+		t.Error("files from a closed connection were taken")
+	}
+
+	m.queued = nil
+	m.toggleShareClipboard()
+	if !m.cfg.ShareClipboard || len(m.queued) == 0 {
+		t.Fatalf("on: share %v, %d commands queued", m.cfg.ShareClipboard, len(m.queued))
+	}
+	m.handleSysclipReady(sysclipReadyMsg{err: errors.New("no compositor")})
+	if !m.statusErr || !strings.Contains(m.status, "unavailable") {
+		t.Errorf("a failed connection says nothing: %q", m.status)
 	}
 }

@@ -166,8 +166,9 @@ to toggle between single- and dual-pane layout.
   protocol (`internal/wlclip`, no `wl-copy`/`wl-paste` needed): works on
   wlroots compositors (labwc, sway, Hyprland...) and KDE Plasma; elsewhere
   it quietly stays off. What shfm copies stays on the clipboard while shfm
-  runs. On by default; set `"share_clipboard": false` in
-  `$XDG_CONFIG_HOME/shfm/config.json` to keep the clipboard private.
+  runs. On by default; `Ctrl+Alt+C` turns it off (and on again),
+  remembered as `"share_clipboard"` in `$XDG_CONFIG_HOME/shfm/config.json`:
+  off, the clipboard stays private.
 - **Colored listing** by file type (folders, symlinks, executables,
   archives, images, media) and by permissions (read-only entries are
   shown in a fainter shade).
@@ -1082,6 +1083,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+L` / click title | toggle single/dual pane |
 | `Ctrl+H` / `.` | show/hide hidden files (dotfiles, and `lost+found` at a drive's root); remembered as `show_hidden` in `config.json` |
 | `Ctrl+Alt+N` | Nerd Font icons on/off, after checking a Nerd Font is installed; remembered as `nerd_icons` in `config.json` |
+| `Ctrl+Alt+C` | Clipboard shared with the desktop on/off; remembered as `share_clipboard` in `config.json` |
 | `Space`, `a`, `A` | multi-selection |
 | `Ctrl+C` | copy to clipboard |
 | `Ctrl+V` | paste (as a copy) |

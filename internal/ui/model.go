@@ -149,6 +149,10 @@ type Model struct {
 	sysclipCh  chan sysclipFilesMsg
 	extClip    []string
 	useExtClip bool
+	// sysclipWaiting: a command already waits on sysclipCh.
+	// sysclipAnnounce: the sharing was just turned on, so its outcome
+	// goes in the status line.
+	sysclipWaiting, sysclipAnnounce bool
 
 	// picker is set when shfm runs as a file chooser: see picker.go.
 	picker *pickerState
@@ -213,6 +217,7 @@ func homeOrRoot() string {
 func (m *Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.waitForTaskMsg(), m.waitForSizeMsg(), m.waitForConnectMsg(), m.waitForOpenMsg(), m.waitForSearchMsg(), m.waitForSemanticMsg(), mirrorTick(time.Second)}
 	if m.cfg.ShareClipboard {
+		m.sysclipWaiting = true
 		cmds = append(cmds, connectSysclip, m.waitForSysclipMsg())
 	}
 	return tea.Batch(cmds...)
@@ -444,6 +449,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.toggleLayout()
 	case config.ActionToggleIcons:
 		m.toggleIcons()
+	case config.ActionShareClipboard:
+		m.toggleShareClipboard()
 	case config.ActionToggleHidden:
 		m.toggleHidden(listHeight)
 	case config.ActionTaskList:
