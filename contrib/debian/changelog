@@ -1,3 +1,10 @@
+shfm (0.5.7) unstable; urgency=medium
+
+  * Mounting a source again right after unmounting it no longer
+    fails now and then.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Mon, 05 Oct 2026 23:30:00 +0200
+
 shfm (0.5.6) unstable; urgency=medium
 
   * The progress of a copy that ends before its sizes are all measured

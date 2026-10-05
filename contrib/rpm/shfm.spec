@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.5.6
+Version:        0.5.7
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -141,6 +141,10 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Mon Oct 05 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.7-1
+- Mounting a source again right after unmounting it no longer
+  fails now and then.
+
 * Mon Oct 05 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.6-1
 - The progress of a copy that ends before its sizes are all measured
   now shows the final totals.
