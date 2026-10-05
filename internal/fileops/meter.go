@@ -98,13 +98,18 @@ func startMeter(prog *Progress, scan []Item) *meter {
 }
 
 // finish stops the meter, waiting for its scan (which must not touch the
-// sources once the operation is over), and reports the last count.
+// sources once the operation is over), and reports the last count. A
+// scan cut short by the end of the operation still makes the totals
+// final: report raises them to what was copied.
 func (m *meter) finish() {
 	if m == nil {
 		return
 	}
 	close(m.stop)
 	m.wg.Wait()
+	m.mu.Lock()
+	m.known = true
+	m.mu.Unlock()
 	m.report()
 }
 
