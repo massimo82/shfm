@@ -1,3 +1,12 @@
+shfm (0.5.4) unstable; urgency=medium
+
+  * The progress of copying, moving to another source and compressing is
+    shown in bytes, with the speed, the time left and the files copied out
+    of how many; for cloud storage, the bytes the service received.
+  * Cancelling a copy stops even halfway through a file, removing it.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Mon, 05 Oct 2026 21:00:00 +0200
+
 shfm (0.5.3) unstable; urgency=medium
 
   * Opening a Dropbox account checks that its authorization reaches the
