@@ -164,6 +164,12 @@ type Model struct {
 	lastInput    time.Time
 	vaultTicking bool
 
+	// The help line's carousel (see helpline.go): the hints it last showed,
+	// how far they have scrolled, and whether its tick is running.
+	helpText    string
+	helpOffset  int
+	helpTicking bool
+
 	quitting bool
 }
 
@@ -238,6 +244,9 @@ func (m *Model) setError(format string, args ...interface{}) {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.update(msg)
+	if tick := m.ensureHelpTick(); tick != nil {
+		m.queueCmd(tick)
+	}
 	if len(m.queued) > 0 {
 		cmd = tea.Batch(append(m.queued, cmd)...)
 		m.queued = nil
@@ -307,6 +316,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 		return m.waitForSemanticMsg()
 	case mirrorTickMsg:
 		return m.handleMirrorTick()
+	case helpTickMsg:
+		return m.handleHelpTick()
 	case sysclipReadyMsg:
 		m.handleSysclipReady(msg)
 		return nil
