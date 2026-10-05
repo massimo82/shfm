@@ -1,3 +1,10 @@
+shfm (0.5.5) unstable; urgency=medium
+
+  * Ctrl+Alt+C turns the clipboard shared with the desktop on and off,
+    remembering the choice.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Mon, 05 Oct 2026 22:00:00 +0200
+
 shfm (0.5.4) unstable; urgency=medium
 
   * The progress of copying, moving to another source and compressing is
