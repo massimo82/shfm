@@ -42,8 +42,9 @@ func TestAboutDialog(t *testing.T) {
 		"https://massimo82.github.io/shfm/",
 		"Designed by Massimo Cavalleri in Milan, Italy :)",
 		"Copyright (C) 2026 Massimo Cavalleri",
-		"GNU General Public License",
-		"The third-party code bundled",
+		"GNU GPL version 3 or later",
+		"NO WARRANTY",
+		"Bundled third-party code",
 	} {
 		if !strings.Contains(box, want) {
 			t.Errorf("About dialog lacks %q:\n%s", want, box)

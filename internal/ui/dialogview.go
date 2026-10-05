@@ -593,21 +593,15 @@ func (m *Model) renderDialogBox() string {
 	return dialogBox(64).Render(b.String())
 }
 
-// aboutCopyright is the copyright notice every source file carries, its
-// paragraphs left unwrapped for the About box to wrap.
-const aboutCopyright = "Copyright (C) 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com>\n\n" +
-	"shfm is free software: you can redistribute it and/or modify it under " +
-	"the terms of the GNU General Public License as published by the Free " +
-	"Software Foundation, either version 3 of the License, or (at your " +
-	"option) any later version.\n\n" +
-	"shfm is distributed in the hope that it will be useful, but WITHOUT " +
-	"ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or " +
-	"FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License " +
-	"for more details.\n\n" +
-	"You should have received a copy of the GNU General Public License " +
-	"along with shfm.  If not, see <https://www.gnu.org/licenses/>.\n\n" +
-	"The third-party code bundled with this repository remains under its " +
-	"own license, found alongside its sources."
+// aboutCopyright is the short notice the GNU Coding Standards give for
+// --version, which carries the "Appropriate Legal Notices" GPLv3 asks of
+// an interactive interface: copyright, no warranty, the freedom to
+// redistribute and where the license is.
+const aboutCopyright = "Copyright (C) 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com>\n" +
+	"License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.\n" +
+	"This is free software: you are free to change and redistribute it. " +
+	"There is NO WARRANTY, to the extent permitted by law. " +
+	"Bundled third-party code keeps its own license."
 
 // aboutDescription describes shfm as this build is: the optional modules
 // (cloud storage, semantic search, encrypted vaults) only when built in.
