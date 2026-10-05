@@ -69,7 +69,7 @@ func authClient(ts oauth2.TokenSource) *http.Client {
 // APIError is an error answer from a service. It's never a lost
 // connection (see vfs.IsConnectionFailure): the service answered.
 type APIError struct {
-	Status  int    // HTTP status
+	Status  int    // HTTP status, 0 when unknown
 	Code    string // the service's own error code, if any
 	Message string
 	kind    error // os.ErrNotExist, os.ErrExist, os.ErrPermission, ErrAuthorization or nil
@@ -80,7 +80,12 @@ func (e *APIError) Error() string {
 	if msg == "" {
 		msg = http.StatusText(e.Status)
 	}
-	if e.Code != "" {
+	switch {
+	case e.Status == 0 && e.Code == "": // a status the SDK didn't keep
+		return msg
+	case e.Status == 0:
+		return fmt.Sprintf("%s (%s)", msg, e.Code)
+	case e.Code != "":
 		return fmt.Sprintf("%s (%s, HTTP %d)", msg, e.Code, e.Status)
 	}
 	return fmt.Sprintf("%s (HTTP %d)", msg, e.Status)

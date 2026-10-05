@@ -46,6 +46,9 @@ type fakeDropbox struct {
 	next     int
 	clock    time.Time
 	throttle int
+	// tokenLacks and appLacks: a permission the token, or the app itself,
+	// doesn't have, failing the files/ routes as Dropbox does.
+	tokenLacks, appLacks string
 }
 
 type fakeDbxItem struct {
@@ -123,6 +126,15 @@ func (f *fakeDropbox) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	route := parts[1]
+	if strings.HasPrefix(route, "files/") && f.appLacks != "" {
+		http.Error(w, fmt.Sprintf(`Error in call to API function "%s": Your app (ID: 1234) is not permitted to access this endpoint because it does not have the required scope '%s'. The owner of the app can enable the scope for the app using the Permissions tab on the App Console.`, route, f.appLacks), http.StatusBadRequest)
+		return
+	}
+	if strings.HasPrefix(route, "files/") && f.tokenLacks != "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error_summary": "missing_scope/",
+			"error": map[string]any{".tag": "missing_scope", "required_scope": f.tokenLacks}})
+		return
+	}
 	arg := r.Header.Get("Dropbox-API-Arg")
 	var body []byte
 	if arg == "" {

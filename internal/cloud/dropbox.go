@@ -29,10 +29,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	dbx "github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox"
+	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox/auth"
 	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox/files"
 	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox/retry"
 	"github.com/dropbox/dropbox-sdk-go-unofficial/v6/dropbox/users"
@@ -124,9 +126,42 @@ func dropboxErr(err error) error {
 	}
 	summary := err.Error()
 	e := &APIError{Message: summary}
-	var internal dbx.SDKInternalError
-	if errors.As(err, &internal) {
+	var (
+		internal dbx.SDKInternalError
+		authErr  auth.AuthAPIError
+		badReq   auth.BadRequest
+		access   auth.AccessAPIError
+		rate     auth.RateLimitAPIError
+	)
+	switch {
+	case errors.As(err, &internal):
 		e.Status, e.Message = internal.StatusCode, internal.Content
+	case errors.As(err, &authErr):
+		e.Status = http.StatusUnauthorized
+		if a := authErr.AuthError; a != nil && a.Tag == auth.AuthErrorMissingScope {
+			// A token issued before the app got the permission keeps
+			// lacking it: a new authorization has it.
+			scope := "a permission"
+			if a.MissingScope != nil && a.MissingScope.RequiredScope != "" {
+				scope = a.MissingScope.RequiredScope
+			}
+			e.kind = ErrAuthorization
+			e.Message = "authorization lacks " + scope + ": authorize again"
+			return e
+		}
+	case errors.As(err, &badReq):
+		// Dropbox explains a bad request in plain text, after a prefix
+		// naming the route.
+		e.Status = http.StatusBadRequest
+		e.Message = dropboxCallPrefix.ReplaceAllString(summary, "")
+		if m := dropboxAppScope.FindStringSubmatch(summary); m != nil {
+			e.Message = "app lacks " + m[1] + ": enable it in the App Console"
+			return e
+		}
+	case errors.As(err, &access):
+		e.Status, e.kind = http.StatusForbidden, os.ErrPermission
+	case errors.As(err, &rate):
+		e.Status = http.StatusTooManyRequests
 	}
 	switch {
 	case strings.Contains(summary, "invalid_access_token"), strings.Contains(summary, "expired_access_token"):
@@ -148,6 +183,13 @@ func dropboxErr(err error) error {
 	}
 	return e
 }
+
+var (
+	dropboxCallPrefix = regexp.MustCompile(`^Error in call to API function "[^"]*": `)
+	// dropboxAppScope finds the permission named by the bad request
+	// answering an app that doesn't have it.
+	dropboxAppScope = regexp.MustCompile(`required scope '([^']+)'`)
+)
 
 func dropboxEntry(m files.IsMetadata) (vfs.Entry, bool) {
 	switch m := m.(type) {
@@ -333,9 +375,18 @@ func (d *dropbox) setModTime(ctx context.Context, p string, t time.Time) error {
 	return vfs.ErrNotSupported
 }
 
+// account also checks that the authorization reaches the files: reading
+// the account takes a permission every authorization has, so it alone
+// wouldn't notice one lacking the others (issued before the app got
+// them, or by an app without them).
 func (d *dropbox) account(ctx context.Context) (string, error) {
 	a, err := d.users.GetCurrentAccountContext(ctx)
 	if err != nil {
+		return "", dropboxErr(err)
+	}
+	arg := files.NewListFolderArg("")
+	arg.Limit = 1
+	if _, err := d.files.ListFolderContext(ctx, arg); err != nil {
 		return "", dropboxErr(err)
 	}
 	return firstNonEmpty(a.Email, a.Name.DisplayName, "Dropbox"), nil

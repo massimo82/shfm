@@ -20,7 +20,12 @@
 package cloud
 
 import (
+	"errors"
+	"os"
+	"strings"
 	"testing"
+
+	"golang.org/x/oauth2"
 
 	"shfm/internal/vfs"
 )
@@ -56,5 +61,47 @@ func TestDropboxCaseOnlyRename(t *testing.T) {
 	}
 	if got := string(readFile(t, fs, "/NAME.txt")); got != "keep me" {
 		t.Errorf("after a case-only rename: %q", got)
+	}
+}
+
+// TestDropboxMissingScope: an authorization lacking a permission (issued
+// before the app got it) is one to renew, already when the account is
+// opened; an app lacking it says where to give it.
+func TestDropboxMissingScope(t *testing.T) {
+	isolateConfig(t)
+	f, fs := newTestDropboxFS(t)
+	f.tokenLacks = "files.metadata.read"
+	_, err := fs.List("/")
+	if !errors.Is(err, ErrAuthorization) || !strings.Contains(err.Error(), "files.metadata.read") ||
+		!strings.Contains(err.Error(), "HTTP 401") {
+		t.Errorf("List without the permission: %v, want ErrAuthorization naming it", err)
+	}
+
+	acc := Account{Provider: Dropbox, ID: "acc", ClientID: "key"}
+	saveToken("acc", &oauth2.Token{AccessToken: testToken, RefreshToken: "r"})
+	if _, err := Dial(acc); !errors.Is(err, ErrAuthorization) {
+		t.Errorf("Dial without the permission: %v, want ErrAuthorization", err)
+	}
+
+	f.tokenLacks, f.appLacks = "", "files.metadata.read"
+	_, err = Dial(acc)
+	if err == nil || errors.Is(err, ErrAuthorization) || !strings.Contains(err.Error(), "App Console") ||
+		strings.Contains(err.Error(), "Error in call") || !strings.Contains(err.Error(), "HTTP 400") {
+		t.Errorf("Dial with an app without the permission: %v", err)
+	}
+
+	f.appLacks = ""
+	if _, err := Dial(acc); err != nil {
+		t.Errorf("Dial with every permission: %v", err)
+	}
+}
+
+// TestDropboxErrorStatus: a route error doesn't claim an HTTP status the
+// SDK didn't keep.
+func TestDropboxErrorStatus(t *testing.T) {
+	_, fs := newTestDropboxFS(t)
+	_, err := fs.List("/missing")
+	if !errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "HTTP 0") {
+		t.Errorf("List of a missing folder: %v", err)
 	}
 }
