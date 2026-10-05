@@ -575,6 +575,7 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString("Website: https://massimo82.github.io/shfm/\n\n")
 		b.WriteString("Designed by Massimo Cavalleri in Milan, Italy :)")
 		b.WriteString("\n\n")
+		b.WriteString(aboutCopyright + "\n\n")
 		b.WriteString(styleDim.Render("press any key to close"))
 		return dialogBox(64).Render(b.String())
 
@@ -592,28 +593,40 @@ func (m *Model) renderDialogBox() string {
 	return dialogBox(64).Render(b.String())
 }
 
+// aboutCopyright is the copyright notice every source file carries, its
+// paragraphs left unwrapped for the About box to wrap.
+const aboutCopyright = "Copyright (C) 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com>\n\n" +
+	"shfm is free software: you can redistribute it and/or modify it under " +
+	"the terms of the GNU General Public License as published by the Free " +
+	"Software Foundation, either version 3 of the License, or (at your " +
+	"option) any later version.\n\n" +
+	"shfm is distributed in the hope that it will be useful, but WITHOUT " +
+	"ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or " +
+	"FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License " +
+	"for more details.\n\n" +
+	"You should have received a copy of the GNU General Public License " +
+	"along with shfm.  If not, see <https://www.gnu.org/licenses/>.\n\n" +
+	"The third-party code bundled with this repository remains under its " +
+	"own license, found alongside its sources."
+
 // aboutDescription describes shfm as this build is: the optional modules
 // (cloud storage, semantic search, encrypted vaults) only when built in.
 func aboutDescription() string {
-	where := " and network shares (SMB, NFS, SFTP)"
+	features := []string{"removable drives", "MTP", "SMB", "NFS", "SFTP"}
 	if cloud.Available {
-		where = ", network shares (SMB, NFS, SFTP) and cloud storage (Google Drive, Dropbox, Microsoft OneDrive)"
+		features = append(features, "cloud storage")
 	}
-	search := "searches by name"
-	if semantic.Available {
-		search = "searches by name or, fully locally, by content"
-	}
-	text := "shfm is a file manager for the terminal. It browses and " +
-		"manages files on local disks, removable drives, phones and " +
-		"cameras (MTP)" + where + " from a single interface, driven by " +
-		"keyboard or mouse, in one pane or two side by side.\n\n" +
-		"Besides copying, moving and deleting in the background, it " +
-		"handles archives, the trash, automatic mirrors and file " +
-		"associations, formats removable drives, and " + search + "."
 	if vault.Available {
-		text += " It keeps encrypted vaults in the standard age format, even split across three sources."
+		features = append(features, "encrypted vaults (normal or split across sources)")
 	}
-	return text + " It also works as the desktop's file manager and file dialog."
+	features = append(features, "desktop integration", "search")
+	if semantic.Available {
+		features = append(features, "semantic search")
+	}
+	features = append(features, "file associations", "formatting", "trash",
+		"automatic mirrors", "archives")
+	return "shfm is a file manager for the terminal. It includes all the " +
+		"modern features, such as: " + strings.Join(features, ", ") + " and more."
 }
 
 // dialogBox is styleDialogBox for a box whose content area plus padding is

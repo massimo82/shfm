@@ -27,7 +27,8 @@ import (
 )
 
 // TestAboutDialog: Ctrl+Alt+A opens About with the name and version, a
-// description, the website and the author's line; any key closes it.
+// description, the website, the author's line and the copyright notice;
+// any key closes it.
 func TestAboutDialog(t *testing.T) {
 	m := newTestModel()
 	m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl | tea.ModAlt})
@@ -40,6 +41,9 @@ func TestAboutDialog(t *testing.T) {
 		"shfm is a file manager for the terminal.",
 		"https://massimo82.github.io/shfm/",
 		"Designed by Massimo Cavalleri in Milan, Italy :)",
+		"Copyright (C) 2026 Massimo Cavalleri",
+		"GNU General Public License",
+		"The third-party code bundled",
 	} {
 		if !strings.Contains(box, want) {
 			t.Errorf("About dialog lacks %q:\n%s", want, box)
