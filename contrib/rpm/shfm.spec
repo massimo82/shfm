@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.5.7
+Version:        0.5.8
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -141,6 +141,10 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Tue Oct 06 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.8-1
+- The help line scrolls round when it is too long for the terminal,
+  instead of being cut.
+
 * Mon Oct 05 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.7-1
 - Mounting a source again right after unmounting it no longer
   fails now and then.

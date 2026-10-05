@@ -1,4 +1,4 @@
-# shfm — Shell File Manager v0.5.7
+# shfm — Shell File Manager v0.5.8
 
 shfm is a file manager for the terminal. It browses and manages files
 on local disks, removable drives, phones and cameras (MTP), network
@@ -111,7 +111,8 @@ per-pane **detail line** showing the permissions, owner, group and
 modification/creation dates of whichever entry is currently under that
 pane's cursor (a file, folder, or symlink), updating as the cursor moves;
 and, shared below both panes even in **dual-pane** mode, a single summary
-help line with the main shortcuts. Click the title bar, or press Ctrl+L,
+help line with the main shortcuts (scrolling round when the terminal is
+too narrow for it). Click the title bar, or press Ctrl+L,
 to toggle between single- and dual-pane layout.
 
 ## Features in detail
@@ -1971,7 +1972,7 @@ vendor/                         Go module dependencies (the default build works 
 
 ## Version
 
-The current release is **0.5.7**, shown in the title bar next to "Shell File
+The current release is **0.5.8**, shown in the title bar next to "Shell File
 Manager". It lives in a single constant, `Version` in
 `internal/version/version.go`; to cut a new release change it there, and
 the README's title line, a new entry at the top of
