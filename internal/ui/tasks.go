@@ -20,6 +20,7 @@ package ui
 import (
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -82,6 +83,14 @@ type Task struct {
 	Cancelled   bool
 	LastError   error
 
+	// Bytes is the progress in bytes and files of a task that copies
+	// (copy, move, compress), when hasBytes.
+	Bytes    fileops.Bytes
+	hasBytes bool
+	speed    float64 // bytes per second, smoothed
+	lastAt   time.Time
+	lastDone int64
+
 	// Label, when set, names what the task works on in Summary (e.g. a
 	// mirror's "src → dst"), since CurrentName keeps changing.
 	Label string
@@ -102,6 +111,12 @@ func (t *Task) isCancelled() bool { return atomic.LoadInt32(&t.cancelFlag) == 1 
 // in the title bar's background-activity indicator.
 func (t *Task) Summary() string {
 	status := fmt.Sprintf("%d/%d", t.Done, t.Total)
+	if pct, ok := t.percent(); ok {
+		status = fmt.Sprintf("%d%%", pct)
+		if eta, ok := t.eta(); ok {
+			status += ", " + formatETA(eta) + " left"
+		}
+	}
 	switch {
 	case t.Cancelled:
 		status = "cancelled"
@@ -122,6 +137,65 @@ func (t *Task) Summary() string {
 	return fmt.Sprintf("%s — %s (%s)", t.Kind, status, detail)
 }
 
+// showsBytes reports whether the task's progress is shown in bytes: not
+// for one that turned out to copy nothing (a move made of renames).
+func (t *Task) showsBytes() bool {
+	return t.hasBytes && (t.Bytes.Total != 0 || t.Bytes.FilesTotal != 0)
+}
+
+// percent is how much the task has copied, when it knows: by bytes, or
+// by files when they're all empty.
+func (t *Task) percent() (int, bool) {
+	switch b := t.Bytes; {
+	case !t.showsBytes():
+	case b.Total > 0:
+		return int(min(b.Done*100/b.Total, 100)), true
+	case b.Total == 0 && b.FilesTotal > 0:
+		return min(b.Files*100/b.FilesTotal, 100), true
+	}
+	return 0, false
+}
+
+// eta estimates the time left, from the recent speed.
+func (t *Task) eta() (time.Duration, bool) {
+	if !t.showsBytes() || t.Bytes.Total < 0 || t.speed <= 0 {
+		return 0, false
+	}
+	left := float64(max(t.Bytes.Total-t.Bytes.Done, 0)) / t.speed
+	return time.Duration(left * float64(time.Second)), true
+}
+
+// updateBytes records a byte progress report received at now, updating
+// the speed: smoothed over samples a second or more apart, so that it
+// doesn't jump with every chunk.
+func (t *Task) updateBytes(b fileops.Bytes, now time.Time) {
+	switch {
+	case !t.hasBytes:
+		t.hasBytes, t.lastAt, t.lastDone = true, now, b.Done
+	case now.Sub(t.lastAt) >= time.Second:
+		inst := float64(b.Done-t.lastDone) / now.Sub(t.lastAt).Seconds()
+		if t.speed == 0 {
+			t.speed = inst
+		} else {
+			t.speed = 0.7*t.speed + 0.3*inst
+		}
+		t.lastAt, t.lastDone = now, b.Done
+	}
+	t.Bytes = b
+}
+
+// formatETA renders a time left: "45s", "3m 05s", "2h 10m".
+func formatETA(d time.Duration) string {
+	s := int(d.Round(time.Second).Seconds())
+	switch {
+	case s < 60:
+		return fmt.Sprintf("%ds", s)
+	case s < 3600:
+		return fmt.Sprintf("%dm %02ds", s/60, s%60)
+	}
+	return fmt.Sprintf("%dh %02dm", s/3600, s%3600/60)
+}
+
 // taskMsg is sent on Model.taskCh from a background goroutine to report
 // progress on, or the completion of, a Task; Update() applies it to the
 // matching Task and re-issues waitForTaskMsg to keep listening.
@@ -134,6 +208,7 @@ type taskMsg struct {
 	finished  bool
 	cancelled bool
 	errCount  int
+	bytes     *fileops.Bytes // a byte progress report, and nothing else
 }
 
 // waitForTaskMsg returns a tea.Cmd that blocks on the task channel and
@@ -172,6 +247,10 @@ func (m *Model) handleTaskMsg(msg taskMsg) {
 	if t == nil {
 		return
 	}
+	if msg.bytes != nil {
+		t.updateBytes(*msg.bytes, time.Now())
+		return
+	}
 	if msg.finished {
 		t.Finished = true
 		t.Cancelled = msg.cancelled
@@ -205,6 +284,9 @@ func (m *Model) startTask(kind TaskKind, total int, run func(prog *fileops.Progr
 		prog := &fileops.Progress{
 			OnItem: func(done, total int, name string, err error) {
 				ch <- taskMsg{id: id, done: done, total: total, name: name, err: err}
+			},
+			OnBytes: func(b fileops.Bytes) {
+				ch <- taskMsg{id: id, bytes: &b}
 			},
 			Cancelled: t.isCancelled,
 		}

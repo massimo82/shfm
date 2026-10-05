@@ -26,6 +26,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -456,5 +457,58 @@ func TestForget(t *testing.T) {
 	}
 	if err := Forget("never-saved"); err != nil {
 		t.Errorf("Forget of an unknown account: %v", err)
+	}
+}
+
+// TestUploadSent: an upload's writer counts the bytes the service
+// received — through a stream, a spooled file or chunks of a sized
+// upload — without counting twice those of a refused request sent again.
+func TestUploadSent(t *testing.T) {
+	data := testData(300 << 10)
+	for _, tc := range []struct {
+		name string
+		fs   func(t *testing.T) vfs.FileSystem
+	}{
+		{"Dropbox", func(t *testing.T) vfs.FileSystem {
+			f, fs := newTestDropboxFS(t)
+			f.throttle = 2
+			return fs
+		}},
+		{"Google Drive", func(t *testing.T) vfs.FileSystem {
+			f, fs := newTestDriveFS(t)
+			f.throttle = 2
+			return fs
+		}},
+		{"OneDrive", func(t *testing.T) vfs.FileSystem { _, fs := newTestOneDriveFS(t); return fs }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := tc.fs(t)
+			home := fs.(interface{ Root() string }).Root() // Drive's and OneDrive's root holds no files
+			check := func(how string, w io.WriteCloser, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("%s: %v", how, err)
+				}
+				if _, err := w.Write(data); err != nil {
+					t.Fatalf("%s: writing: %v", how, err)
+				}
+				if err := w.Close(); err != nil {
+					t.Fatalf("%s: closing: %v", how, err)
+				}
+				s, ok := w.(vfs.SentReporter)
+				if !ok {
+					t.Fatalf("%s: the writer doesn't report what it sent", how)
+				}
+				if got := s.Sent(); got < int64(len(data)) || got > int64(len(data))+4096 {
+					t.Errorf("%s: Sent() = %d, want %d (plus a request's metadata at most)", how, got, len(data))
+				}
+			}
+			w, err := fs.Create(path.Join(home, "created.bin"))
+			check("Create", w, err)
+			if sc, ok := fs.(vfs.SizedCreator); ok {
+				w, err := sc.CreateSized(path.Join(home, "sized.bin"), int64(len(data)))
+				check("CreateSized", w, err)
+			}
+		})
 	}
 }

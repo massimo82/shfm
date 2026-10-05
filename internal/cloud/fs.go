@@ -129,6 +129,8 @@ var (
 	_ vfs.SizedCreator       = (*sizedFS)(nil)
 	_ vfs.TimesSetter        = (*timesSizedFS)(nil)
 	_ vfs.SizedCreator       = (*timesSizedFS)(nil)
+	_ vfs.SentReporter       = (*pipeWriter)(nil)
+	_ vfs.SentReporter       = (*spoolWriter)(nil)
 )
 
 // clean normalizes a path from the UI or the FUSE mount.
@@ -211,7 +213,7 @@ func (f *FS) Create(p string) (io.WriteCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &spoolWriter{f: f, p: p, tmp: tmp}, nil
+	return &spoolWriter{f: f, p: p, tmp: tmp, sent: &sentCounter{}}, nil
 }
 
 func (f *FS) createSized(p string, size int64) (io.WriteCloser, error) {
@@ -226,12 +228,13 @@ func (f *FS) createSized(p string, size int64) (io.WriteCloser, error) {
 func (f *FS) pipeUpload(p string, size int64) io.WriteCloser {
 	pr, pw := io.Pipe()
 	done := make(chan error, 1)
+	sent := &sentCounter{}
 	go func() {
-		err := f.b.upload(f.ctx, p, size, pr)
+		err := f.b.upload(withSentCounter(f.ctx, sent), p, size, pr)
 		pr.CloseWithError(errOr(err, io.ErrClosedPipe))
 		done <- err
 	}()
-	return &pipeWriter{pw: pw, done: done, p: p}
+	return &pipeWriter{pw: pw, done: done, p: p, sent: sent}
 }
 
 // errOr returns err, or fallback when err is nil (a reader closed with a
@@ -243,13 +246,17 @@ func errOr(err, fallback error) error {
 	return fallback
 }
 
+// pipeWriter and spoolWriter implement vfs.SentReporter: Write only
+// hands the data over, to an upload that sends it in chunks, or on Close.
 type pipeWriter struct {
 	pw   *io.PipeWriter
 	done chan error
 	p    string
+	sent *sentCounter
 }
 
 func (w *pipeWriter) Write(b []byte) (int, error) { return w.pw.Write(b) }
+func (w *pipeWriter) Sent() int64                 { return w.sent.Sent() }
 
 func (w *pipeWriter) Close() error {
 	w.pw.Close()
@@ -257,12 +264,14 @@ func (w *pipeWriter) Close() error {
 }
 
 type spoolWriter struct {
-	f   *FS
-	p   string
-	tmp *os.File
+	f    *FS
+	p    string
+	tmp  *os.File
+	sent *sentCounter
 }
 
 func (w *spoolWriter) Write(b []byte) (int, error) { return w.tmp.Write(b) }
+func (w *spoolWriter) Sent() int64                 { return w.sent.Sent() }
 
 func (w *spoolWriter) Close() error {
 	defer os.Remove(w.tmp.Name())
@@ -274,7 +283,7 @@ func (w *spoolWriter) Close() error {
 	if err != nil {
 		return err
 	}
-	return pathErr("upload", w.p, w.f.b.upload(w.f.ctx, w.p, size, w.tmp))
+	return pathErr("upload", w.p, w.f.b.upload(withSentCounter(w.f.ctx, w.sent), w.p, size, w.tmp))
 }
 
 func (f *FS) Join(elem ...string) string { return path.Join(elem...) }

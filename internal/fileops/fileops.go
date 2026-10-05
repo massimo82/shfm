@@ -24,6 +24,7 @@
 package fileops
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -58,16 +59,22 @@ func (r *Result) Error() string {
 }
 
 // Progress reports per-item progress and lets the caller cancel a
-// long-running Copy/Move/Delete between items. Both fields are optional:
-// a nil Progress, or nil fields within it, are simply not called.
+// long-running operation. Every field is optional: a nil Progress, or
+// nil fields within it, are simply not called.
 type Progress struct {
 	// OnItem is called once per top-level item, right after it finishes
 	// (successfully or not): done is how many items have been processed so
 	// far (including this one), total is len(items), name is the item's
 	// display name, err is nil on success.
 	OnItem func(done, total int, name string, err error)
-	// Cancelled is polled before starting each item; when it returns true,
-	// processing stops and Result.Cancelled is set.
+	// OnBytes, for Copy, Move and CreateArchive, is called a few times a
+	// second with the bytes and files copied so far; the items are
+	// measured alongside the copy. Called from another goroutine than the
+	// operation's.
+	OnBytes func(Bytes)
+	// Cancelled is polled before starting each item, and while copying a
+	// file; when it returns true, processing stops (a file copied halfway
+	// is removed) and Result.Cancelled is set.
 	Cancelled func() bool
 }
 
@@ -88,6 +95,8 @@ func (p *Progress) cancelled() bool {
 func Copy(items []Item, destFS vfs.FileSystem, destDir string, prog *Progress) *Result {
 	res := &Result{}
 	total := len(items)
+	m := startMeter(prog, items)
+	defer m.finish()
 	for _, it := range items {
 		if prog.cancelled() {
 			res.Cancelled = true
@@ -100,7 +109,11 @@ func Copy(items []Item, destFS vfs.FileSystem, destDir string, prog *Progress) *
 		} else if destExists(destFS, destPath) {
 			destPath = uniqueName(destFS, destDir, name, " (copy)")
 		}
-		err := copyRecursive(it.FS, it.Path, destFS, destPath)
+		err := copyRecursive(it.FS, it.Path, destFS, destPath, m, prog.cancelled)
+		if errors.Is(err, errCancelled) {
+			res.Cancelled = true
+			break
+		}
 		if err != nil {
 			err = fmt.Errorf("copying %q: %w", it.Path, err)
 			res.Errors = append(res.Errors, err)
@@ -119,13 +132,27 @@ func Copy(items []Item, destFS vfs.FileSystem, destDir string, prog *Progress) *
 func Move(items []Item, destFS vfs.FileSystem, destDir string, prog *Progress) *Result {
 	res := &Result{}
 	total := len(items)
+	// Only what crosses backends is measured up front: within one, a
+	// rename moves the item at once.
+	var crossing []Item
+	for _, it := range items {
+		if it.FS != destFS {
+			crossing = append(crossing, it)
+		}
+	}
+	m := startMeter(prog, crossing)
+	defer m.finish()
 	for _, it := range items {
 		if prog.cancelled() {
 			res.Cancelled = true
 			break
 		}
 		name := it.FS.Base(it.Path)
-		err := moveOne(it, destFS, destDir, name)
+		err := moveOne(it, destFS, destDir, name, m, prog.cancelled)
+		if errors.Is(err, errCancelled) {
+			res.Cancelled = true
+			break
+		}
 		if err != nil {
 			err = fmt.Errorf("moving %q: %w", it.Path, err)
 			res.Errors = append(res.Errors, err)
@@ -137,7 +164,7 @@ func Move(items []Item, destFS vfs.FileSystem, destDir string, prog *Progress) *
 	return res
 }
 
-func moveOne(it Item, destFS vfs.FileSystem, destDir, name string) error {
+func moveOne(it Item, destFS vfs.FileSystem, destDir, name string, m *meter, cancelled func() bool) error {
 	destPath := destFS.Join(destDir, name)
 	if it.FS == destFS {
 		if destPath == it.Path {
@@ -152,11 +179,12 @@ func moveOne(it Item, destFS vfs.FileSystem, destDir, name string) error {
 			return err
 		}
 		// ErrNotSupported: fall through to copy+delete below.
+		m.addItem(it)
 	}
 	if destExists(destFS, destPath) {
 		destPath = uniqueName(destFS, destDir, name, " (moved)")
 	}
-	if err := copyRecursive(it.FS, it.Path, destFS, destPath); err != nil {
+	if err := copyRecursive(it.FS, it.Path, destFS, destPath, m, cancelled); err != nil {
 		return err
 	}
 	return it.FS.Remove(it.Path)
@@ -216,7 +244,7 @@ func Rename(fs vfs.FileSystem, oldPath, newName string) error {
 		if err != vfs.ErrNotSupported {
 			return err
 		}
-		if err := copyRecursive(fs, oldPath, fs, newPath); err != nil {
+		if err := copyRecursive(fs, oldPath, fs, newPath, nil, nil); err != nil {
 			return err
 		}
 		return fs.Remove(oldPath)
@@ -261,13 +289,15 @@ func openDest(destFS vfs.FileSystem, destPath string, size int64) (io.WriteClose
 // CopyTo copies srcPath (a file, or a folder recursively) to exactly
 // destPath, overwriting what's there — no " (copy)" renaming, unlike Copy.
 func CopyTo(srcFS vfs.FileSystem, srcPath string, destFS vfs.FileSystem, destPath string) error {
-	return copyRecursive(srcFS, srcPath, destFS, destPath)
+	return copyRecursive(srcFS, srcPath, destFS, destPath, nil, nil)
 }
 
 // copyRecursive copies a file or folder (recursively) from a source
 // FileSystem to a destination FileSystem, even across different backends
-// (local, SMB, NFS, MTP, SFTP), via Open/Create streaming.
-func copyRecursive(srcFS vfs.FileSystem, srcPath string, destFS vfs.FileSystem, destPath string) error {
+// (local, SMB, NFS, MTP, SFTP), via Open/Create streaming. m (may be nil)
+// counts the bytes; once cancelled (may be nil) it stops with
+// errCancelled, removing a file it copied halfway.
+func copyRecursive(srcFS vfs.FileSystem, srcPath string, destFS vfs.FileSystem, destPath string, m *meter, cancelled func() bool) error {
 	entry, err := srcFS.Stat(srcPath)
 	if err != nil {
 		return err
@@ -281,7 +311,10 @@ func copyRecursive(srcFS vfs.FileSystem, srcPath string, destFS vfs.FileSystem, 
 			return err
 		}
 		for _, c := range children {
-			if err := copyRecursive(srcFS, srcFS.Join(srcPath, c.Name), destFS, destFS.Join(destPath, c.Name)); err != nil {
+			if cancelled != nil && cancelled() {
+				return errCancelled
+			}
+			if err := copyRecursive(srcFS, srcFS.Join(srcPath, c.Name), destFS, destFS.Join(destPath, c.Name), m, cancelled); err != nil {
 				return err
 			}
 		}
@@ -301,9 +334,19 @@ func copyRecursive(srcFS vfs.FileSystem, srcPath string, destFS vfs.FileSystem, 
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(w, r); err != nil {
+	n, err := copyData(w, r, m, cancelled)
+	if err != nil {
 		w.Close()
+		m.fileDone(0, false)
+		if errors.Is(err, errCancelled) {
+			_ = destFS.Remove(destPath)
+		}
 		return err
 	}
-	return w.Close()
+	if err := w.Close(); err != nil {
+		m.fileDone(0, false)
+		return err
+	}
+	m.fileDone(n, true)
+	return nil
 }

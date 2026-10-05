@@ -47,7 +47,8 @@ func CreateArchive(items []Item, destFS vfs.FileSystem, destPath string, kind ar
 	res := &Result{}
 	total := len(items)
 	root := ArchiveRoot(destFS.Base(destPath))
-	c := &compressor{prog: prog, total: total}
+	c := &compressor{prog: prog, total: total, meter: startMeter(prog, items)}
+	defer c.meter.finish()
 
 	err := c.write(destFS, destPath, kind, func(put archive.PutFunc) error {
 		if err := put(archive.Entry{Name: root, Type: archive.TypeDir, Mode: 0o755, ModTime: time.Now()}, nil); err != nil {
@@ -82,6 +83,7 @@ func CreateArchive(items []Item, destFS vfs.FileSystem, destPath string, kind ar
 
 type compressor struct {
 	prog       *Progress
+	meter      *meter
 	done       int
 	total      int
 	skipped    []string
@@ -231,7 +233,7 @@ func (c *compressor) add(put archive.PutFunc, srcFS vfs.FileSystem, srcPath, nam
 		}
 		defer os.Remove(tmp.Name())
 		defer tmp.Close()
-		n, err := io.Copy(tmp, cancelReader{c.prog.cancelled, r})
+		n, err := io.Copy(tmp, c.meter.reader(cancelReader{c.prog.cancelled, r}))
 		if err != nil {
 			if errors.Is(err, errCancelled) {
 				return err
@@ -242,9 +244,19 @@ func (c *compressor) add(put archive.PutFunc, srcFS vfs.FileSystem, srcPath, nam
 		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		e.Size, content = n, tmp
+		e.Size = n
+		return c.counted(put(e, cancelReader{c.prog.cancelled, tmp}))
 	}
-	return put(e, cancelReader{c.prog.cancelled, content})
+	return c.counted(put(e, c.meter.reader(cancelReader{c.prog.cancelled, content})))
+}
+
+// counted counts a file as archived, unless putting it failed (its bytes,
+// read already, stay counted).
+func (c *compressor) counted(err error) error {
+	if err == nil {
+		c.meter.fileDone(0, true)
+	}
+	return err
 }
 
 // cancelReader fails reads once the user cancelled, so archiving a huge

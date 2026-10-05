@@ -134,7 +134,13 @@ to toggle between single- and dual-pane layout.
   available.
 - **Background tasks with progress**: copy/move/delete run as background
   tasks with a live progress dialog; closing it (`Esc`) just sends the
-  task to the background — it keeps running. `Ctrl+B` opens the list of
+  task to the background — it keeps running. Copying, moving to another
+  source and compressing show the bytes copied out of the total, the
+  speed, the time left and the files copied out of how many: the total
+  is measured while the copy already runs, and shows as `?` until then.
+  For cloud storage, the bytes counted are those the service received.
+  Cancelling (`c`) stops even halfway through a file, removing it.
+  `Ctrl+B` opens the list of
   background tasks, to check on or reopen any of them. Quitting while
   tasks are still running shows a warning first.
 - **Desktop notifications for backgrounded tasks**: a task sent to the

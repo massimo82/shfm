@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -41,7 +42,7 @@ import (
 // overall timeout, since a download can take hours; the connection, TLS
 // handshake and response headers each have one instead, so an unreachable
 // service fails fast.
-var plainClient = &http.Client{Transport: newTransport()}
+var plainClient = &http.Client{Transport: sentCountingTransport{newTransport()}}
 
 func newTransport() *http.Transport {
 	return &http.Transport{
@@ -53,6 +54,54 @@ func newTransport() *http.Transport {
 		MaxIdleConnsPerHost:   8,
 		ForceAttemptHTTP2:     true,
 	}
+}
+
+// sentCounter counts the bytes of an upload the service has received:
+// those of its requests that were answered, plus what the one in flight
+// has sent so far. A failed request's bytes aren't counted, so a resent
+// chunk isn't counted twice.
+type sentCounter struct{ done, cur atomic.Int64 }
+
+func (c *sentCounter) Sent() int64 { return c.done.Load() + c.cur.Load() }
+
+type sentKey struct{}
+
+// withSentCounter has the requests made with ctx counted in c.
+func withSentCounter(ctx context.Context, c *sentCounter) context.Context {
+	return context.WithValue(ctx, sentKey{}, c)
+}
+
+// sentCountingTransport counts the request bodies it sends into the
+// sentCounter of their context, if any: every backend's uploads go
+// through it, whether their requests carry a token or not.
+type sentCountingTransport struct{ base http.RoundTripper }
+
+func (t sentCountingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	c, _ := req.Context().Value(sentKey{}).(*sentCounter)
+	if c == nil || req.Body == nil || req.Body == http.NoBody {
+		return t.base.RoundTrip(req)
+	}
+	c.cur.Store(0)
+	req = req.Clone(req.Context())
+	req.Body = &countingBody{ReadCloser: req.Body, c: c}
+	resp, err := t.base.RoundTrip(req)
+	if err == nil && resp.StatusCode < 400 {
+		c.done.Add(c.cur.Swap(0))
+	} else {
+		c.cur.Store(0)
+	}
+	return resp, err
+}
+
+type countingBody struct {
+	io.ReadCloser
+	c *sentCounter
+}
+
+func (b *countingBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	b.c.cur.Add(int64(n))
+	return n, err
 }
 
 // bgContext is the context token refreshes run in: it makes the oauth2

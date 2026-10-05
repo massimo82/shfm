@@ -19,7 +19,9 @@ package ui
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"shfm/internal/fileops"
 )
@@ -113,4 +115,46 @@ func containsSubstring(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// TestByteProgress: a copying task shows its bytes in human-readable
+// form, out of the total, with its speed, the time left and its files.
+func TestByteProgress(t *testing.T) {
+	task := &Task{Kind: TaskCopy, Total: 1}
+	start := time.Now()
+	const mib = 1 << 20
+	task.updateBytes(fileops.Bytes{Done: 0, Total: -1, Files: 0, FilesTotal: -1}, start)
+	if out := renderByteProgress(task); !strings.Contains(out, "0B of ?") || !strings.Contains(out, "0/? files") {
+		t.Errorf("while measuring:\n%s", out)
+	}
+	task.updateBytes(fileops.Bytes{Done: 10 * mib, Total: 40 * mib, Files: 2, FilesTotal: 5}, start.Add(time.Second))
+	out := renderByteProgress(task)
+	for _, want := range []string{"25%", "10.0M of 40.0M", "10.0M/s", "3s left", "2/5 files"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("progress lacks %q:\n%s", want, out)
+		}
+	}
+	if s := task.Summary(); !strings.Contains(s, "25%, 3s left") {
+		t.Errorf("Summary() = %q", s)
+	}
+
+	// A move made of renames has nothing to show in bytes.
+	renames := &Task{Kind: TaskMove, Total: 2, Done: 1}
+	renames.updateBytes(fileops.Bytes{}, start)
+	if renames.showsBytes() || !strings.Contains(renames.Summary(), "1/2") {
+		t.Errorf("a move by renames: showsBytes %v, Summary() %q", renames.showsBytes(), renames.Summary())
+	}
+}
+
+func TestFormatETA(t *testing.T) {
+	for d, want := range map[time.Duration]string{
+		45 * time.Second:              "45s",
+		3*time.Minute + 5*time.Second: "3m 05s",
+		2*time.Hour + 10*time.Minute:  "2h 10m",
+		1500 * time.Millisecond:       "2s",
+	} {
+		if got := formatETA(d); got != want {
+			t.Errorf("formatETA(%v) = %q, want %q", d, got, want)
+		}
+	}
 }

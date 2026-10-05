@@ -404,8 +404,12 @@ func (m *Model) renderDialogBox() string {
 		} else {
 			b.WriteString(fmt.Sprintf("%s\n", t.Kind))
 		}
-		b.WriteString(renderProgressBar(48, t.Done, t.Total))
-		b.WriteString(fmt.Sprintf("  %d/%d\n", t.Done, t.Total))
+		if t.showsBytes() {
+			b.WriteString(renderByteProgress(t))
+		} else {
+			b.WriteString(renderProgressBar(48, t.Done, t.Total))
+			b.WriteString(fmt.Sprintf("  %d/%d\n", t.Done, t.Total))
+		}
 		b.WriteString(styleDim.Render(truncate(t.CurrentName, 56)) + "\n")
 		if t.ErrorCount > 0 {
 			b.WriteString(styleErr.Render(fmt.Sprintf("%d error(s) so far", t.ErrorCount)) + "\n")
@@ -621,6 +625,38 @@ func aboutDescription() string {
 		"automatic mirrors", "archives")
 	return "shfm is a file manager for the terminal. It includes all the " +
 		"modern features, such as: " + strings.Join(features, ", ") + " and more."
+}
+
+// renderByteProgress renders a copying task's bar, by bytes, then what it
+// copied out of how much, its speed and time left, and the files copied
+// out of how many. Totals still being measured show as "?".
+func renderByteProgress(t *Task) string {
+	bt := t.Bytes
+	var b strings.Builder
+	if pct, ok := t.percent(); ok {
+		b.WriteString(renderProgressBar(48, pct, 100))
+		b.WriteString(fmt.Sprintf("  %d%%\n", pct))
+	} else {
+		b.WriteString(renderProgressBar(48, 0, 1) + "\n")
+	}
+	total := "?"
+	if bt.Total >= 0 {
+		total = humanSize(bt.Total)
+	}
+	line := humanSize(bt.Done) + " of " + total
+	if t.speed > 0 && !t.Finished {
+		line += " · " + humanSize(int64(t.speed)) + "/s"
+	}
+	if eta, ok := t.eta(); ok && !t.Finished {
+		line += " · " + formatETA(eta) + " left"
+	}
+	files := "?"
+	if bt.FilesTotal >= 0 {
+		files = fmt.Sprint(bt.FilesTotal)
+	}
+	b.WriteString(line + "\n")
+	b.WriteString(fmt.Sprintf("%d/%s files\n", bt.Files, files))
+	return b.String()
 }
 
 // dialogBox is styleDialogBox for a box whose content area plus padding is

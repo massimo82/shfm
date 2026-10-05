@@ -171,6 +171,15 @@ type SizedCreator interface {
 	CreateSized(path string, size int64) (io.WriteCloser, error)
 }
 
+// SentReporter is an optional interface of the writer Create returns,
+// for a backend whose data reaches the destination later than Write
+// returns (cloud storage, which sends it in chunks, or all on Close):
+// Sent is how many bytes the destination has received so far. fileops
+// reports a copy's progress with it.
+type SentReporter interface {
+	Sent() int64
+}
+
 // DirSizer is an optional interface a backend may implement to compute the
 // total recursive size, and item count, of a folder's contents. Only
 // implemented by the local backend: over SMB/NFS/MTP/SFTP, walking a whole
