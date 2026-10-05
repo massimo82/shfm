@@ -31,7 +31,7 @@ import (
 const (
 	helpCarouselStep = 130 * time.Millisecond
 	helpCarouselRest = 2 * time.Second
-	helpCarouselGap  = " # "
+	helpCarouselGap  = " ... "
 )
 
 type helpTickMsg struct{}
