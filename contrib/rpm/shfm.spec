@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.5.2
+Version:        0.5.3
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -141,6 +141,14 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Mon Oct 05 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.3-1
+- Opening a Dropbox account checks that its authorization reaches the
+  files: one lacking a permission is authorized again, and an app without
+  it says to enable it in the App Console. Errors no longer show "HTTP 0".
+- Error messages are shorter, to fit the status line; the SMB, NFS and
+  SFTP forms wrap their error instead of cutting it.
+- About shows the short GPL notice instead of the full one.
+
 * Mon Oct 05 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.2-1
 - About ends with the copyright and license notice, and says the bundled
   third-party code keeps its own license.
