@@ -86,10 +86,10 @@ func Label(provider, user string) string {
 var (
 	// ErrUnavailable is returned by every operation in a build without
 	// the cloud module.
-	ErrUnavailable = errors.New("shfm was built without cloud storage support (build tag \"cloud\")")
+	ErrUnavailable = errors.New("cloud storage isn't in this build (build tag \"cloud\")")
 
 	// ErrAuthorization means the account's authorization is no longer
 	// valid (revoked, expired, or its token lost): it must be authorized
 	// again.
-	ErrAuthorization = errors.New("the account's authorization is no longer valid: authorize it again")
+	ErrAuthorization = errors.New("authorization no longer valid: authorize again")
 )

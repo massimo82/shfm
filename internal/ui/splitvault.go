@@ -237,7 +237,7 @@ func (m *Model) warnSplitParts(t vaultTarget) {
 		for _, i := range missing {
 			names = append(names, fmt.Sprintf("part %d", i+1))
 		}
-		m.setError("%s: %s unreachable — the vault is read-only until all three parts are", t.name, strings.Join(names, ", "))
+		m.setError("%s: %s unreachable, read-only until all parts are back", t.name, strings.Join(names, ", "))
 	}
 }
 
@@ -343,7 +343,7 @@ func (m *Model) submitNewSplitVault() tea.Cmd {
 		}
 		switch {
 		case len([]rune(pw)) < minVaultPassword:
-			res.err = fmt.Errorf("no vault in these folders yet, and a new one's password needs at least %d characters", minVaultPassword)
+			res.err = fmt.Errorf("no vault here yet: a new one needs %d+ password characters", minVaultPassword)
 		case pw != again:
 			res.err = errors.New("no vault in these folders yet: repeat the password to create one")
 		}

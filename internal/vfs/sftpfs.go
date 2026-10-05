@@ -162,7 +162,7 @@ func sftpAuthMethods(opts SFTPOptions) ([]ssh.AuthMethod, error) {
 		methods = append(methods, ssh.PublicKeys(signer))
 	}
 	if len(methods) == 0 {
-		return nil, fmt.Errorf("no authentication method available: provide a password or a usable private key")
+		return nil, fmt.Errorf("no way to log in: enter a password or set up an SSH key")
 	}
 	return methods, nil
 }
@@ -200,8 +200,7 @@ func tofuHostKeyCallback() (ssh.HostKeyCallback, error) {
 		if len(keyErr.Want) > 0 {
 			// The host IS known, but under a *different* key: refuse, this
 			// is exactly the case TOFU exists to catch.
-			return fmt.Errorf("host key for %s changed since the last connection — refusing (possible man-in-the-middle); "+
-				"remove the stale entry from %s if you're sure this is expected", hostname, path)
+			return fmt.Errorf("%s's host key changed (attack?): if expected, remove it from %s", hostname, path)
 		}
 		// Unknown host: trust it and record it for next time.
 		return appendKnownHost(path, hostname, key)

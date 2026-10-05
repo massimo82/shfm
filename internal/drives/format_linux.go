@@ -204,7 +204,7 @@ func unmountDisk(wholeDiskPath string) error {
 			}
 			mounted = true
 			if err := Unmount(dev, mi.mountPoint); err != nil {
-				return fmt.Errorf("cannot unmount %s (%s) before formatting: %w — close any program using it and retry", dev, mi.mountPoint, err)
+				return fmt.Errorf("can't unmount %s to format it (in use?): %w", dev, err)
 			}
 		}
 		if !mounted {

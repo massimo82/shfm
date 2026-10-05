@@ -47,7 +47,7 @@ const RootHandle uint32 = 0x00000000
 const FormatAssociation uint16 = extmtp.OFC_Association
 
 // errNoUSB: libusb couldn't be initialized, there's no USB bus to look at.
-var errNoUSB = errors.New("mtp: USB is not available (libusb could not be initialized)")
+var errNoUSB = errors.New("mtp: can't initialize libusb")
 
 // ErrNotSupported indicates the device replied "operation not supported" to
 // an optional operation (typically rename): the caller can fall back to
@@ -134,7 +134,7 @@ func Open(info DeviceInfo) (*Device, error) {
 	if len(storageIDs.Values) == 0 {
 		dev.CloseSession()
 		dev.Close()
-		return nil, fmt.Errorf("mtp: no storage available on the device (SD card not mounted / device locked?)")
+		return nil, errors.New("mtp: no storage on the device (is it locked?)")
 	}
 	d := &Device{dev: dev, storageID: storageIDs.Values[0], ops: map[uint16]bool{}}
 	// Best effort: a device whose DeviceInfo can't be read is simply

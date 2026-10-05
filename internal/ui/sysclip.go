@@ -340,7 +340,7 @@ func (m *Model) effectiveClipboard() (Clipboard, error) {
 		return Clipboard{}, err
 	}
 	if len(groups) != 1 || groups[0].src.fs == nil {
-		return Clipboard{}, fmt.Errorf("open the copied items' source in a pane first (and copy from a single folder)")
+		return Clipboard{}, fmt.Errorf("open the copied items' folder in a pane first")
 	}
 	g := groups[0]
 	return Clipboard{FS: g.src.fs, Dir: g.dir, Names: g.names}, nil

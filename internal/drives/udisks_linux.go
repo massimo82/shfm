@@ -45,7 +45,7 @@ const (
 // ErrUDisks2Missing reports that udisks2 isn't installed: the system bus
 // has no UDisks2 service, nor a way to start one ("The name is not
 // activatable"), as when it was removed as an orphan along with GVfs.
-var ErrUDisks2Missing = errors.New("udisks2 is not installed: install it to mount and format removable media without root")
+var ErrUDisks2Missing = errors.New("udisks2 is missing: install it to mount removable drives")
 
 // udisksError explains a failed udisks2 call: a missing daemon is
 // ErrUDisks2Missing rather than the bus's cryptic reply.

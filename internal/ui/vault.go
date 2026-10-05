@@ -106,7 +106,7 @@ func (m *Model) enterVault() bool {
 		return false
 	}
 	if !vault.Available {
-		m.setError("%s is an encrypted vault: %v — showing its encrypted files", e.Name, vault.ErrUnavailable)
+		m.setError("%s: %v, showing its encrypted files", e.Name, vault.ErrUnavailable)
 		return false
 	}
 	t := vaultTarget{pane: m.active, fs: p.FS, dir: dir, name: e.Name}

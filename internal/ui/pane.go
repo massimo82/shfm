@@ -35,7 +35,7 @@ var errNotADirectory = errors.New("the given path is not a folder")
 
 // errLostAndFound replaces "permission denied" inside lost+found (see
 // isLostAndFound), which says nothing of what the folder is.
-var errLostAndFound = errors.New("lost+found is where fsck puts the pieces of damaged files it recovers: only root can open it, and it's normally empty")
+var errLostAndFound = errors.New("only root can open lost+found (fsck's recovered files)")
 
 // PaneMode distinguishes normal filesystem browsing from the trash view.
 type PaneMode int

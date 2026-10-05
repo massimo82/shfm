@@ -610,7 +610,7 @@ func (m *Model) deleteMirror(id string, deleteCopy bool) {
 	}
 	src, ok := m.resolveEndpoint(pair.Src)
 	if !ok {
-		m.setError("Not deleting the copy: open or mount the mirror's source first, to check the copy isn't the source itself")
+		m.setError("Not deleting the copy: open or mount the mirror's source first")
 		return
 	}
 	if running {

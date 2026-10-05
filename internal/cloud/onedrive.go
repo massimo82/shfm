@@ -209,9 +209,9 @@ func (it graphItem) entry() vfs.Entry {
 
 var (
 	errOneDriveFixed = &APIError{Status: http.StatusForbidden, kind: os.ErrPermission,
-		Message: "My files, Shared and the items shared with you can't be renamed, moved or removed from shfm"}
+		Message: "OneDrive's places can't be renamed, moved or removed"}
 	errOneDriveVirtual = &APIError{Status: http.StatusForbidden, kind: os.ErrPermission,
-		Message: "nothing can be created here: choose a folder in My files or a folder shared with you"}
+		Message: "nothing can be created here, only inside folders"}
 )
 
 // graphEscape escapes a path for Graph's path addressing, where ':' ends

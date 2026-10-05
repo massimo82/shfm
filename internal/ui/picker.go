@@ -229,7 +229,7 @@ func (m *Model) pickDir(p *Pane) (string, bool) {
 			return dir, true
 		}
 	}
-	m.setError("Only local folders can be chosen: the application couldn't open %s once shfm is closed", p.SourceLabel)
+	m.setError("Only local folders can be chosen, not %s", p.SourceLabel)
 	return "", false
 }
 

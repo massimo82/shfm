@@ -167,7 +167,7 @@ func Decrypt(encoded string) (string, error) {
 	nonce, ciphertext := raw[:gcm.NonceSize()], raw[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return "", fmt.Errorf("could not decrypt the saved password (has the machine key changed?): %w", err)
+		return "", fmt.Errorf("can't decrypt the saved password (machine key changed?): %w", err)
 	}
 	return string(plaintext), nil
 }

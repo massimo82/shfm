@@ -910,7 +910,7 @@ func (m *Model) askRemoveSavedSource() {
 			continue
 		}
 		if i == m.active || m.dualPane {
-			m.setError("%s is open in the %s pane: switch that pane to another source, or close it (%s, single pane)",
+			m.setError("%s is open in the %s pane: switch it away or close it (%s)",
 				label, paneSide(i), m.firstKey(config.ActionToggleLayout))
 			return
 		}

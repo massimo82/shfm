@@ -84,7 +84,7 @@ func StartAuthorization(providerID, clientID, clientSecret, accountID string) (*
 		id = p.info.DefaultClientID
 	}
 	if id == "" {
-		return nil, fmt.Errorf("a client ID is needed: register shfm with %s (see README, \"Cloud storage\")", p.info.Name)
+		return nil, fmt.Errorf("a client ID is needed: see README, \"Cloud storage\"")
 	}
 	if p.info.NeedsSecret && clientSecret == "" && clientID != "" {
 		return nil, fmt.Errorf("%s's client secret is needed too", p.info.Name)
@@ -104,7 +104,7 @@ func StartAuthorization(providerID, clientID, clientSecret, accountID string) (*
 			// Dropbox can show the code to copy instead.
 			redirect = ""
 		} else {
-			return nil, fmt.Errorf("could not start the local server receiving the authorization: %w", err)
+			return nil, fmt.Errorf("can't start the authorization server: %w", err)
 		}
 	}
 	a.cfg = p.oauthConfig(id, clientSecret)
@@ -166,7 +166,7 @@ func (a *Authorization) parseRedirect(q url.Values) (string, error) {
 		return "", fmt.Errorf("%s refused the authorization (%s)", a.p.info.Name, e)
 	}
 	if s := q.Get("state"); s != a.state {
-		return "", errors.New("the answer doesn't belong to this authorization (state mismatch): start again")
+		return "", errors.New("state mismatch: start the authorization again")
 	}
 	code := q.Get("code")
 	if code == "" {
@@ -232,7 +232,7 @@ func (a *Authorization) Wait(ctx context.Context) (Account, error) {
 		return Account{}, fmt.Errorf("exchanging the authorization code: %w", err)
 	}
 	if tok.RefreshToken == "" {
-		return Account{}, fmt.Errorf("%s granted no lasting access (no refresh token): try again", a.p.info.Name)
+		return Account{}, fmt.Errorf("%s gave no refresh token: try again", a.p.info.Name)
 	}
 
 	acc := Account{Provider: a.p.info.ID, ID: a.accountID, ClientID: a.clientID, ClientSecret: a.cfg.ClientSecret}

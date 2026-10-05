@@ -245,9 +245,9 @@ func TryAutoMount(devicePath, name string) (string, error) {
 		return mp, nil
 	}
 	if errors.Is(udisksErr, ErrUDisks2Missing) {
-		return "", fmt.Errorf("%w (direct mount(2) failed too: %v)", udisksErr, directErr)
+		return "", fmt.Errorf("%w (mount(2): %v)", udisksErr, directErr)
 	}
-	return "", fmt.Errorf("udisks2 mount failed (%v); direct mount(2) also failed (%v)", udisksErr, directErr)
+	return "", fmt.Errorf("udisks2: %v; mount(2): %v", udisksErr, directErr)
 }
 
 // tryDirectMount mounts devicePath by calling the mount(2) syscall directly

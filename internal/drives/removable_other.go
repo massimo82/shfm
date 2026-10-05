@@ -39,7 +39,7 @@ func ListRemovable() ([]RemovableDevice, error) { return nil, nil }
 
 // TryAutoMount is not supported on this platform.
 func TryAutoMount(devicePath, name string) (string, error) {
-	return "", fmt.Errorf("automatic mounting of removable devices is not supported on this platform")
+	return "", fmt.Errorf("mounting removable drives isn't supported here")
 }
 
 // Unmount is not supported on this platform.

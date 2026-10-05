@@ -345,7 +345,7 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString("\n")
 		}
 		if d.IsError && d.Message != "" {
-			b.WriteString("\n" + styleErr.Render(truncate(d.Message, 56)) + "\n")
+			b.WriteString("\n" + styleErr.Width(60).Render(d.Message) + "\n")
 		}
 		b.WriteString(styleDim.Render("Tab or click field · Enter connect · Esc cancel"))
 		return dialogBox(64).Render(b.String())

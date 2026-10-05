@@ -182,9 +182,9 @@ type driveNode struct {
 
 var (
 	errDriveFixed = &APIError{Status: http.StatusForbidden, kind: os.ErrPermission,
-		Message: "Drive's places, shared drives and items shared with you can't be renamed, moved or removed from shfm"}
+		Message: "Drive's places can't be renamed, moved or removed"}
 	errDriveVirtual = &APIError{Status: http.StatusForbidden, kind: os.ErrPermission,
-		Message: "nothing can be created here: choose a folder in My Drive, a shared drive or a folder shared with you"}
+		Message: "nothing can be created here, only inside folders"}
 )
 
 // --- names ----------------------------------------------------------------
@@ -871,7 +871,7 @@ func (d *drive) sendChunks(ctx context.Context, session string, size int64, r io
 			}
 			acked := got - start
 			if acked < 0 || acked > int64(len(chunk)) || (acked == 0 && len(chunk) > 0) {
-				return fmt.Errorf("Google Drive acknowledged an unexpected part of the upload (%q)", resp.Header.Get("Range"))
+				return fmt.Errorf("unexpected upload range from Google Drive (%q)", resp.Header.Get("Range"))
 			}
 			chunk, start = chunk[acked:], got
 			if len(chunk) == 0 {

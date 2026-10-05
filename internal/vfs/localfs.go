@@ -206,7 +206,7 @@ func (l *LocalFS) Close() error               { return nil }
 // disk. DirSize refuses to walk such a tree at all rather than silently
 // producing an absurd number; the UI leaves the size as "unknown" (it
 // already does this for any DirSize error).
-var errPseudoFS = errors.New("vfs: refusing to compute a recursive size on a virtual/kernel filesystem")
+var errPseudoFS = errors.New("no recursive size on a virtual filesystem")
 
 func (l *LocalFS) DirSize(path string) (size int64, itemCount int64, err error) {
 	if isOnPseudoFS(path) {

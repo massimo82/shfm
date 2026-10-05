@@ -52,7 +52,7 @@ var Available bool
 
 // ErrUnavailable is returned by every Engine method when shfm was built
 // without the "semantic" tag (the default).
-var ErrUnavailable = errors.New("semantic content search wasn't compiled into this build (rebuild with: go build -tags semantic . — see the README's \"Building\" section)")
+var ErrUnavailable = errors.New("semantic search isn't in this build (build tag \"semantic\")")
 
 // Result is one content match, RelPath relative to whatever root Search
 // was asked to cover.

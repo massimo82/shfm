@@ -210,17 +210,13 @@ func pickModel(role modelRole) (string, error) {
 		case 1:
 			return found[0], nil
 		default:
-			return "", fmt.Errorf("%w as %s in %s (%s): keep exactly one ending in .gguf "+
-				"and rename the others, e.g. to .gguf.disabled",
-				errSeveralModels, role, d, strings.Join(baseNames(found), ", "))
+			return "", fmt.Errorf("%w as %s in %s: keep one .gguf, rename the others",
+				errSeveralModels, role, d)
 		}
 	}
-	msg := fmt.Sprintf("no %s model found in %s: put a GGUF file ending in .gguf there, "+
-		"or install the shfm-models package "+
-		"(see the README's \"Building\" section for which one to download)", role, dir)
+	msg := fmt.Sprintf("no %s model in %s: add a .gguf or install shfm-models", role, dir)
 	if len(unknown) > 0 {
-		msg += fmt.Sprintf("; ignored, role unknown (no \"embed\"/\"rerank\" in the name, "+
-			"and no embedding or reranker pooling type in the file): %s",
+		msg += fmt.Sprintf("; role unknown: %s",
 			strings.Join(baseNames(unknown), ", "))
 	}
 	return "", errors.New(msg)

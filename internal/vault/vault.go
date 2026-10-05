@@ -57,7 +57,7 @@ var Available bool
 var (
 	// ErrUnavailable is returned by every operation in a build without the
 	// vault module.
-	ErrUnavailable = errors.New("encrypted vaults are not available in this build of shfm (build tag \"vault\")")
+	ErrUnavailable = errors.New("vaults aren't in this build (build tag \"vault\")")
 	// ErrNotVault: the folder holds no vault (no vault.json).
 	ErrNotVault = errors.New("not an encrypted vault")
 	// ErrDirNotEmpty: a new vault can only be created in an empty folder.
@@ -152,7 +152,7 @@ type Part struct {
 }
 
 // ErrPartUnavailable: a change needs all three parts of a split vault.
-var ErrPartUnavailable = errors.New("a part of the split vault is unavailable: it is read-only until all three are reachable")
+var ErrPartUnavailable = errors.New("a vault part is unreachable: read-only until all are back")
 
 // RepairStats says what RepairDispersed did.
 type RepairStats struct {

@@ -512,5 +512,5 @@ func dirEntry(name string, mod time.Time) vfs.Entry {
 var (
 	errIsDir    = syscall.EISDIR
 	errNotDir   = syscall.ENOTDIR
-	errReadOnly = &APIError{Status: 403, Message: "Google Docs documents can't be modified from shfm (they're exported read-only)", kind: os.ErrPermission}
+	errReadOnly = &APIError{Status: 403, Message: "Google Docs documents are read-only in shfm", kind: os.ErrPermission}
 )

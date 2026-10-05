@@ -271,13 +271,13 @@ func TestModelDiscovery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Two enabled embedding models: an error naming both, not a silent pick.
+	// Two enabled embedding models: an error, not a silent pick.
 	putModel(t, "Qwen3-Embedding-0.6B-Q8_0.gguf", 30)
 	_, err := modelPath()
 	if !errors.Is(err, errSeveralModels) {
 		t.Fatalf("two enabled embedding models must be ambiguous, got %v", err)
 	}
-	for _, want := range []string{"Qwen3-Embedding-4B-Q8_0.gguf", "Qwen3-Embedding-0.6B-Q8_0.gguf", ".gguf.disabled"} {
+	for _, want := range []string{"embedding", "rename the others"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err, want)
 		}
@@ -402,7 +402,7 @@ func TestModelDiscoveryMetadataFallback(t *testing.T) {
 		if err == nil {
 			t.Fatal("no embedding model: modelPath must fail")
 		}
-		for _, want := range []string{"chat-model.gguf", "junk.gguf", "no embedding model found"} {
+		for _, want := range []string{"chat-model.gguf", "junk.gguf", "no embedding model"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error %q should mention %q", err, want)
 			}

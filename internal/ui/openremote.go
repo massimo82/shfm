@@ -32,7 +32,7 @@ import (
 	"shfm/internal/vfs"
 )
 
-var errNoVaultSpool = errors.New("no $XDG_RUNTIME_DIR to hold a decrypted copy in memory, and a vault's files are never decrypted to disk")
+var errNoVaultSpool = errors.New("no $XDG_RUNTIME_DIR: vault files are never decrypted to disk")
 
 // remoteOpenTarget identifies an entry on a source with no real local path
 // (SMB/NFS/SFTP/MTP): opening it with an external app requires either the
