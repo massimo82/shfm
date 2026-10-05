@@ -1,3 +1,11 @@
+shfm (0.5.2) unstable; urgency=medium
+
+  * About ends with the copyright and license notice, and says the bundled
+    third-party code keeps its own license.
+  * About describes shfm in a shorter list of its features.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  Mon, 05 Oct 2026 12:00:00 +0200
+
 shfm (0.5.1) unstable; urgency=medium
 
   * Mounting a removable drive without udisks2 installed says so, and to

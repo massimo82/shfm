@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.5.1
+Version:        0.5.2
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -141,6 +141,11 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Mon Oct 05 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.2-1
+- About ends with the copyright and license notice, and says the bundled
+  third-party code keeps its own license.
+- About describes shfm in a shorter list of its features.
+
 * Sun Oct 04 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.1-1
 - Mounting a removable drive without udisks2 installed says so, and to
   install it, instead of reporting an unrecognized filesystem; formatting
