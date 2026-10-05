@@ -198,7 +198,7 @@ func (mg *Manager) ensure(src vfs.FileSystem) (*mount, error) {
 		closeBe()
 		return nil, err
 	}
-	mnt, err := mountAt(dir, src.Label(), mfs, !shared)
+	mnt, err := mg.mountAt(dir, src.Label(), mfs, !shared)
 	if err != nil {
 		closeBe()
 		os.Remove(dir)
@@ -330,7 +330,8 @@ func dirName(label string) string {
 // MTP device), which isn't meant to be listed, keeps the "shfm" subtype.
 const networkSubtype = "rclone"
 
-func mountAt(dir, label string, mfs *mountFS, network bool) (*mount, error) {
+// mountAt mounts mfs on dir; mg.mu must be held.
+func (mg *Manager) mountAt(dir, label string, mfs *mountFS, network bool) (*mount, error) {
 	subtype := "shfm"
 	if network {
 		subtype = networkSubtype
@@ -360,11 +361,20 @@ func mountAt(dir, label string, mfs *mountFS, network bool) (*mount, error) {
 		// Returns once unmounted, including by an external fusermount -u
 		// (ejected from another application's file dialog): the mount
 		// point goes too, so that mounting the source again reuses its
-		// name. Removing it fails harmlessly if it's in use again.
+		// name. Under mg.mu, and only if no newer mount has taken the
+		// name since: unmountLocked has already removed it, so a remount
+		// may have created it afresh, still empty until mounted on.
 		server.Wait()
 		mfs.close()
-		os.Remove(dir)
+		mg.mu.Lock()
+		defer mg.mu.Unlock()
 		close(mnt.done)
+		for _, other := range mg.mounts {
+			if other != mnt && other.dir == dir {
+				return
+			}
+		}
+		os.Remove(dir)
 	}()
 	return mnt, nil
 }
