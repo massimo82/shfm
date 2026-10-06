@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.5.9
+Version:        0.5.10
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -141,6 +141,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Tue Oct 06 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.10-1
+- shfm always starts in single-pane mode; the layout is no longer saved.
+
 * Tue Oct 06 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.9-1
 - The scrolling help line comes back round after a " ... " gap.
 

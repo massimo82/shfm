@@ -1,3 +1,9 @@
+shfm (0.5.10) unstable; urgency=medium
+
+  * shfm always starts in single-pane mode; the layout is no longer saved.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  mar, 06 ott 2026 20:58:23 +0200
+
 shfm (0.5.9) unstable; urgency=medium
 
   * The scrolling help line comes back round after a " ... " gap.
