@@ -118,7 +118,7 @@ to toggle between single- and dual-pane layout.
 ## Features in detail
 
 - **Single or dual pane**, toggled with `Ctrl+L` or a click on the title
-  bar (preference saved to disk).
+  bar; shfm always starts in single-pane mode.
 - **No function keys**: every shortcut uses `Ctrl` (and `Ctrl+Alt` for
   "alternative" variants), designed for modern keyboards where F1-F12 are
   often missing or hard to reach.

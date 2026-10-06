@@ -336,6 +336,7 @@ func TestRemoveOpenSourceRefused(t *testing.T) {
 	isolateCloudTest(t)
 	dir := t.TempDir()
 	m := newTestModel()
+	m.dualPane = true
 	nas := config.RemoteSource{Name: "nas/share", Kind: "smb", Host: "nas", Share: "share"}
 	m.cfg.RemoteSources = []config.RemoteSource{nas}
 	m.panes[1] = NewPane(labeledFS{vfs.NewLocalFS("x", dir), "smb://nas/share"}, dir, false, 1, m.sizeCh)

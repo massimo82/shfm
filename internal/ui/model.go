@@ -187,7 +187,6 @@ func New(cfg *config.Config, keymap *config.KeyMap, start Start) *Model {
 	m := &Model{
 		cfg:       cfg,
 		keymap:    keymap,
-		dualPane:  cfg.DualPane,
 		taskCh:    make(chan taskMsg, 256),
 		sizeCh:    make(chan dirSizeMsg, 256),
 		connectCh: make(chan connectResultMsg, 8),
@@ -589,8 +588,6 @@ func (m *Model) handlePathEditKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *Model) toggleLayout() {
 	m.dualPane = !m.dualPane
-	m.cfg.DualPane = m.dualPane
-	m.cfg.Save()
 }
 
 // toggleHidden shows or hides hidden entries (dotfiles, and lost+found at a

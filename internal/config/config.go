@@ -15,8 +15,8 @@
 // You should have received a copy of the GNU General Public License
 // along with shfm.  If not, see <https://www.gnu.org/licenses/>.
 
-// Package config manages the user's persistent preferences (layout, saved
-// network sources) as JSON under $XDG_CONFIG_HOME.
+// Package config manages the user's persistent preferences (saved network
+// sources, display options) as JSON under $XDG_CONFIG_HOME.
 package config
 
 import (
@@ -120,7 +120,6 @@ type MirrorPair struct {
 
 // Config groups all persistent preferences.
 type Config struct {
-	DualPane      bool           `json:"dual_pane"`
 	ShowHidden    bool           `json:"show_hidden"`
 	RemoteSources []RemoteSource `json:"remote_sources"`
 	CloudSources  []CloudSource  `json:"cloud_sources,omitempty"`
@@ -181,7 +180,7 @@ type Config struct {
 
 // Default returns the default configuration.
 func Default() *Config {
-	return &Config{DualPane: true, ShowHidden: false, LogLevel: "warn", Notifications: true, ShareClipboard: true, VaultAutoLockMinutes: 15}
+	return &Config{ShowHidden: false, LogLevel: "warn", Notifications: true, ShareClipboard: true, VaultAutoLockMinutes: 15}
 }
 
 func path() (string, error) {
