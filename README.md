@@ -876,13 +876,29 @@ closed or unreachable without losing anything.
 
 Open the new vault form (see [Creating a vault](#creating-a-vault)) and
 press `Ctrl+T` to split it: a name, then for each of the three parts its
-source (`Ctrl+←`/`Ctrl+→`: the local disk, a saved remote source, a cloud
-account) and its folder — created if missing, otherwise it must be
-empty — and the password, as for a vault in a folder. Three folders that
-already hold a split vault add it back instead, with its password only
-(after it was forgotten, or on another machine).
+source (`Ctrl+←`/`Ctrl+→`: the local disk, a removable disk, a saved
+remote source, a cloud account) and the location of its folder, and the
+password, as for a vault in a folder. The three folders are **named like
+the vault**, each in its location: left empty, the source's root — on
+the local disk, your home folder. A folder is created if missing,
+otherwise it must be empty. Three folders that already hold a split
+vault add it back instead, with its password only (after it was
+forgotten, or on another machine): give the vault their name.
+
+A **removable disk** (USB drive, SD card) is recognized by its
+filesystem's UUID, wherever it gets mounted: its part's location is from
+the disk's root, and opening the vault mounts the disk if it isn't
+already. Unplugged, it is a part unreachable like any other.
 The vault is saved in the same section; choosing it connects to its three
 sources and shows it in the pane, in place of the source the pane had.
+
+**Entering one of its folders** — any of the three, on whatever source
+the pane shows — works as for a vault in a folder: the password, then
+the vault's content; `..` at its root, or locking it, comes back to that
+folder. A part of a split vault not saved here (on another machine, or
+after forgetting it) opens the form to add it instead, with its name,
+source and location already filled in: only the other two parts and the
+password are left.
 
 - With a source unreachable, the vault opens **read-only** (shfm says
   which part is missing): reading needs two parts, any change all three.

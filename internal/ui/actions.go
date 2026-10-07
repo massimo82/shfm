@@ -762,6 +762,9 @@ func (m *Model) replaceFS(idx int, fs vfs.FileSystem, path string) {
 	if exit := m.panes[idx].VaultExit; exit != nil {
 		// A vault's FS doesn't own its backend: the pane does.
 		old = exit.FS
+		if exit.Back != nil && exit.Back.FS != fs {
+			m.closeFSWhenUnused(exit.Back.FS)
+		}
 	}
 	m.panes[idx] = NewPane(fs, path, m.cfg.ShowHidden, idx, m.sizeCh)
 	if old != nil && old != fs {
@@ -923,7 +926,7 @@ func (m *Model) askRemoveSavedSource() {
 	case "cloud":
 		msg = m.cloudRemovalMessage(e.cloud)
 	case "split-vault":
-		msg = fmt.Sprintf("Forget the split vault %s?\n\nIts files stay on its three parts: create a split vault with the same three folders (New encrypted vault…, Ctrl+T) to add it back.", e.split.Name)
+		msg = fmt.Sprintf("Forget the split vault %s?\n\nIts files stay on its three parts: enter one of its folders to add it back.", e.split.Name)
 	default:
 		m.setStatus("Only saved sources and accounts can be removed")
 		return

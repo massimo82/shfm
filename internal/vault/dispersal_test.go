@@ -288,3 +288,22 @@ func TestSplitVault(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitPart(t *testing.T) {
+	fs := vfs.NewLocalFS("Local", "/")
+	for i := range 3 {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, recoveryFile), []byte(splitRecoveryText(i)), 0o644)
+		if got, ok := SplitPart(fs, dir); !ok || got != i {
+			t.Fatalf("part %d: SplitPart = %d, %v", i+1, got, ok)
+		}
+	}
+	plain := t.TempDir()
+	os.WriteFile(filepath.Join(plain, recoveryFile), []byte(recoveryText(config{})), 0o644)
+	if _, ok := SplitPart(fs, plain); ok {
+		t.Fatal("a vault in a folder taken for a split part")
+	}
+	if _, ok := SplitPart(fs, t.TempDir()); ok {
+		t.Fatal("an empty folder taken for a split part")
+	}
+}

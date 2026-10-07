@@ -44,8 +44,11 @@ package vault
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"shfm/internal/vfs"
 )
@@ -160,4 +163,32 @@ type RepairStats struct {
 	Shards  int // shards rebuilt
 	Removed int // stale shards and folders removed
 	Lost    int // files with fewer than two shards: unrecoverable
+}
+
+// splitRecoveryTitle starts a split vault part's RECOVERY.txt (see
+// splitRecoveryText).
+const splitRecoveryTitle = "SPLIT ENCRYPTED VAULT"
+
+// SplitPart reports whether dir on fs is a part of a split vault, and
+// which (0-2): its RECOVERY.txt, in clear, says so.
+func SplitPart(fs vfs.FileSystem, dir string) (int, bool) {
+	r, err := fs.Open(fs.Join(dir, recoveryFile))
+	if err != nil {
+		return 0, false
+	}
+	defer r.Close()
+	head, _ := io.ReadAll(io.LimitReader(r, 512))
+	text := string(head)
+	if !strings.HasPrefix(text, splitRecoveryTitle) {
+		return 0, false
+	}
+	i := strings.Index(text, "This folder is part ")
+	if i < 0 {
+		return 0, false
+	}
+	var part int
+	if _, err := fmt.Sscanf(text[i:], "This folder is part %d of 3", &part); err != nil || part < 1 || part > 3 {
+		return 0, false
+	}
+	return part - 1, true
 }

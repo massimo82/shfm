@@ -31,6 +31,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"shfm/internal/config"
+	"shfm/internal/drives"
 	"shfm/internal/vault"
 	"shfm/internal/vfs"
 )
@@ -316,8 +317,9 @@ func TestLockVaultsKeyBinding(t *testing.T) {
 	}
 }
 
-// splitForm fills the split vault form: three local folders.
-func splitForm(t *testing.T, m *Model, name string, dirs [3]string, pw, again string) tea.Cmd {
+// splitForm fills the split vault form: three local folders, named name
+// in the three locations.
+func splitForm(t *testing.T, m *Model, name string, locs [3]string, pw, again string) tea.Cmd {
 	t.Helper()
 	m.openSourceMenu()
 	for i, e := range m.sourceMenuEntries {
@@ -341,7 +343,7 @@ func splitForm(t *testing.T, m *Model, name string, dirs [3]string, pw, again st
 		t.Fatal("part 1 doesn't default to the local disk")
 	}
 	m.dialog.SplitChoice = [3]int{0, 0, 0} // all local, in three folders
-	typeInto(m, name, dirs[0], dirs[1], dirs[2], pw, again)
+	typeInto(m, name, locs[0], locs[1], locs[2], pw, again)
 	cmd, _ := m.confirmDialog()
 	return cmd
 }
@@ -349,13 +351,14 @@ func splitForm(t *testing.T, m *Model, name string, dirs [3]string, pw, again st
 func TestSplitVaultUI(t *testing.T) {
 	home := t.TempDir()
 	m := archiveTestModel(t, home)
-	var dirs [3]string
+	var locs, dirs [3]string
 	for i := range dirs {
-		dirs[i] = filepath.Join(t.TempDir(), "part")
+		locs[i] = t.TempDir()
+		dirs[i] = filepath.Join(locs[i], "Split")
 	}
 
 	// Creating: the folders are made, the key shown, the vault opened.
-	run(t, m, splitForm(t, m, "Split", dirs, testVaultPW, testVaultPW))
+	run(t, m, splitForm(t, m, "Split", locs, testVaultPW, testVaultPW))
 	if m.dialog.Kind != DialogVaultRecoveryKey {
 		t.Fatalf("dialog %v %q, want the recovery key", m.dialog.Kind, m.dialog.Message)
 	}
@@ -367,8 +370,8 @@ func TestSplitVaultUI(t *testing.T) {
 	if len(p.Entries) != 0 {
 		t.Fatalf("a standalone vault's root lists %v (no ..)", p.Entries)
 	}
-	if len(m.cfg.SplitVaults) != 1 {
-		t.Fatal("the split vault wasn't saved")
+	if len(m.cfg.SplitVaults) != 1 || m.cfg.SplitVaults[0].Parts[1].Path != dirs[1] {
+		t.Fatalf("the split vault wasn't saved: %+v", m.cfg.SplitVaults)
 	}
 	w, _ := p.FS.Create("/doc.txt")
 	w.Write([]byte("in three parts"))
@@ -460,7 +463,7 @@ func TestSplitVaultUI(t *testing.T) {
 	if len(m.cfg.SplitVaults) != 0 {
 		t.Fatal("not forgotten")
 	}
-	run(t, m, splitForm(t, m, "Again", dirs, testVaultPW, ""))
+	run(t, m, splitForm(t, m, "Split", locs, testVaultPW, ""))
 	if m.dialog.Kind != DialogNone || m.activePane().FS.Kind() != vfs.KindVault {
 		t.Fatalf("adding back: dialog %v %q", m.dialog.Kind, m.dialog.Message)
 	}
@@ -469,17 +472,137 @@ func TestSplitVaultUI(t *testing.T) {
 // A new split vault needs empty folders.
 func TestSplitVaultNeedsEmptyFolders(t *testing.T) {
 	m := archiveTestModel(t, t.TempDir())
-	var dirs [3]string
-	for i := range dirs {
-		dirs[i] = t.TempDir()
+	var locs [3]string
+	for i := range locs {
+		locs[i] = t.TempDir()
 	}
-	os.WriteFile(filepath.Join(dirs[2], "unrelated"), nil, 0o644)
-	run(t, m, splitForm(t, m, "S", dirs, testVaultPW, testVaultPW))
+	os.Mkdir(filepath.Join(locs[2], "S"), 0o755)
+	os.WriteFile(filepath.Join(locs[2], "S", "unrelated"), nil, 0o644)
+	run(t, m, splitForm(t, m, "S", locs, testVaultPW, testVaultPW))
 	if m.dialog.Kind != DialogNewSplitVault || !strings.Contains(m.dialog.Message, "isn't empty") {
 		t.Fatalf("dialog %v %q", m.dialog.Kind, m.dialog.Message)
 	}
-	if entries, _ := os.ReadDir(dirs[0]); len(entries) != 0 {
+	if entries, _ := os.ReadDir(locs[0]); len(entries) != 0 {
 		t.Fatal("something was written to part 1")
+	}
+
+	// The same folder twice, and a name that can't be a folder's.
+	run(t, m, splitForm(t, m, "T", [3]string{locs[0], locs[0], locs[1]}, testVaultPW, testVaultPW))
+	if !strings.Contains(m.dialog.Message, "same folder") {
+		t.Fatalf("same folder twice: %q", m.dialog.Message)
+	}
+	if cmd := splitForm(t, m, "a/b", locs, testVaultPW, testVaultPW); cmd != nil || !strings.Contains(m.dialog.Message, "No /") {
+		t.Fatalf("a name with a /: %q", m.dialog.Message)
+	}
+}
+
+// A part on a removable disk, found by its filesystem UUID wherever it's
+// mounted (mounted when needed), and one on the local disk by default in
+// the home folder.
+func TestSplitVaultRemovableDisk(t *testing.T) {
+	m := archiveTestModel(t, t.TempDir())
+	home, _ := os.UserHomeDir() // archiveTestModel's
+	stick := t.TempDir()        // the disk's content
+	mounted, mountedAt, mounts := false, "", 0
+	listRemovableDrives = func() ([]drives.RemovableDevice, error) {
+		return []drives.RemovableDevice{{Name: "sdz1", Path: "/dev/sdz1", SizeBytes: 1 << 30, Vendor: "Acme", Model: "Stick"}}, nil
+	}
+	uuidOf = func(dev string) string {
+		if dev == "/dev/sdz1" {
+			return "AB12-CD34"
+		}
+		return ""
+	}
+	attached := true
+	deviceByUUID = func(uuid string) (string, bool) { return "/dev/sdz1", attached && uuid == "AB12-CD34" }
+	mountByUUID = func(uuid string) (drives.Mount, bool) {
+		return drives.Mount{MountPoint: mountedAt, UUID: uuid}, mounted && uuid == "AB12-CD34"
+	}
+	autoMount = func(dev, name string) (string, error) {
+		mounts++
+		// Mounted somewhere else every time: a link to the disk's content.
+		mountedAt = filepath.Join(t.TempDir(), name)
+		if err := os.Symlink(stick, mountedAt); err != nil {
+			return "", err
+		}
+		mounted = true
+		return mountedAt, nil
+	}
+	t.Cleanup(func() {
+		listRemovableDrives = func() ([]drives.RemovableDevice, error) { return nil, nil }
+		uuidOf = func(string) string { return "" }
+		mountByUUID = func(string) (drives.Mount, bool) { return drives.Mount{}, false }
+		deviceByUUID = func(string) (string, bool) { return "", false }
+		autoMount = func(string, string) (string, error) { return "", errors.New("no mounting in tests") }
+	})
+
+	m.askNewSplitVault("")
+	d := &m.dialog
+	if len(d.SplitChoices) < 2 || d.SplitChoices[1].id != "uuid:AB12-CD34" || !strings.Contains(d.SplitChoices[1].label, "Acme Stick") {
+		t.Fatalf("the removable disk isn't offered: %+v", d.SplitChoices)
+	}
+	if d.Inputs[1].Placeholder != "in your home folder" || d.Inputs[2].Placeholder != "in the root of the source" {
+		t.Fatalf("placeholders %q, %q", d.Inputs[1].Placeholder, d.Inputs[2].Placeholder)
+	}
+	other := t.TempDir()
+	d.SplitChoice = [3]int{0, 1, 0} // home, the disk's root, a local folder
+	typeInto(m, "Vault", "", "", other, testVaultPW, testVaultPW)
+	cmd, _ := m.confirmDialog()
+	run(t, m, cmd)
+	if m.dialog.Kind != DialogVaultRecoveryKey {
+		t.Fatalf("dialog %v %q, want the recovery key", m.dialog.Kind, m.dialog.Message)
+	}
+	key(m, "enter")
+	for _, dir := range []string{filepath.Join(home, "Vault"), filepath.Join(stick, "Vault"), filepath.Join(other, "Vault")} {
+		if _, err := os.Stat(filepath.Join(dir, "RECOVERY.txt")); err != nil {
+			t.Fatalf("no part in %s: %v", dir, err)
+		}
+	}
+	if mounts != 1 {
+		t.Fatalf("mounted %d times, want once", mounts)
+	}
+	saved := m.cfg.SplitVaults[0].Parts
+	if saved[0].Path != filepath.Join(home, "Vault") || saved[1] != (config.VaultPart{Source: "uuid:AB12-CD34", Path: "/Vault", Label: "Acme Stick"}) {
+		t.Fatalf("saved parts %+v", saved)
+	}
+	w, _ := m.activePane().FS.Create("/doc.txt")
+	w.Write([]byte("on a stick"))
+	w.Close()
+	key(m, "ctrl+alt+l")
+
+	// Unplugged, its label still shown: the vault opens read-only.
+	mounted, attached = false, false
+	listRemovableDrives = func() ([]drives.RemovableDevice, error) { return nil, nil }
+	entries := m.splitVaultMenuEntries()
+	if !strings.Contains(entries[0].label, "Acme Stick") {
+		t.Fatalf("picker entry %q", entries[0].label)
+	}
+	run(t, m, m.openSplitVault(m.cfg.SplitVaults[0], nil))
+	typeInto(m, testVaultPW)
+	cmd, _ = m.confirmDialog()
+	run(t, m, cmd)
+	if !strings.Contains(m.status, "part 2") || !strings.Contains(m.status, "read-only") {
+		t.Fatalf("unplugged: %q", m.status)
+	}
+	key(m, "ctrl+alt+l")
+
+	// Plugged back in: mounted elsewhere, found again.
+	attached = true
+	run(t, m, m.openSplitVault(m.cfg.SplitVaults[0], nil))
+	typeInto(m, testVaultPW)
+	cmd, _ = m.confirmDialog()
+	run(t, m, cmd)
+	if mounts != 2 || m.statusErr {
+		t.Fatalf("plugged back: %d mounts, status %q", mounts, m.status)
+	}
+	r, err := m.activePane().FS.Open("/doc.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(r)
+	r.Close()
+	if string(got) != "on a stick" {
+		t.Fatalf("read back %q", got)
 	}
 }
 
@@ -565,5 +688,87 @@ func TestNoVaultCopiedIntoVault(t *testing.T) {
 	}
 	if es, _ := vfsys.List("/"); len(es) != 0 {
 		t.Fatalf("something was copied: %v", es)
+	}
+}
+
+// Enter on a part's folder opens the split vault like a vault in a
+// folder: its password, then its content; ".." and locking come back.
+func TestSplitVaultEnterPart(t *testing.T) {
+	m := archiveTestModel(t, t.TempDir())
+	var locs [3]string
+	for i := range locs {
+		locs[i] = t.TempDir()
+	}
+	run(t, m, splitForm(t, m, "Split", locs, testVaultPW, testVaultPW))
+	key(m, "enter") // the recovery key
+	w, _ := m.activePane().FS.Create("/doc.txt")
+	w.Write([]byte("x"))
+	w.Close()
+	key(m, "ctrl+alt+l")
+
+	enterPart := func() {
+		t.Helper()
+		m.replaceActiveFS(vfs.NewLocalFS("Local", "/"), locs[1])
+		moveCursorTo(t, m.activePane(), "Split")
+		m.enterOrOpen()
+		if len(m.queued) == 0 {
+			t.Fatalf("Enter on the part: nothing to connect (dialog %v, status %q)", m.dialog.Kind, m.status)
+		}
+		cmd := m.queued[len(m.queued)-1]
+		m.queued = nil
+		run(t, m, cmd)
+	}
+	enterPart()
+	if m.dialog.Kind != DialogVaultUnlock {
+		t.Fatalf("dialog %v (%q), want the password", m.dialog.Kind, m.status)
+	}
+	typeInto(m, testVaultPW)
+	cmd, _ := m.confirmDialog()
+	run(t, m, cmd)
+	p := m.activePane()
+	if p.FS.Kind() != vfs.KindVault || p.VaultExit == nil || p.VaultExit.Back == nil {
+		t.Fatalf("the pane doesn't show the vault: %v", p.FS.Kind())
+	}
+	if len(p.Entries) != 2 || !IsParentEntry(p.Entries[0]) || p.Entries[1].Name != "doc.txt" {
+		t.Fatalf("the vault lists %v, want .. and doc.txt", p.Entries)
+	}
+
+	// "..": back to the part's folder, on the pane's source.
+	p.Cursor = 0
+	m.enterOrOpen()
+	p = m.activePane()
+	if p.FS.Kind() != vfs.KindLocal || p.Path != locs[1] || p.VaultExit != nil {
+		t.Fatalf("after ..: %v at %s", p.FS.Kind(), p.Path)
+	}
+	if e, _ := p.CurrentEntry(); e.Name != "Split" {
+		t.Fatalf("cursor on %q", e.Name)
+	}
+
+	// Unlocked already: no password; locking comes back too.
+	enterPart()
+	if m.dialog.Kind != DialogNone || m.activePane().FS.Kind() != vfs.KindVault {
+		t.Fatalf("entering again: dialog %v", m.dialog.Kind)
+	}
+	key(m, "ctrl+alt+l")
+	if p := m.activePane(); p.FS.Kind() != vfs.KindLocal || p.Path != locs[1] {
+		t.Fatalf("after locking: %v at %s", p.FS.Kind(), p.Path)
+	}
+
+	// Not saved here: the form to add it, this part filled in.
+	m.removeSplitVault(m.cfg.SplitVaults[0])
+	m.replaceActiveFS(vfs.NewLocalFS("Local", "/"), locs[1])
+	moveCursorTo(t, m.activePane(), "Split")
+	m.enterOrOpen()
+	d := m.dialog
+	if d.Kind != DialogNewSplitVault || d.Inputs[0].Value() != "Split" || d.Inputs[2].Value() != locs[1] || d.SplitChoices[d.SplitChoice[1]].id != "local" {
+		t.Fatalf("form %v: name %q, part 2 at %q", d.Kind, d.Inputs[0].Value(), d.Inputs[2].Value())
+	}
+	m.dialog.Inputs[1].SetValue(locs[0])
+	m.dialog.Inputs[3].SetValue(locs[2])
+	m.dialog.Inputs[4].SetValue(testVaultPW)
+	cmd, _ = m.confirmDialog()
+	run(t, m, cmd)
+	if m.dialog.Kind != DialogNone || m.activePane().FS.Kind() != vfs.KindVault || len(m.cfg.SplitVaults) != 1 {
+		t.Fatalf("adding it back: dialog %v %q", m.dialog.Kind, m.dialog.Message)
 	}
 }

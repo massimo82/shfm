@@ -117,7 +117,7 @@ jq; run it from this folder, names containing a line break excepted):
 // each part of a split vault: how to put the vault back together from any
 // two parts, before following the vault's own RECOVERY.txt.
 func splitRecoveryText(part int) string {
-	return fmt.Sprintf(`SPLIT ENCRYPTED VAULT — HOW TO RECOVER IT WITHOUT SHFM
+	return fmt.Sprintf(splitRecoveryTitle+` — HOW TO RECOVER IT WITHOUT SHFM
 =====================================================
 
 This folder is part %d of 3 of a split encrypted vault made by shfm

@@ -126,3 +126,19 @@ func isUnder(path, dir string) bool {
 	}
 	return path == dir || strings.HasPrefix(path, dir+"/")
 }
+
+// UUIDOf returns the filesystem UUID of the block device dev (e.g.
+// /dev/sdb1), "" when it has none.
+func UUIDOf(dev string) string {
+	return uuidsByDevice()[resolveDevice(dev)]
+}
+
+// DeviceByUUID returns the block device holding the filesystem with the
+// given UUID, mounted or not, if it's attached.
+func DeviceByUUID(uuid string) (string, bool) {
+	if uuid == "" || strings.Contains(uuid, "/") {
+		return "", false
+	}
+	dev, err := filepath.EvalSymlinks(filepath.Join(byUUIDDir, uuid))
+	return dev, err == nil
+}

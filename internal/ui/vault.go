@@ -69,6 +69,24 @@ type vaultExit struct {
 	// Standalone: a split vault, opened from the source picker on storage
 	// of its own — there's no folder to go back to, ".." isn't offered.
 	Standalone bool
+	// Back: a split vault entered from one of its parts' folders — ".."
+	// and locking go back there.
+	Back *vaultBack
+}
+
+// vaultBack is the part's folder a split vault was entered from (see
+// enterSplitPart).
+type vaultBack struct {
+	FS    vfs.FileSystem // the pane's source, kept open meanwhile
+	Dir   string         // the part's folder on FS
+	Label string         // the pane's SOURCE label on FS
+	// release closes the vault's storage once the pane goes back.
+	release func()
+}
+
+// leavable: ".." at the vault's root leaves it.
+func (e *vaultExit) leavable() bool {
+	return e != nil && (!e.Standalone || e.Back != nil)
 }
 
 // vaultTarget is a vault a dialog is about.
@@ -81,6 +99,8 @@ type vaultTarget struct {
 	// alone (see vaultExit.Standalone): shown in the pane whatever it
 	// shows meanwhile, and closed if it isn't shown in the end.
 	standalone bool
+	// back: the standalone vault was entered from a part's folder.
+	back *vaultBack
 }
 
 func vaultKey(fs vfs.FileSystem, dir string) string {
@@ -103,6 +123,9 @@ func (m *Model) enterVault() bool {
 	}
 	dir := p.FS.Join(p.Path, e.Name)
 	if !vault.IsVault(p.FS, dir) {
+		if part, ok := vault.SplitPart(p.FS, dir); ok && p.VaultExit == nil {
+			return m.enterSplitPart(e.Name, dir, part)
+		}
 		return false
 	}
 	if !vault.Available {
@@ -121,13 +144,22 @@ func (m *Model) enterVault() bool {
 // showVault shows the unlocked vault s in t's pane, at its root.
 func (m *Model) showVault(t vaultTarget, s *vaultSession) {
 	p := m.panes[t.pane]
-	// A split vault replaces the pane's source, which is closed.
+	// A split vault replaces the pane's source, which is closed — unless
+	// it was entered from a part's folder on it, to go back to.
 	var old vfs.FileSystem
-	if t.standalone {
+	back := t.back
+	if back != nil && (p.FS != back.FS || p.VaultExit != nil) {
+		back = nil // the pane has moved on meanwhile
+	}
+	if t.standalone && back == nil {
 		old = p.FS
 		if p.VaultExit != nil {
 			old = p.VaultExit.FS
 		}
+	}
+	if back != nil {
+		storage := t.fs
+		back.release = func() { m.closeFSWhenUnused(storage) }
 	}
 	fs := s.v.On(t.fs).FS()
 	s.fss = append(s.fss, fs)
@@ -135,7 +167,7 @@ func (m *Model) showVault(t vaultTarget, s *vaultSession) {
 	if t.standalone {
 		label = ""
 	}
-	p.VaultExit = &vaultExit{FS: t.fs, Dir: t.dir, Label: label, key: vaultKey(t.fs, t.dir), Standalone: t.standalone}
+	p.VaultExit = &vaultExit{FS: t.fs, Dir: t.dir, Label: label, key: vaultKey(t.fs, t.dir), Standalone: t.standalone, Back: back}
 	p.FS, p.Path, p.SourceLabel = fs, "/", iconSourceVault+" "+s.name
 	p.Cursor, p.Offset = 0, 0
 	p.DeselectAll()
@@ -632,7 +664,7 @@ func (m *Model) lockVault(key string) {
 	for i, p := range m.panes {
 		switch {
 		case p.VaultExit == nil || p.VaultExit.key != key:
-		case p.VaultExit.Standalone:
+		case p.VaultExit.Standalone && p.VaultExit.Back == nil:
 			home := homeOrRoot()
 			m.replaceFS(i, vfs.NewLocalFS("Local", home), home)
 		default:

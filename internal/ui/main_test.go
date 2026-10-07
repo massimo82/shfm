@@ -18,6 +18,7 @@
 package ui
 
 import (
+	"errors"
 	"os"
 	"testing"
 
@@ -27,10 +28,16 @@ import (
 
 // TestMain keeps the tests off the machine's hardware: the source picker
 // lists no disks and no USB devices (a CI runner may have no usbfs at all,
-// and the tests must not depend on what's plugged in).
+// and the tests must not depend on what's plugged in), and nothing gets
+// mounted.
 func TestMain(m *testing.M) {
 	listLocalDrives = func() ([]drives.LocalDrive, error) { return nil, nil }
 	listRemovableDrives = func() ([]drives.RemovableDevice, error) { return nil, nil }
 	discoverMTPDevices = func() ([]mtp.DeviceInfo, error) { return nil, nil }
+	uuidOf = func(string) string { return "" }
+	mountOf = func(string) (drives.Mount, bool) { return drives.Mount{}, false }
+	mountByUUID = func(string) (drives.Mount, bool) { return drives.Mount{}, false }
+	deviceByUUID = func(string) (string, bool) { return "", false }
+	autoMount = func(string, string) (string, error) { return "", errors.New("no mounting in tests") }
 	os.Exit(m.Run())
 }

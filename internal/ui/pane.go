@@ -242,7 +242,7 @@ func (p *Pane) Load() {
 		p.DirSizesSupported = false
 	}
 
-	if p.FS.Dir(p.Path) != p.Path || (p.VaultExit != nil && !p.VaultExit.Standalone) {
+	if p.FS.Dir(p.Path) != p.Path || p.VaultExit.leavable() {
 		filtered = append([]vfs.Entry{{Name: parentEntryName, IsDir: true}}, filtered...)
 	}
 	p.Entries = filtered
@@ -524,7 +524,7 @@ func (p *Pane) Activate() bool {
 func (p *Pane) GoUp() bool {
 	parent := p.FS.Dir(p.Path)
 	if parent == p.Path {
-		if p.VaultExit != nil && !p.VaultExit.Standalone {
+		if p.VaultExit.leavable() {
 			p.leaveVault()
 			return true
 		}
@@ -550,14 +550,23 @@ func (p *Pane) GoUp() bool {
 // it, the cursor on the vault.
 func (p *Pane) leaveVault() {
 	e := p.VaultExit
-	p.FS, p.SourceLabel, p.VaultExit = e.FS, e.Label, nil
-	p.Path = e.FS.Dir(e.Dir)
+	fs, dir, label := e.FS, e.Dir, e.Label
+	if b := e.Back; b != nil {
+		// A split vault entered from a part's folder: back there, its
+		// storage closed.
+		fs, dir, label = b.FS, b.Dir, b.Label
+		if b.release != nil {
+			b.release()
+		}
+	}
+	p.FS, p.SourceLabel, p.VaultExit = fs, label, nil
+	p.Path = fs.Dir(dir)
 	p.Cursor, p.Offset = 0, 0
 	p.DeselectAll()
 	p.FilterQuery, p.FilterActive = "", false
 	p.Load()
 	for i, en := range p.Entries {
-		if en.Name == e.FS.Base(e.Dir) {
+		if en.Name == fs.Base(dir) {
 			p.Cursor = i
 			break
 		}

@@ -61,11 +61,16 @@ type SplitVault struct {
 }
 
 // VaultPart is one of a split vault's folders: on the local file system
-// ("local"), a saved remote source ("remote:" + its Name) or a cloud
-// account ("cloud:" + its Account).
+// ("local"), a removable disk ("uuid:" + its filesystem UUID, Path then
+// being from the disk's root, wherever it gets mounted), a saved remote
+// source ("remote:" + its Name) or a cloud account ("cloud:" + its
+// Account).
 type VaultPart struct {
 	Source string `json:"source"`
 	Path   string `json:"path"`
+	// Label names a removable disk (its vendor and model) while it isn't
+	// attached.
+	Label string `json:"label,omitempty"`
 }
 
 // CloudSource is a cloud storage account (Google Drive, Dropbox, Microsoft

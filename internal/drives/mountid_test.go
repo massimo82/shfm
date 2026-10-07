@@ -75,3 +75,21 @@ func TestMountOfAndByUUID(t *testing.T) {
 		t.Fatal("isUnder matched a sibling with a common prefix")
 	}
 }
+
+func TestUUIDOfAndDeviceByUUID(t *testing.T) {
+	tmp := fakeMounts(t, "", map[string]string{"BBBB-2222": "sdb1"})
+	if got := UUIDOf(filepath.Join(tmp, "sdb1")); got != "BBBB-2222" {
+		t.Fatalf("UUIDOf = %q", got)
+	}
+	if got := UUIDOf(filepath.Join(tmp, "sdc1")); got != "" {
+		t.Fatalf("UUIDOf(no filesystem) = %q", got)
+	}
+	if dev, ok := DeviceByUUID("BBBB-2222"); !ok || dev != filepath.Join(tmp, "sdb1") {
+		t.Fatalf("DeviceByUUID = %q, %v", dev, ok)
+	}
+	for _, uuid := range []string{"CCCC-3333", "", "../by-uuid/BBBB-2222"} {
+		if _, ok := DeviceByUUID(uuid); ok {
+			t.Fatalf("DeviceByUUID(%q) found a device", uuid)
+		}
+	}
+}
