@@ -1,3 +1,9 @@
+shfm (0.5.11) unstable; urgency=medium
+
+  * Split vaults can use removable disks; their folders take the vault's name and open it when entered.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  mer, 07 ott 2026 21:32:43 +0200
+
 shfm (0.5.10) unstable; urgency=medium
 
   * shfm always starts in single-pane mode; the layout is no longer saved.
