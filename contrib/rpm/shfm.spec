@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.5.11
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,12 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Thu Oct 08 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.0-1
+- LocalSend (optional module, build tag localsend): files, folders and text messages sent to and received from phones and computers on the local network, with Ctrl+Alt+S.
+- Devices are found over IPv4 and IPv6 multicast and by scanning the local IPv4 networks; transfers go over HTTPS, with certificates pinned.
+- Receiving is off by default; each incoming transfer is asked, saved in Downloads or the active pane's folder (any source), never overwriting; an optional PIN.
+- The release archives and packages include LocalSend.
+
 * Wed Oct 07 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.5.11-1
 - Split vaults can use removable disks; their folders take the vault's name and open it when entered.
 
