@@ -12,7 +12,8 @@ removable drives, and searches by name or — fully locally — by content.
 It keeps encrypted vaults in the standard age format, even split across
 three sources, and opens files in other applications in place, network
 ones included. It also works as the desktop's file manager and file
-dialog. Cloud storage, semantic search and encrypted vaults are optional
+dialog, and sends files to phones and computers with LocalSend. Cloud
+storage, semantic search, encrypted vaults and LocalSend are optional
 modules, all included in the [release packages](#packages).
 
 <!-- site:skip -->
@@ -67,6 +68,8 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
 - Formatting removable drives (exFAT, FAT32, ext4, XFS).
 - Optional module: [encrypted vaults](#encrypted-vaults), folders on any
   source whose files and names are encrypted (standard age format).
+- Optional module: [LocalSend](#localsend), files and messages sent to
+  and received from phones and computers on the local network.
 - Desktop launcher entry installed on first run.
 
 ## Overview
@@ -707,7 +710,7 @@ go build -tags cloud -o shfm -ldflags "\
 ```
 
 Tags combine with the others, e.g. `-tags "cloud vault"`, or
-`-tags "semantic vulkan cloud vault"` for the
+`-tags "semantic vulkan cloud vault localsend"` for the
 [full build](#full-build-every-feature-vulkan-gpu-acceleration).
 
 ### Registering shfm with the services
@@ -810,7 +813,7 @@ go build -tags vault -o shfm .
 ```
 
 Tags combine with the others, e.g. `go build -tags "cloud vault" -o shfm .`,
-or `-tags "semantic vulkan cloud vault"` for the
+or `-tags "semantic vulkan cloud vault localsend"` for the
 [full build](#full-build-every-feature-vulkan-gpu-acceleration).
 
 ### Creating a vault
@@ -970,6 +973,122 @@ from any two of the three folders (with parts 1 and 2, a file is simply
 `cat NAME.GEN.a NAME.GEN.b`). The result is a regular vault, recovered as
 above.
 
+## LocalSend
+
+**An optional module**, not part of the base build: LocalSend exists only
+in a shfm built with the `localsend` tag (see
+[Building with LocalSend](#building-with-localsend)) — as the release
+packages and archives are, with every feature (see [Packages](#packages)).
+Without it, `Ctrl+Alt+S` only says so.
+
+[LocalSend](https://localsend.org) sends files between the devices of a
+local network — Android and iOS phones, Linux, Windows and macOS
+computers — with no server, account or internet connection involved.
+shfm speaks its [protocol](https://github.com/localsend/protocol)
+(version 2.2) itself, in Go: it sends to, and receives from, the
+LocalSend app and any other program speaking it.
+
+### Building with LocalSend
+
+The module is pure Go, with no library beyond Go's own:
+
+```sh
+go build -tags localsend -o shfm .
+```
+
+Tags combine with the others, e.g. `go build -tags "cloud vault localsend" -o shfm .`,
+or `-tags "semantic vulkan cloud vault localsend"` for the
+[full build](#full-build-every-feature-vulkan-gpu-acceleration).
+
+### Sending
+
+Select files and folders (or leave the cursor on one) and press
+`Ctrl+Alt+S`: the dialog lists the devices found on the network —
+LocalSend must be open on them. Choose one (arrows or click) and press
+`Enter`: the device asks its user to accept, then the transfer goes on
+as a background task (`Ctrl+B`), shown with its progress until `Esc`
+sends it to the background; `c` cancels it, on both sides.
+
+- Folders are sent whole, with what's inside them; empty folders aren't
+  (the protocol only carries files).
+- Files are sent from any source: local disks, removable drives, MTP
+  devices, SMB, NFS, SFTP, cloud accounts, unlocked
+  [vaults](#encrypted-vaults) (sent decrypted). A Google Docs document,
+  exported on the fly, is first exported to a temporary file: its size
+  must be announced before sending it.
+- `t` sends a text message instead, to the device chosen (over 64,000
+  bytes, it's sent as a `.txt` file).
+- `r` looks for the devices again.
+- A device asking for a PIN gets it from a dialog; after 3 wrong ones it
+  refuses this computer until it's restarted.
+
+### Receiving
+
+**Off by default.** `Ctrl+R` in the dialog turns it on, and off
+(remembered as `localsend_receive` in `config.json`): from then on, other
+devices find shfm and can send to it while it's open, from its start.
+Each transfer is asked, in a dialog over whatever is on screen (and
+with a desktop notification), saying who sends what:
+
+- **Save in Downloads** (the XDG Downloads folder);
+- **Save here**: the active pane's folder, on any source — a USB drive,
+  a share, a cloud account or a vault;
+- **Decline** (`Esc`).
+
+A folder sent whole is created in the destination; a name already there
+gets a number (`photo (2).jpg`): nothing is ever overwritten. The transfer
+runs as a background task, which cancelling stops on both sides; one
+whose sender stays silent for two minutes ends by itself. A text message
+is shown, to copy to the clipboard. shfm receives one transfer at a time:
+another device is told it's busy.
+
+`Ctrl+P` in the dialog sets a **PIN** senders must give (none: empty),
+saved encrypted like the passwords (`localsend_pin`); an address that
+gives a wrong one 3 times is refused until shfm restarts.
+
+### Settings
+
+In `config.json`, besides `localsend_receive` and `localsend_pin`:
+
+- `localsend_alias`: the name other devices see (default: the host name);
+- `localsend_port`: the port (default: 53317, LocalSend's). If it's
+  taken, by another program or another shfm, a free one is used: devices
+  still find shfm through the announcements, but not by scanning.
+
+### What to expect
+
+- **When it runs.** LocalSend starts with shfm when receiving is on (not
+  in a file dialog), otherwise the first time `Ctrl+Alt+S` is pressed;
+  it stops when shfm exits. While it runs, other devices see shfm, even
+  with receiving off (they're then declined).
+- **Finding devices.** shfm announces itself over UDP multicast on every
+  network interface, over IPv4 (`224.0.0.167`, port 53317) and IPv6
+  (`ff12::fd3a:e420`, as the LocalSend app does too), and asks every
+  address of the local IPv4 networks (at most 254 per network) on port
+  53317, for the networks multicast doesn't cross (some Wi-Fi access
+  points, guest networks). A device turned on later finds shfm by itself;
+  `r` finds it from shfm, and joins the networks connected since.
+- **IPv6.** Devices are reached over IPv6 too, link-local addresses
+  included, on networks with no IPv4 at all; a device heard over both is
+  reached over IPv4.
+- **Firewall.** Receiving, and being found, need TCP and UDP port 53317
+  open to incoming connections: e.g. `sudo ufw allow 53317`, or
+  `sudo firewall-cmd --permanent --add-port=53317/tcp --add-port=53317/udp`
+  then `sudo firewall-cmd --reload`. shfm never changes the firewall.
+- **Encryption and identity.** Transfers go over HTTPS, with a
+  certificate shfm creates on first use, in
+  `$XDG_CONFIG_HOME/shfm/localsend/`: its fingerprint is how the other
+  devices know shfm (the LocalSend app's favourites, for instance), so
+  it's kept. shfm checks that a device's certificate is the one its
+  announcement names, and proves its own, as the LocalSend app does.
+  Beyond that, as with LocalSend itself, anyone on the local network may
+  ask to send: hence every transfer is asked, and a PIN can be required.
+- **Not supported**: version 1 of the protocol (LocalSend's early
+  releases) and the download API (the app's "Share via link", serving files to
+  a browser). Version 3 of the protocol is still a draft; its
+  support will sit next to version 2's (`internal/localsend/protocol/`),
+  without changing the rest.
+
 ## Desktop integration
 
 shfm can register with the desktop as a file manager like any other,
@@ -1117,6 +1236,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Esc` | cancel a search/filter or close a dialog |
 | `Ctrl+F` | semantic search on file contents (optional, needs a special build: see [Optional: semantic (content) search](#optional-semantic-content-search)) |
 | `T`, `R`, `e` | open/close trash, restore (`R` refreshes outside the trash), empty the trash (in the trash view) |
+| `Ctrl+Alt+S` | [LocalSend](#localsend): send the selection to a device of the network, turn receiving on/off (optional module) |
 | `Ctrl+B` | background tasks |
 | `Ctrl+Alt+H` / `?` | full list of shortcuts |
 | `Ctrl+Alt+A` | about shfm: name, version, description, website and author |
@@ -1150,7 +1270,7 @@ reflects the current file, since both read from the same configuration.
 Each [release](https://github.com/massimo82/shfm/releases) comes with
 packages of shfm with every feature — semantic search with Vulkan GPU
 acceleration, [cloud storage](#cloud-storage), [encrypted
-vaults](#encrypted-vaults), the [desktop integration](#desktop-integration)
+vaults](#encrypted-vaults), [LocalSend](#localsend), the [desktop integration](#desktop-integration)
 and the [GIO module](#network-sources-in-other-applications):
 
 - **Arch, Artix, Manjaro and derivatives** (x86_64):
@@ -1235,7 +1355,7 @@ shfm --portal                xdg-desktop-portal file chooser backend (see Deskto
 ```
 
 This is the base build: everything except semantic (content) search,
-cloud storage and encrypted vaults. For a build with **every feature enabled**, including
+cloud storage, encrypted vaults and LocalSend. For a build with **every feature enabled**, including
 semantic search with Vulkan GPU acceleration, see [Full build](#full-build-every-feature-vulkan-gpu-acceleration)
 below.
 
@@ -1243,6 +1363,8 @@ below.
 `cloud` tag: see [Building with cloud storage](#building-with-cloud-storage).
 [Encrypted vaults](#encrypted-vaults) are another optional module, added
 with the `vault` tag: see [Building with vaults](#building-with-vaults).
+[LocalSend](#localsend) is another one, added with the `localsend` tag:
+see [Building with LocalSend](#building-with-localsend).
 
 To connect to NFS exports that require a privileged source port (see
 [Notes](#notes)), optionally run this after building:
@@ -1281,10 +1403,10 @@ cp -an "$UP"/. third_party/llama-go/ && rm -rf "$UP"
 #    (about 5 minutes with 8 jobs; cmake builds serially unless told otherwise)
 
 # 2. Workspace pointing at it (skip if go.work already exists), then shfm
-#    with semantic search, the Vulkan libraries linked in, cloud storage and
-#    encrypted vaults
+#    with semantic search, the Vulkan libraries linked in, cloud storage,
+#    encrypted vaults and LocalSend
 go work init . && go work use ./third_party/llama-go
-go build -tags "semantic vulkan cloud vault" -o shfm .
+go build -tags "semantic vulkan cloud vault localsend" -o shfm .
 
 # 3. Allow NFS exports that require a privileged source port
 #    (repeat after every rebuild)
@@ -1333,7 +1455,7 @@ folder.
 
 1. **Build** (skip it with a release's `shfm-VERSION-linux-ARCH.tar.gz`,
    already built: see [Packages](#packages)). The base build (everything
-   but semantic search, cloud storage and encrypted vaults):
+   but semantic search, cloud storage, encrypted vaults and LocalSend):
 
    ```sh
    go build -o shfm .
@@ -1974,6 +2096,8 @@ internal/wlclip/                Wayland clipboard client (data-control protocol)
 internal/drives/                local disks, removable device mount/format (udisks2)
 internal/secret/                at-rest encryption for saved passwords, client secrets and cloud tokens
 internal/vault/                 optional encrypted vaults (build tag vault): age-format storage, CryptFS decorator over any backend, split (2-of-3) storage
+internal/localsend/             optional LocalSend (build tag localsend): discovery, sending and receiving through any backend
+internal/localsend/protocol/    the LocalSend protocol: version-neutral types and interfaces, one package per version (lsv2)
 internal/desktopfile/           first-run .desktop launcher installation
 internal/config/                persistent preferences (JSON) and keybindings
 internal/applog/                diagnostic log ($XDG_CACHE_HOME/shfm/logs/shfm.log)

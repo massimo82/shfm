@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
 #
 # shfm with every feature: semantic search with Vulkan GPU acceleration
-# (README, "Full build"), cloud storage, encrypted vaults, the desktop
+# (README, "Full build"), cloud storage, encrypted vaults, LocalSend, the desktop
 # integration and the GIO module. The release's archive (.github/workflows/release.yml) builds
 # llama.cpp the same way: keep them in step. Build
 # from the top of the source tree, with Go >= 1.27 on PATH:
@@ -42,7 +42,7 @@ override_dh_auto_build:
 		CMAKE_ARGS="$(LLAMA_CMAKE_ARGS)" UNAME_M=generic BUILD_TYPE=vulkan \
 		CMAKE_BUILD_PARALLEL_LEVEL=$$(nproc) $(MAKE) libbinding.a
 	CGO_CPPFLAGS="$(CPPFLAGS)" CGO_CFLAGS="$(CFLAGS)" CGO_CXXFLAGS="$(CXXFLAGS)" CGO_LDFLAGS="$(LDFLAGS)" \
-		go build -buildmode=pie -trimpath -tags 'semantic vulkan cloud vault' -o shfm .
+		go build -buildmode=pie -trimpath -tags 'semantic vulkan cloud vault localsend' -o shfm .
 	$(MAKE) -C contrib/gio-module
 	$(MAKE) -C contrib/desktop-integration SHFM=/usr/bin/shfm
 

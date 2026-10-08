@@ -181,6 +181,18 @@ type Config struct {
 	// click in shfm; 0 never locks them on its own (Ctrl+Alt+L, or quitting
 	// shfm, still does). Defaults to 15.
 	VaultAutoLockMinutes int `json:"vault_auto_lock_minutes"`
+
+	// LocalSend (built with the "localsend" tag, see internal/localsend):
+	// LocalSendReceive lets the devices on the local network send files
+	// (each transfer is still asked), from shfm's start; LocalSendAlias is
+	// the name they see ("" for the host name); LocalSendPort the port
+	// used (0 for LocalSend's, 53317); LocalSendPIN, encrypted like the
+	// passwords (see internal/secret), a PIN senders must give ("" for
+	// none).
+	LocalSendReceive bool   `json:"localsend_receive,omitempty"`
+	LocalSendAlias   string `json:"localsend_alias,omitempty"`
+	LocalSendPort    int    `json:"localsend_port,omitempty"`
+	LocalSendPIN     string `json:"localsend_pin,omitempty"`
 }
 
 // Default returns the default configuration.
@@ -188,7 +200,9 @@ func Default() *Config {
 	return &Config{ShowHidden: false, LogLevel: "warn", Notifications: true, ShareClipboard: true, VaultAutoLockMinutes: 15}
 }
 
-func path() (string, error) {
+// Dir returns shfm's configuration folder, $XDG_CONFIG_HOME/shfm,
+// creating it if needed.
+func Dir() (string, error) {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
 		home, err := os.UserHomeDir()
@@ -199,6 +213,14 @@ func path() (string, error) {
 	}
 	dir = filepath.Join(dir, "shfm")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func path() (string, error) {
+	dir, err := Dir()
+	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, "config.json"), nil

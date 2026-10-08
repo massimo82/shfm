@@ -33,8 +33,9 @@ Description: terminal file manager for local, MTP, network and cloud files
  media, MTP devices, SMB, NFS and SFTP shares and Google Drive, Dropbox
  and Microsoft OneDrive accounts, with background tasks, archives,
  automatic mirrors, a clipboard shared with the desktop, encrypted vaults
- in the age format (even split across three sources) and local semantic
- search on file contents with Vulkan GPU acceleration.
+ in the age format (even split across three sources), file transfers with
+ the devices running LocalSend and local semantic search on file contents
+ with Vulkan GPU acceleration.
  .
  Registers with the desktop as a file manager next to the others (opening
  folders, "Show in folder", the file chooser portal) and lists its network

@@ -41,6 +41,8 @@ const (
 	TaskExtract
 	TaskCompress
 	TaskRepair
+	TaskSend
+	TaskReceive
 )
 
 func (k TaskKind) String() string {
@@ -61,6 +63,10 @@ func (k TaskKind) String() string {
 		return "Compress"
 	case TaskRepair:
 		return "Repair"
+	case TaskSend:
+		return "Send"
+	case TaskReceive:
+		return "Receive"
 	default:
 		return "Task"
 	}

@@ -74,7 +74,7 @@ jobs:
           (cd third_party/llama-go && CMAKE_ARGS="$cmake_args" UNAME_M=generic BUILD_TYPE=vulkan \
             CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) make libbinding.a)
           go work init . ./third_party/llama-go
-          go build -trimpath -tags 'semantic vulkan cloud vault' -ldflags "-s -w" -o shfm .
+          go build -trimpath -tags 'semantic vulkan cloud vault localsend' -ldflags "-s -w" -o shfm .
           make -C contrib/gio-module
 
       # The archive holds what the packages install, laid out as in the

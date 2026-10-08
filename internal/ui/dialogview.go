@@ -27,6 +27,7 @@ import (
 	"shfm/internal/config"
 	"shfm/internal/drives"
 	"shfm/internal/fileops"
+	"shfm/internal/localsend"
 	"shfm/internal/semantic"
 	"shfm/internal/vault"
 	"shfm/internal/version"
@@ -587,6 +588,9 @@ func (m *Model) renderDialogBox() string {
 		return m.renderVaultDialog(&b)
 	case DialogNewSplitVault:
 		return m.renderNewSplitVault(&b)
+	case DialogLocalSend, DialogLocalSendText, DialogLocalSendSetPIN,
+		DialogLocalSendIncoming, DialogLocalSendMessage, DialogLocalSendPIN:
+		return m.renderLocalSendDialog(&b)
 
 	case DialogMessage:
 		b.WriteString(d.Message)
@@ -616,6 +620,9 @@ func aboutDescription() string {
 	}
 	if vault.Available {
 		features = append(features, "encrypted vaults (normal or split across sources)")
+	}
+	if localsend.Available {
+		features = append(features, "LocalSend")
 	}
 	features = append(features, "desktop integration", "search")
 	if semantic.Available {

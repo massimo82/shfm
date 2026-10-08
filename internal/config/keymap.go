@@ -78,6 +78,7 @@ const (
 	ActionRestoreOrRefresh Action = "restore-or-refresh"
 	ActionEmptyTrash       Action = "empty-trash"
 	ActionMirror           Action = "mirror"
+	ActionLocalSend        Action = "localsend"
 	ActionPickAccept       Action = "pick-accept"
 	ActionPickFilter       Action = "pick-filter"
 	ActionPickOptions      Action = "pick-options"
@@ -144,6 +145,7 @@ var keybindingDefs = []keybindingDef{
 	{ActionSourceMenu, []string{"ctrl+s"}, "Open source picker"},
 	{ActionEditPath, []string{"ctrl+p"}, "Edit current path"},
 	{ActionLockVaults, []string{"ctrl+alt+l"}, "Lock encrypted vaults"},
+	{ActionLocalSend, []string{"ctrl+alt+s"}, "LocalSend: send, receive"},
 
 	{ActionToggleTrashView, []string{"T"}, "Toggle trash view"},
 	{ActionRestoreOrRefresh, []string{"R"}, "Restore or refresh"},

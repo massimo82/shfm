@@ -87,6 +87,14 @@ jobs:
       - name: go test (vault)
         run: go test -race -tags vault ./...
 
+      # The LocalSend module (build tag "localsend") is pure Go: its tests
+      # run two devices on the loopback interface, off the network.
+      - name: go vet (localsend)
+        run: go vet -tags localsend ./...
+
+      - name: go test (localsend)
+        run: go test -race -tags localsend ./...
+
       # The semantic (content search) variant is not built here: it needs the
       # llama-go static libraries, see README "Full build".
       - name: go build
@@ -94,3 +102,4 @@ jobs:
           go build -o shfm .
           go build -tags cloud -o shfm-cloud .
           go build -tags vault -o shfm-vault .
+          go build -tags localsend -o shfm-localsend .

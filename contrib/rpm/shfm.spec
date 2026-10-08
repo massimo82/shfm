@@ -71,8 +71,9 @@ Two-pane file manager for the terminal, talking directly to removable media,
 MTP devices, SMB, NFS and SFTP shares and Google Drive, Dropbox and Microsoft
 OneDrive accounts, with background tasks, archives, automatic mirrors, a
 clipboard shared with the desktop, encrypted vaults in the age format (even
-split across three sources) and local semantic search on file contents with
-Vulkan GPU acceleration.
+split across three sources), file transfers with the devices running
+LocalSend and local semantic search on file contents with Vulkan GPU
+acceleration.
 
 Registers with the desktop as a file manager next to the others (opening
 folders, "Show in folder", the file chooser portal) and lists its network
@@ -119,7 +120,7 @@ go work init . ./third_party/llama-go
 )
 
 export CGO_CPPFLAGS="$CPPFLAGS" CGO_CFLAGS="$CFLAGS" CGO_CXXFLAGS="$CXXFLAGS" CGO_LDFLAGS="$LDFLAGS"
-go build -buildmode=pie -trimpath -ldflags=-linkmode=external -tags 'semantic vulkan cloud vault' -o shfm .
+go build -buildmode=pie -trimpath -ldflags=-linkmode=external -tags 'semantic vulkan cloud vault localsend' -o shfm .
 
 make -C contrib/gio-module
 make -C contrib/desktop-integration SHFM=%{_bindir}/shfm

@@ -268,6 +268,14 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 		if row >= 0 && row < len(m.dialog.Items) {
 			m.dialog.ItemIdx = row
 		}
+	case DialogLocalSend, DialogLocalSendIncoming, DialogLocalSendMessage:
+		// Select a device; choose what to do with a request.
+		if i := row - m.lsListTop(); i >= 0 && i < len(m.dialog.Items) {
+			m.dialog.ItemIdx = i
+			if m.dialog.Kind != DialogLocalSend {
+				m.updateDialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+			}
+		}
 	case DialogHelp, DialogAbout:
 		m.dialog = Dialog{}
 	case DialogConnectSMB, DialogConnectNFS, DialogConnectSFTP, DialogConnectCloud, DialogProperties,

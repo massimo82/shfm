@@ -29,6 +29,7 @@ import (
 	"shfm/internal/cloud"
 	"shfm/internal/config"
 	"shfm/internal/drives"
+	"shfm/internal/localsend"
 	"shfm/internal/opener"
 	"shfm/internal/polkitagent"
 	"shfm/internal/vfs"
@@ -85,6 +86,12 @@ const (
 	DialogVaultPassword
 	DialogVaultShowKey
 	DialogNewSplitVault
+	DialogLocalSend
+	DialogLocalSendText
+	DialogLocalSendSetPIN
+	DialogLocalSendIncoming
+	DialogLocalSendMessage
+	DialogLocalSendPIN
 )
 
 // Dialog is the state of any currently active modal.
@@ -202,6 +209,14 @@ type Dialog struct {
 	// chosen for each (see splitvault.go).
 	SplitChoices []splitSource
 	SplitChoice  [3]int
+
+	// The LocalSend dialogs (see localsend.go): the entries to send (in
+	// LSDir on LSFS), and the devices found, parallel to Items (the one
+	// to send a message to, for DialogLocalSendText).
+	LSFS      vfs.FileSystem
+	LSDir     string
+	LSNames   []string
+	LSDevices []localsend.Device
 }
 
 func newSingleInputDialog(kind DialogKind, title, placeholder, value string) Dialog {
@@ -288,6 +303,11 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if isVaultDialog(d.Kind) {
 		if cmd, handled := m.updateVaultDialogKey(msg); handled {
+			return cmd, true
+		}
+	}
+	if isLocalSendDialog(d.Kind) {
+		if cmd, handled := m.updateLocalSendKey(msg); handled {
 			return cmd, true
 		}
 	}
@@ -391,7 +411,8 @@ func hasListNav(k DialogKind) bool {
 	switch k {
 	case DialogSourceMenu, DialogHelp, DialogNewChoice, DialogTaskList, DialogFormatChoose,
 		DialogMirrorConfirm, DialogMirrorList, DialogMirrorDeleteCopy,
-		DialogPickFilter, DialogPickOptions:
+		DialogPickFilter, DialogPickOptions,
+		DialogLocalSend, DialogLocalSendIncoming, DialogLocalSendMessage:
 		return true
 	default:
 		return false

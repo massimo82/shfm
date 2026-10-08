@@ -131,6 +131,7 @@ func main() {
 		}
 		session.Close()
 	}
+	m.StopLocalSend()
 	mounts.Close()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)

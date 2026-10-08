@@ -32,6 +32,7 @@ import (
 	"shfm/internal/archive"
 	"shfm/internal/config"
 	"shfm/internal/fusemount"
+	"shfm/internal/localsend"
 	"shfm/internal/opener"
 	"shfm/internal/semantic"
 	"shfm/internal/vfs"
@@ -164,6 +165,14 @@ type Model struct {
 	lastInput    time.Time
 	vaultTicking bool
 
+	// LocalSend (see localsend.go): the Service, once started; its
+	// messages; the requests waiting to be shown; the dialog shown over
+	// the others.
+	ls        *localsend.Service
+	lsCh      chan tea.Msg
+	lsQueue   []*localsend.Request
+	lsOverlay *lsOverlay
+
 	// The help line's carousel (see helpline.go): the hints it last showed,
 	// how far they have scrolled, and whether its tick is running.
 	helpText    string
@@ -199,6 +208,7 @@ func New(cfg *config.Config, keymap *config.KeyMap, start Start) *Model {
 		semanticIndexing: map[string]bool{},
 
 		vaults: map[string]*vaultSession{},
+		lsCh:   make(chan tea.Msg, 16),
 	}
 	m.panes[0] = NewPane(local0, dir, cfg.ShowHidden, 0, m.sizeCh)
 	m.panes[1] = NewPane(local1, dir, cfg.ShowHidden, 1, m.sizeCh)
@@ -220,7 +230,14 @@ func homeOrRoot() string {
 }
 
 func (m *Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.waitForTaskMsg(), m.waitForSizeMsg(), m.waitForConnectMsg(), m.waitForOpenMsg(), m.waitForSearchMsg(), m.waitForSemanticMsg(), mirrorTick(time.Second)}
+	cmds := []tea.Cmd{m.waitForTaskMsg(), m.waitForSizeMsg(), m.waitForConnectMsg(), m.waitForOpenMsg(), m.waitForSearchMsg(), m.waitForSemanticMsg(), mirrorTick(time.Second), m.waitForLocalSendMsg()}
+	// Receiving is on: other devices can send from the start (not in a
+	// file chooser, a second shfm the user closes soon).
+	if localsend.Available && m.cfg.LocalSendReceive && m.picker == nil {
+		if err := m.startLocalSend(); err != nil {
+			m.setError("LocalSend: %v", err)
+		}
+	}
 	if m.cfg.ShareClipboard {
 		m.sysclipWaiting = true
 		cmds = append(cmds, connectSysclip, m.waitForSysclipMsg())
@@ -250,6 +267,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(append(m.queued, cmd)...)
 		m.queued = nil
 	}
+	m.keepLocalSendOnTop()
 	m.keepAuthOnTop()
 	if m.quitting && cmd == nil {
 		// A path that decided to quit (e.g. a choice made in file chooser
@@ -336,6 +354,8 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case editorDoneMsg:
 		m.handleEditorDone(msg)
 		return nil
+	case lsChangedMsg, lsIncomingMsg, lsWithdrawnMsg, lsPINAskMsg:
+		return m.handleLocalSendMsg(msg)
 	case authPromptMsg:
 		m.handleAuthPrompt(msg)
 		return nil
@@ -467,6 +487,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openTaskList()
 	case config.ActionLockVaults:
 		m.lockVaultsAction()
+	case config.ActionLocalSend:
+		m.openLocalSend()
 
 	// --- cursor / pane navigation ---
 	case config.ActionCursorUp:
