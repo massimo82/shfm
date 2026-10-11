@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.6.0
+Version:        0.6.1
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,10 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Sun Oct 11 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.1-1
+- The default key for creating an archive is now c (z before); a keybindings.conf already written keeps its own.
+- A single folder archived is the root of its archive, and extracting an archive whose content sits in one folder named like it no longer nests it twice.
+
 * Thu Oct 08 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.0-1
 - LocalSend (optional module, build tag localsend): files, folders and text messages sent to and received from phones and computers on the local network, with Ctrl+Alt+S.
 - Devices are found over IPv4 and IPv6 multicast and by scanning the local IPv4 networks; transfers go over HTTPS, with certificates pinned.

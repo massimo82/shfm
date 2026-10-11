@@ -1,3 +1,10 @@
+shfm (0.6.1) unstable; urgency=medium
+
+  * The default key for creating an archive is now c (z before); a keybindings.conf already written keeps its own.
+  * A single folder archived is the root of its archive, and extracting an archive whose content sits in one folder named like it no longer nests it twice.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  dom, 11 ott 2026 19:29:51 +0200
+
 shfm (0.6.0) unstable; urgency=medium
 
   * LocalSend (optional module, build tag localsend): files, folders and text messages sent to and received from phones and computers on the local network, with Ctrl+Alt+S.
