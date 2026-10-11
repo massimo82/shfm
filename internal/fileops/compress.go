@@ -39,7 +39,7 @@ func ArchiveRoot(name string) string {
 
 // CreateArchive writes an archive of kind at destPath on destFS holding
 // items (files and folders, recursively), all under one root folder named
-// after the archive (see ArchiveRoot). Progress is reported per item. An
+// after the archive (see ArchiveRoot); a single folder becomes that root. Progress is reported per item. An
 // entry that can't be read before it's added is skipped and reported as
 // the result's error; any other failure, or a cancellation, removes the
 // incomplete archive.
@@ -49,6 +49,18 @@ func CreateArchive(items []Item, destFS vfs.FileSystem, destPath string, kind ar
 	root := ArchiveRoot(destFS.Base(destPath))
 	c := &compressor{prog: prog, total: total, meter: startMeter(prog, items)}
 	defer c.meter.finish()
+
+	if len(items) == 1 {
+		if st, err := items[0].FS.Stat(items[0].Path); err == nil && st.IsDir && !st.IsSymlink {
+			// A single folder is the root itself: wrapping it in another
+			// would nest photos/photos/.
+			err := c.write(destFS, destPath, kind, func(put archive.PutFunc) error {
+				return c.add(put, items[0].FS, items[0].Path, root)
+			})
+			prog.report(1, total, items[0].FS.Base(items[0].Path), nil)
+			return c.result(res, destPath, total, err)
+		}
+	}
 
 	err := c.write(destFS, destPath, kind, func(put archive.PutFunc) error {
 		if err := put(archive.Entry{Name: root, Type: archive.TypeDir, Mode: 0o755, ModTime: time.Now()}, nil); err != nil {
@@ -67,6 +79,11 @@ func CreateArchive(items []Item, destFS vfs.FileSystem, destPath string, kind ar
 		}
 		return nil
 	})
+	return c.result(res, destPath, total, err)
+}
+
+// result fills res from the outcome of writing the archive.
+func (c *compressor) result(res *Result, destPath string, total int, err error) *Result {
 	switch {
 	case errors.Is(err, errCancelled) || errors.Is(err, context.Canceled):
 		res.Cancelled = true

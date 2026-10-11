@@ -118,7 +118,7 @@ func TestCreateArchiveDialogThenExtract(t *testing.T) {
 	if task := waitTask(t, m); task.ErrorCount > 0 {
 		t.Fatalf("extract: %v", task.LastError)
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "bundle", "bundle", "docs", "a.txt"))
+	b, err := os.ReadFile(filepath.Join(dir, "bundle", "a.txt"))
 	if err != nil || string(b) != "alpha" {
 		t.Errorf("extracted a.txt: %q, %v", b, err)
 	}

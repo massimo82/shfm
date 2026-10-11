@@ -153,15 +153,14 @@ func TestCreateThenExtract(t *testing.T) {
 				t.Fatalf("Extract: %+v", res)
 			}
 			sameTree(t, tree(t, filepath.Join(out, "bundle")), map[string]string{
-				"bundle":                 "/",
-				"bundle/docs":            "/",
-				"bundle/docs/a.txt":      "alpha",
-				"bundle/docs/deep":       "/",
-				"bundle/docs/deep/b.txt": "beta",
-				"bundle/docs/link":       "-> a.txt",
-				"bundle/note.md":         "note",
+				"docs":            "/",
+				"docs/a.txt":      "alpha",
+				"docs/deep":       "/",
+				"docs/deep/b.txt": "beta",
+				"docs/link":       "-> a.txt",
+				"note.md":         "note",
 			})
-			deep := filepath.Join(out, "bundle", "bundle", "docs", "deep")
+			deep := filepath.Join(out, "bundle", "docs", "deep")
 			st, err := os.Stat(filepath.Join(deep, "b.txt"))
 			if err != nil {
 				t.Fatal(err)
@@ -246,7 +245,7 @@ func TestExtractRemote(t *testing.T) {
 	if len(res.Errors) != 1 || !strings.Contains(res.Error(), "symbolic links aren't supported") {
 		t.Errorf("errors: %v", res.Error())
 	}
-	if b, err := os.ReadFile(filepath.Join(dir, "r", "r", "f.txt")); err != nil || string(b) != "remote" {
+	if b, err := os.ReadFile(filepath.Join(dir, "r", "f.txt")); err != nil || string(b) != "remote" {
 		t.Errorf("f.txt: %q, %v", b, err)
 	}
 	if remote.sized == 0 {
@@ -263,7 +262,7 @@ func TestExtractRemote(t *testing.T) {
 	if len(res.Errors) > 0 {
 		t.Fatal(res.Error())
 	}
-	if b, err := os.ReadFile(filepath.Join(dir, "again", "again", "r", "r", "f.txt")); err != nil || string(b) != "remote" {
+	if b, err := os.ReadFile(filepath.Join(dir, "again", "f.txt")); err != nil || string(b) != "remote" {
 		t.Errorf("again f.txt: %q, %v", b, err)
 	}
 }
@@ -348,4 +347,46 @@ func (w *exactWriter) Close() error {
 		return io.ErrShortWrite
 	}
 	return os.WriteFile(w.path, w.buf.Bytes(), 0o644)
+}
+
+// TestExtractUnwrap lifts a lone top folder named like the archive, and
+// only that one.
+func TestExtractUnwrap(t *testing.T) {
+	fs := vfs.NewLocalFS("local", "/")
+	for _, tc := range []struct {
+		name    string
+		entries []*tar.Header
+		want    map[string]string
+	}{
+		{"same name", []*tar.Header{{Name: "p/", Typeflag: tar.TypeDir, Mode: 0o755}, {Name: "p/a", Typeflag: tar.TypeReg}},
+			map[string]string{"a": "x"}},
+		{"other name", []*tar.Header{{Name: "q/", Typeflag: tar.TypeDir, Mode: 0o755}, {Name: "q/a", Typeflag: tar.TypeReg}},
+			map[string]string{"q": "/", "q/a": "x"}},
+		{"not alone", []*tar.Header{{Name: "p/a", Typeflag: tar.TypeReg}, {Name: "b", Typeflag: tar.TypeReg}},
+			map[string]string{"p": "/", "p/a": "x", "b": "x"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			p := filepath.Join(dir, "p.tar")
+			var bodies []string
+			for _, h := range tc.entries {
+				if h.Typeflag == tar.TypeReg {
+					h.Mode = 0o644
+					bodies = append(bodies, "x")
+				} else {
+					bodies = append(bodies, "")
+				}
+			}
+			writeTarFile(t, p, tc.entries, bodies)
+			// Taken, so the archive goes to "p (2)".
+			os.Mkdir(filepath.Join(dir, "p"), 0o755)
+			if res := Extract([]Item{{FS: fs, Path: p}}, nil); len(res.Errors) > 0 {
+				t.Fatal(res.Error())
+			}
+			sameTree(t, tree(t, filepath.Join(dir, "p (2)")), tc.want)
+			if left, _ := os.ReadDir(dir); len(left) != 3 {
+				t.Errorf("leftovers next to the archive: %v", left)
+			}
+		})
+	}
 }

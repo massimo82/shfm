@@ -38,7 +38,7 @@ var errCancelled = errors.New("cancelled")
 // Extract extracts every archive in items into a new folder next to it,
 // named after the archive minus its extension ("photos.tar.gz" →
 // "photos"; "photos (2)" and so on if that name is taken), on the
-// archive's own backend. Entries that can't be extracted (unsafe names,
+// archive's own backend; a lone top folder named the same is unwrapped. Entries that can't be extracted (unsafe names,
 // encrypted or special files, symlinks where the backend has none) are
 // skipped and reported as that archive's error, without stopping the
 // rest. A cancelled extraction removes its partial folder.
@@ -141,10 +141,37 @@ func extractOne(it Item, onEntry func(string), cancelled func() bool) error {
 		}
 		return err
 	}
+	unwrap(it.FS, parent, root, base)
 	if len(x.skipped) > 0 {
 		return skippedError(x.skipped)
 	}
 	return nil
+}
+
+// unwrap lifts the content of root/base up into root, when that folder
+// is all root holds: an archive whose entries already sit in a folder
+// named like it (shfm's own, most tarballs) would otherwise extract to
+// photos/photos/. Any failure leaves the extracted tree as it was.
+func unwrap(fs vfs.FileSystem, parent, root, base string) {
+	children, err := fs.List(root)
+	if err != nil || len(children) != 1 {
+		return
+	}
+	only := children[0]
+	if !only.IsDir || only.IsSymlink || only.Name != base {
+		return
+	}
+	tmp := uniqueDirName(fs, parent, base+".unwrapping")
+	if fs.Rename(root, tmp) != nil {
+		return
+	}
+	if fs.Rename(fs.Join(tmp, base), root) != nil {
+		_ = fs.Rename(tmp, root)
+		return
+	}
+	if left, err := fs.List(tmp); err == nil && len(left) == 0 {
+		_ = fs.Remove(tmp)
+	}
 }
 
 // skippedError summarizes the entries an extraction left out.

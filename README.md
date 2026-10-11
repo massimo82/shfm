@@ -426,7 +426,10 @@ extracted, as a background task, into a **new folder in the same
 directory**, named after the archive minus its extension:
 `photos.tar.gz` → `photos/`, `report.txt.gz` → `report.txt/report.txt`.
 If that name is taken, `photos (2)`, `photos (3)`... are used instead:
-nothing existing is ever overwritten. It works on every source (local,
+nothing existing is ever overwritten. An archive whose content already
+sits in one folder named like it (shfm's own, most tarballs) isn't
+nested twice: `photos.zip` holding `photos/...` gives `photos/...`, not
+`photos/photos/...`. It works on every source (local,
 removable, SMB, NFS, SFTP, MTP), reading and writing through the source
 itself.
 
@@ -445,7 +448,8 @@ for several entries). The archive is created in the current folder, never
 over an existing file. Its content always sits in **one root folder
 named like the archive minus its extension**: `bundle.tar.zst` holds
 `bundle/<the selected entries>`, so extracting it anywhere never
-scatters files. Symbolic links are stored as links from a local source,
+scatters files; a single folder becomes that root itself (`photos/`
+archived as `photos.zip` holds `photos/<its content>`). Symbolic links are stored as links from a local source,
 and followed to files elsewhere. The last format chosen is proposed
 first next time.
 
