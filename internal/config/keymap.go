@@ -135,7 +135,7 @@ var keybindingDefs = []keybindingDef{
 	{ActionNewFile, []string{"f"}, "Create new file"},
 	{ActionProperties, []string{"i"}, "Entry properties"},
 	{ActionExtract, []string{"x"}, "Extract archive here"},
-	{ActionCompress, []string{"z"}, "Create an archive"},
+	{ActionCompress, []string{"c"}, "Create an archive"},
 	{ActionAssociations, []string{"o"}, "Applications opening file types"},
 
 	{ActionSearch, []string{"/"}, "Search/filter by name"},

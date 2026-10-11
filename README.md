@@ -305,7 +305,7 @@ to toggle between single- and dual-pane layout.
   [Automatic mirrors](#automatic-mirrors) for how that's enforced.
 - **Archives**: `x` extracts the selected archives (or the one under the
   cursor), each into a new folder in the same directory named after the
-  archive minus its extension; `z` creates an archive of the selected
+  archive minus its extension; `c` creates an archive of the selected
   entries, choosing its format and name. See [Archives](#archives).
 - **Format a removable source**: pick exFAT, FAT32, ext4 or XFS, via a
   dedicated dialog with a red data-loss warning followed by a second,
@@ -438,7 +438,7 @@ become copies. Whatever was skipped is reported as the task's error,
 without stopping the rest. Cancelling (`c` in the progress dialog)
 removes the partial folder.
 
-**Creating** (`z`): a dialog lists the formats this machine can write
+**Creating** (`c`): a dialog lists the formats this machine can write
 (`↑`/`↓`, `Tab` or a click picks one, and swaps the name's extension)
 above the archive's name, proposed from the entry's name (or the folder's,
 for several entries). The archive is created in the current folder, never
@@ -1231,7 +1231,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `i` | properties (permissions, owner, group) |
 | `o` | file associations: the application opening each file type (see [File associations](#file-associations), for the dialog's own keys) |
 | `x` | extract the selected archives here, each into its own new folder |
-| `z` | create an archive of the selected entries, choosing the format |
+| `c` | create an archive of the selected entries, choosing the format |
 | `/` | search/filter the current folder by name |
 | `Esc` | cancel a search/filter or close a dialog |
 | `Ctrl+F` | semantic search on file contents (optional, needs a special build: see [Optional: semantic (content) search](#optional-semantic-content-search)) |
