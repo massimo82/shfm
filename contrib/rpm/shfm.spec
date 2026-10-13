@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.6.1
+Version:        0.6.2
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Wed Oct 14 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.2-1
+- With the Nerd Font icons on, a vault's folder shows a closed padlock, an open one once unlocked; inside a vault, the SOURCE shows the open padlock in place of [VLT].
+
 * Sun Oct 11 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.1-1
 - The default key for creating an archive is now c (z before); a keybindings.conf already written keeps its own.
 - A single folder archived is the root of its archive, and extracting an archive whose content sits in one folder named like it no longer nests it twice.

@@ -1,3 +1,9 @@
+shfm (0.6.2) unstable; urgency=medium
+
+  * With the Nerd Font icons on, a vault's folder shows a closed padlock, an open one once unlocked; inside a vault, the SOURCE shows the open padlock in place of [VLT].
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  mer, 14 ott 2026 00:22:27 +0200
+
 shfm (0.6.1) unstable; urgency=medium
 
   * The default key for creating an archive is now c (z before); a keybindings.conf already written keeps its own.
