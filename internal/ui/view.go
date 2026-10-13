@@ -172,6 +172,8 @@ func (m *Model) renderSourceRow(p *Pane, g paneGeom) string {
 		if m.cfg.NerdIcons {
 			value = nerdTrash + " " + value
 		}
+	} else if m.cfg.NerdIcons && p.VaultExit != nil {
+		value = nerdVaultOpen + strings.TrimPrefix(value, iconSourceVault)
 	}
 	box := styleFieldBox.Render(padRight(" "+value, g.sourceBoxW))
 	btn := " " + styleFieldButton.Render(padRight(sourceButtonText, g.sourceBtnW))
@@ -279,8 +281,9 @@ func extOf(name string) string {
 // media/plain file) and, as a modifier, its permissions (entries with no
 // write permission at all are shown in a fainter variant of their color, as
 // a visual cue). special is the XDG key of one of the user's standard XDG
-// user directories (Desktop, Documents, ...; see Pane.XDGNames), or
-// specialTrash for a trash folder, "" otherwise. nerd picks the Nerd Font
+// user directories (Desktop, Documents, ...; see Pane.XDGNames),
+// specialTrash for a trash folder, or specialVaultLocked/specialVaultOpen
+// for a vault (see Pane.Vaults), "" otherwise. nerd picks the Nerd Font
 // icons (see icons.go) over the bracketed ones; the color is the same.
 func entryIconAndStyle(e vfs.Entry, special string, nerd bool) (string, lipgloss.Style) {
 	icon, style := plainIconAndStyle(e, strings.HasPrefix(special, "XDG_"))
@@ -333,6 +336,12 @@ func (m *Model) renderEntryLines(paneIdx int, p *Pane, w, h int) []string {
 		special := p.XDGNames[e.Name]
 		if special == "" && e.IsDir && isTrashDir(p.Path, e.Name) {
 			special = specialTrash
+		}
+		if p.Vaults[e.Name] {
+			special = specialVaultLocked
+			if _, open := m.vaults[vaultKey(p.FS, p.FS.Join(p.Path, e.Name))]; open {
+				special = specialVaultOpen
+			}
 		}
 		icon, nameStyle := entryIconAndStyle(e, special, m.cfg.NerdIcons)
 		mark := " "

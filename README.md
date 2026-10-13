@@ -181,7 +181,8 @@ to toggle between single- and dual-pane layout.
   entry's name, replace the bracketed `[D]`/`[F]`/`[L]` ones: folders,
   the standard user folders (Desktop, Documents, Downloads, Music,
   Pictures, Videos, Templates, Public) each with its own, links to a
-  folder and to a file, trash folders (the trash view's source too), and
+  folder and to a file, trash folders (the trash view's source too),
+  vault folders (see [Encrypted vaults](#encrypted-vaults)), and
   files by type (documents, images, audio, video, archives, packages,
   some 40 programming and markup languages, data and configuration
   files, and files known by name such as `Makefile`, `Dockerfile` or
@@ -849,6 +850,12 @@ password — `Ctrl+R` switches to the recovery key. The pane then shows the
 vault's content in clear, its SOURCE marked `[VLT]`: copy, move, rename,
 delete and open files as anywhere else; `..` at the vault's root goes
 back to the folder holding it.
+
+With the Nerd Font icons on, a vault's folder shows a closed padlock in
+the listing, an open one once unlocked; inside, the SOURCE shows the open
+padlock in place of `[VLT]`. Vault folders are recognized in the
+background, one check per folder, so on a remote source the padlock can
+take a moment to appear.
 
 - **Copying or moving out of a vault decrypts** the files: shfm says so
   in the status line. Copying into a vault encrypts them.

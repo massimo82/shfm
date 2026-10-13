@@ -17,7 +17,11 @@
 
 package ui
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"shfm/internal/vfs"
+)
 
 // SizePending is the sentinel Entry.Size value meaning "this folder's
 // recursive size is being computed in the background, not shown yet".
@@ -26,13 +30,17 @@ const SizePending int64 = -1
 
 // dirSizeMsg carries the result of computing one folder's recursive size
 // and item count, sent from a background goroutine spawned by Pane.Load
-// (see pane.go) to the main bubbletea event loop.
+// (see pane.go) to the main bubbletea event loop. With vault set, it
+// carries no size: it tells that the folder holds an encrypted vault
+// instead (see Pane.findVaults).
 type dirSizeMsg struct {
 	paneIndex int
-	dirPath   string // the folder listing this result belongs to
-	name      string // the child folder's name within dirPath
+	fs        vfs.FileSystem // the source the listing is on
+	dirPath   string         // the folder listing this result belongs to
+	name      string         // the child folder's name within dirPath
 	size      int64
 	itemCount int64
+	vault     bool
 }
 
 // waitForSizeMsg returns a tea.Cmd that blocks on the size-result channel
@@ -54,7 +62,17 @@ func (m *Model) handleDirSizeMsg(msg dirSizeMsg) {
 		return
 	}
 	p := m.panes[msg.paneIndex]
-	if p.Mode != PaneNormal || p.Path != msg.dirPath {
+	if p.Mode != PaneNormal || p.FS != msg.fs || p.Path != msg.dirPath {
+		return
+	}
+	if msg.vault {
+		if p.ShowingSearchResults {
+			return
+		}
+		if p.Vaults == nil {
+			p.Vaults = map[string]bool{}
+		}
+		p.Vaults[msg.name] = true
 		return
 	}
 	for i := range p.Entries {

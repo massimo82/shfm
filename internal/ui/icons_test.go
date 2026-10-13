@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -44,6 +45,8 @@ func TestNerdEntryIcon(t *testing.T) {
 		{"XDG music", vfs.Entry{Name: "Musica", IsDir: true}, "XDG_MUSIC_DIR", nerdMusicDir},
 		{"XDG desktop", vfs.Entry{Name: "Desktop", IsDir: true}, "XDG_DESKTOP_DIR", nerdDesktopDir},
 		{"trash", vfs.Entry{Name: ".Trash-1000", IsDir: true}, specialTrash, nerdTrash},
+		{"locked vault", vfs.Entry{Name: "Box", IsDir: true}, specialVaultLocked, nerdVaultLocked},
+		{"unlocked vault", vfs.Entry{Name: "Box", IsDir: true}, specialVaultOpen, nerdVaultOpen},
 		{"link to folder", vfs.Entry{Name: "l", IsDir: true, IsSymlink: true}, "", nerdLinkDir},
 		{"link to XDG folder", vfs.Entry{Name: "Music", IsDir: true, IsSymlink: true}, "XDG_MUSIC_DIR", nerdLinkDir},
 		{"link to file", vfs.Entry{Name: "a.go", IsSymlink: true}, "", nerdLinkFile},
@@ -188,5 +191,68 @@ func TestRenderEntryLinesIcons(t *testing.T) {
 		if got := lipgloss.Width(r); got != w {
 			t.Errorf("icons on: row %q is %d cells wide, want %d", r, got, w)
 		}
+	}
+}
+
+// TestVaultIcons: a folder holding a vault, found in the background, gets
+// the closed lock, the open one once unlocked; inside it, the SOURCE row
+// shows the open lock in place of [VLT].
+func TestVaultIcons(t *testing.T) {
+	dir := t.TempDir()
+	mkdirs(t, dir, "Box", "plain")
+	if err := os.WriteFile(filepath.Join(dir, "Box", "vault.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := New(config.Default(), config.DefaultKeyMap(), Start{})
+	ch := make(chan dirSizeMsg, 16)
+	p := NewPane(vfs.NewLocalFS("Local", dir), dir, false, 0, ch)
+	m.panes[0] = p
+	timeout := time.After(5 * time.Second)
+	for !p.Vaults["Box"] {
+		select {
+		case msg := <-ch:
+			m.handleDirSizeMsg(msg)
+		case <-timeout:
+			t.Fatal("timed out waiting for the vault to be found")
+		}
+	}
+	if p.Vaults["plain"] {
+		t.Error("a plain folder taken for a vault")
+	}
+
+	row := func(name string) string {
+		for _, l := range m.renderEntryLines(0, p, 50, 10) {
+			if strings.Contains(l, name) {
+				return l
+			}
+		}
+		t.Fatalf("no row for %s", name)
+		return ""
+	}
+	if r := row("Box/"); !strings.Contains(r, iconDir) {
+		t.Errorf("icons off: row %q lacks %q", r, iconDir)
+	}
+	m.cfg.NerdIcons = true
+	if r := row("Box/"); !strings.Contains(r, nerdVaultLocked) {
+		t.Errorf("locked: row %q lacks %q", r, nerdVaultLocked)
+	}
+	if r := row("plain/"); !strings.Contains(r, nerdFolder) {
+		t.Errorf("plain folder: row %q lacks %q", r, nerdFolder)
+	}
+	m.vaults[vaultKey(p.FS, filepath.Join(dir, "Box"))] = &vaultSession{name: "Box"}
+	if r := row("Box/"); !strings.Contains(r, nerdVaultOpen) {
+		t.Errorf("unlocked: row %q lacks %q", r, nerdVaultOpen)
+	}
+
+	p.VaultExit = &vaultExit{}
+	p.SourceLabel = iconSourceVault + " Box"
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	g := m.paneGeom(0)
+	if r := m.renderSourceRow(p, g); !strings.Contains(r, nerdVaultOpen+" Box") || strings.Contains(r, iconSourceVault) {
+		t.Errorf("inside, icons on: SOURCE row %q", r)
+	}
+	m.cfg.NerdIcons = false
+	if r := m.renderSourceRow(p, g); !strings.Contains(r, iconSourceVault+" Box") {
+		t.Errorf("inside, icons off: SOURCE row %q", r)
 	}
 }

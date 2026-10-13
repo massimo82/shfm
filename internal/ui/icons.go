@@ -56,6 +56,8 @@ const (
 	nerdVideoDir    = "\U000f19fa" // md-folder_play
 	nerdTemplateDir = "\U000f19f6" // md-folder_file
 	nerdPublicDir   = "\U000f024c" // md-folder_account
+	nerdVaultLocked = "\uf023"     // fa-lock
+	nerdVaultOpen   = "\uf09c"     // fa-unlock
 )
 
 // nerdXDGDirIcons gives each standard XDG user directory, by its
@@ -294,6 +296,13 @@ var nerdExtIcons = map[string]string{
 // specialTrash marks, in place of an XDG key, a folder holding a trash.
 const specialTrash = "trash"
 
+// specialVaultLocked and specialVaultOpen mark, in place of an XDG key, a
+// folder holding an encrypted vault, locked or unlocked this session.
+const (
+	specialVaultLocked = "vault-locked"
+	specialVaultOpen   = "vault-open"
+)
+
 // isTrashDir tells whether the folder name, in dir, holds a trash: the
 // home trash, ~/.local/share/Trash, or a volume's .Trash or .Trash-$UID
 // (see the freedesktop.org Trash specification).
@@ -305,7 +314,8 @@ func isTrashDir(dir, name string) bool {
 }
 
 // nerdEntryIcon picks e's Nerd Font icon. special is the XDG key of a
-// standard user directory, specialTrash for a trash folder, "" otherwise.
+// standard user directory, specialTrash for a trash folder,
+// specialVaultLocked/specialVaultOpen for a vault, "" otherwise.
 // Links come first, telling a link to a folder from one to a file; files
 // are recognized by name, then by extension, then as executables, and
 // get the generic file icon when nothing matches.
@@ -319,6 +329,10 @@ func nerdEntryIcon(e vfs.Entry, special string) string {
 		return nerdLinkFile
 	case e.IsDir && special == specialTrash:
 		return nerdTrash
+	case e.IsDir && special == specialVaultLocked:
+		return nerdVaultLocked
+	case e.IsDir && special == specialVaultOpen:
+		return nerdVaultOpen
 	case e.IsDir:
 		if icon, ok := nerdXDGDirIcons[special]; ok {
 			return icon

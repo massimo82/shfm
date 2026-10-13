@@ -28,6 +28,7 @@ import (
 
 	"shfm/internal/drives"
 	"shfm/internal/trash"
+	"shfm/internal/vault"
 	"shfm/internal/vfs"
 )
 
@@ -70,6 +71,11 @@ type Pane struct {
 	// to list, color and pick an icon for them separately from the rest.
 	// Nil whenever none apply.
 	XDGNames map[string]string
+
+	// Vaults holds the Entries names that are folders holding an encrypted
+	// vault: filled in by Load() in the background, like folder sizes, so
+	// that the renderer can give them an icon of their own. Nil when none.
+	Vaults map[string]bool
 
 	// Filter narrows Load()'s listing of the current folder to names
 	// matching FilterQuery (exact or regex, see FilterRegex): see search.go.
@@ -158,6 +164,7 @@ func NewPane(fs vfs.FileSystem, path string, showHidden bool, index int, sizeCh 
 func (p *Pane) Load() {
 	p.Err = nil
 	p.XDGNames = nil
+	p.Vaults = nil
 	if p.Mode == PaneTrash {
 		items, err := trash.List()
 		if err != nil {
@@ -234,13 +241,14 @@ func (p *Pane) Load() {
 					if err != nil {
 						continue
 					}
-					ch <- dirSizeMsg{paneIndex: idx, dirPath: dirPath, name: name, size: sz, itemCount: count}
+					ch <- dirSizeMsg{paneIndex: idx, fs: fs, dirPath: dirPath, name: name, size: sz, itemCount: count}
 				}
 			}()
 		}
 	} else {
 		p.DirSizesSupported = false
 	}
+	p.findVaults(filtered)
 
 	if p.FS.Dir(p.Path) != p.Path || p.VaultExit.leavable() {
 		filtered = append([]vfs.Entry{{Name: parentEntryName, IsDir: true}}, filtered...)
@@ -262,6 +270,33 @@ func (p *Pane) Load() {
 			delete(p.Selected, name)
 		}
 	}
+}
+
+// findVaults looks, in the background, for the folders among entries that
+// hold an encrypted vault, reporting each to Vaults as a dirSizeMsg (one
+// Stat per folder: on a remote source, not worth blocking the listing
+// for). A vault is never stored inside another, so not inside one.
+func (p *Pane) findVaults(entries []vfs.Entry) {
+	if p.sizeCh == nil || p.VaultExit != nil {
+		return
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir && !IsParentEntry(e) {
+			dirs = append(dirs, e.Name)
+		}
+	}
+	if len(dirs) == 0 {
+		return
+	}
+	fs, dirPath, idx, ch := p.FS, p.Path, p.index, p.sizeCh
+	go func() {
+		for _, name := range dirs {
+			if vault.IsVault(fs, fs.Join(dirPath, name)) {
+				ch <- dirSizeMsg{paneIndex: idx, fs: fs, dirPath: dirPath, name: name, vault: true}
+			}
+		}
+	}()
 }
 
 // sortEntriesDirsFirst sorts entries folders-before-files, then
@@ -328,6 +363,7 @@ func (p *Pane) ShowSearchResults(results []vfs.Entry) {
 	p.DeselectAll()
 	p.ShowingSearchResults = true
 	p.XDGNames = nil
+	p.Vaults = nil
 }
 
 // ExitSearchResults leaves search-results view, restoring the real listing
