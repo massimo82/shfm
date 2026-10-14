@@ -284,11 +284,15 @@ func extOf(name string) string {
 // user directories (Desktop, Documents, ...; see Pane.XDGNames),
 // specialTrash for a trash folder, or specialVaultLocked/specialVaultOpen
 // for a vault (see Pane.Vaults), "" otherwise. nerd picks the Nerd Font
-// icons (see icons.go) over the bracketed ones; the color is the same.
+// icons (see icons.go) over the bracketed ones, [V] for a vault among them;
+// the color is the same.
 func entryIconAndStyle(e vfs.Entry, special string, nerd bool) (string, lipgloss.Style) {
 	icon, style := plainIconAndStyle(e, strings.HasPrefix(special, "XDG_"))
-	if nerd {
+	switch {
+	case nerd:
 		icon = nerdEntryIcon(e, special)
+	case e.IsDir && !e.IsSymlink && (special == specialVaultLocked || special == specialVaultOpen):
+		icon = iconVault
 	}
 	return icon, style
 }

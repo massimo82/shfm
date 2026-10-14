@@ -851,11 +851,11 @@ vault's content in clear, its SOURCE marked `[VLT]`: copy, move, rename,
 delete and open files as anywhere else; `..` at the vault's root goes
 back to the folder holding it.
 
-With the Nerd Font icons on, a vault's folder shows a closed padlock in
-the listing, an open one once unlocked; inside, the SOURCE shows the open
-padlock in place of `[VLT]`. Vault folders are recognized in the
-background, one check per folder, so on a remote source the padlock can
-take a moment to appear.
+In the listing a vault's folder is marked `[V]` in place of `[D]`; with
+the Nerd Font icons on, it shows a closed padlock instead, an open one
+once unlocked, and inside the SOURCE shows the open padlock in place of
+`[VLT]`. Vault folders are recognized in the background, one check per
+folder, so on a remote source the mark can take a moment to appear.
 
 - **Copying or moving out of a vault decrypts** the files: shfm says so
   in the status line. Copying into a vault encrypts them.

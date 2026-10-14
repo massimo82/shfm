@@ -195,7 +195,7 @@ func TestRenderEntryLinesIcons(t *testing.T) {
 }
 
 // TestVaultIcons: a folder holding a vault, found in the background, gets
-// the closed lock, the open one once unlocked; inside it, the SOURCE row
+// [V] with the icons off, else the closed lock, the open one once unlocked; inside it, the SOURCE row
 // shows the open lock in place of [VLT].
 func TestVaultIcons(t *testing.T) {
 	dir := t.TempDir()
@@ -229,8 +229,11 @@ func TestVaultIcons(t *testing.T) {
 		t.Fatalf("no row for %s", name)
 		return ""
 	}
-	if r := row("Box/"); !strings.Contains(r, iconDir) {
-		t.Errorf("icons off: row %q lacks %q", r, iconDir)
+	if r := row("Box/"); !strings.Contains(r, iconVault) {
+		t.Errorf("icons off: row %q lacks %q", r, iconVault)
+	}
+	if r := row("plain/"); !strings.Contains(r, iconDir) {
+		t.Errorf("icons off, plain folder: row %q lacks %q", r, iconDir)
 	}
 	m.cfg.NerdIcons = true
 	if r := row("Box/"); !strings.Contains(r, nerdVaultLocked) {
@@ -243,6 +246,11 @@ func TestVaultIcons(t *testing.T) {
 	if r := row("Box/"); !strings.Contains(r, nerdVaultOpen) {
 		t.Errorf("unlocked: row %q lacks %q", r, nerdVaultOpen)
 	}
+	m.cfg.NerdIcons = false
+	if r := row("Box/"); !strings.Contains(r, iconVault) {
+		t.Errorf("unlocked, icons off: row %q lacks %q", r, iconVault)
+	}
+	m.cfg.NerdIcons = true
 
 	p.VaultExit = &vaultExit{}
 	p.SourceLabel = iconSourceVault + " Box"

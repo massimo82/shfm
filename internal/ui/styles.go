@@ -96,6 +96,7 @@ const (
 	iconFile    = "[F]"
 	iconSymlink = "[L]"
 	iconTrash   = "[T]"
+	iconVault   = "[V]"
 
 	iconSourceLocal     = "[HDD]"
 	iconSourceRemovable = "[USB]"
