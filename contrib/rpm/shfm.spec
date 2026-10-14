@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.6.2
+Version:        0.6.3
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Thu Oct 15 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.3-1
+- With the Nerd Font icons off, a vault's folder is marked [V] in place of [D]; inside a vault, the SOURCE keeps showing [VLT].
+
 * Wed Oct 14 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.2-1
 - With the Nerd Font icons on, a vault's folder shows a closed padlock, an open one once unlocked; inside a vault, the SOURCE shows the open padlock in place of [VLT].
 

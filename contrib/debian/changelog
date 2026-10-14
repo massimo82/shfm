@@ -1,3 +1,9 @@
+shfm (0.6.3) unstable; urgency=medium
+
+  * With the Nerd Font icons off, a vault's folder is marked [V] in place of [D]; inside a vault, the SOURCE keeps showing [VLT].
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  gio, 15 ott 2026 00:58:53 +0200
+
 shfm (0.6.2) unstable; urgency=medium
 
   * With the Nerd Font icons on, a vault's folder shows a closed padlock, an open one once unlocked; inside a vault, the SOURCE shows the open padlock in place of [VLT].
