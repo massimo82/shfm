@@ -1,3 +1,10 @@
+shfm (0.6.4) unstable; urgency=medium
+
+  * Writes to removable drives are flushed as they go and when an operation ends, so a drive pulled out right after a copy no longer holds truncated files.
+  * The source picker has an Eject entry per removable drive: it unmounts it and powers it off, safe to remove.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  sab, 17 ott 2026 09:01:42 +0200
+
 shfm (0.6.3) unstable; urgency=medium
 
   * With the Nerd Font icons off, a vault's folder is marked [V] in place of [D]; inside a vault, the SOURCE keeps showing [VLT].
