@@ -43,6 +43,7 @@ const (
 	TaskRepair
 	TaskSend
 	TaskReceive
+	TaskEject
 )
 
 func (k TaskKind) String() string {
@@ -67,6 +68,8 @@ func (k TaskKind) String() string {
 		return "Send"
 	case TaskReceive:
 		return "Receive"
+	case TaskEject:
+		return "Eject"
 	default:
 		return "Task"
 	}

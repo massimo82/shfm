@@ -65,7 +65,8 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
   choosing its format (ZIP, TAR with gzip/xz/zstd/bzip2/lzip/lz4, 7z).
 - Automatic one-way mirrors (rsync or generic engine) that never touch
   the source.
-- Formatting removable drives (exFAT, FAT32, ext4, XFS).
+- Formatting removable drives (exFAT, FAT32, ext4, XFS), and ejecting
+  them safely.
 - Optional module: [encrypted vaults](#encrypted-vaults), folders on any
   source whose files and names are encrypted (standard age format).
 - Optional module: [LocalSend](#localsend), files and messages sent to
@@ -318,6 +319,17 @@ to toggle between single- and dual-pane layout.
   the system itself is running from, as a hard safety rail on top of the
   UI confirmations. Implemented over udisks2 D-Bus (`Block.Format` /
   `PartitionTable.CreatePartition`), the same mechanism GNOME Disks uses.
+- **Eject a removable drive**: the source picker's `[EJT] Eject /dev/…`
+  entry, one per disk, unmounts every partition of it (waiting for what's
+  still being written there) and then powers the drive off, or ejects
+  the card from a reader, over udisks2 (`Drive.PowerOff` / `Drive.Eject`),
+  like desktop file managers' "Safely remove". Panes browsing the drive
+  go back to the home folder. Without udisks2, or for a drive that can't
+  be powered off, it's only unmounted, which is enough to pull it out
+  safely. Refused while a background task is running, since it may be
+  writing to the drive, and for the disk the system runs from; a drive
+  still in use (an open vault, a file open in another program) can't be
+  unmounted, and the error says so.
 - **Desktop launcher entry**: on first run, shfm installs a `shfm.desktop`
   file so it shows up in your desktop environment's application menu —
   system-wide (`/usr/share/applications`) if run as root, per-user

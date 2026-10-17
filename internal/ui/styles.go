@@ -110,6 +110,7 @@ const (
 	iconSourceVault     = "[VLT]"
 	iconSourceAdd       = "[ + ]"
 	iconSourceFormat    = "[FMT]"
+	iconSourceEject     = "[EJT]"
 )
 
 // paneHelpHints is the compact reminder line shown once, below both panes,

@@ -50,3 +50,8 @@ func FormatDevice(wholeDiskPath string, fsType FSType) (string, error) {
 func MountFormatted(partition string) (string, error) {
 	return "", fmt.Errorf("formatting devices is not supported on this platform")
 }
+
+// Eject is not supported on this platform.
+func Eject(wholeDiskPath string) (bool, error) {
+	return false, fmt.Errorf("ejecting drives isn't supported here")
+}

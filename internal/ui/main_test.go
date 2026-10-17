@@ -29,7 +29,7 @@ import (
 // TestMain keeps the tests off the machine's hardware: the source picker
 // lists no disks and no USB devices (a CI runner may have no usbfs at all,
 // and the tests must not depend on what's plugged in), and nothing gets
-// mounted.
+// mounted or ejected.
 func TestMain(m *testing.M) {
 	listLocalDrives = func() ([]drives.LocalDrive, error) { return nil, nil }
 	listRemovableDrives = func() ([]drives.RemovableDevice, error) { return nil, nil }
@@ -39,5 +39,6 @@ func TestMain(m *testing.M) {
 	mountByUUID = func(string) (drives.Mount, bool) { return drives.Mount{}, false }
 	deviceByUUID = func(string) (string, bool) { return "", false }
 	autoMount = func(string, string) (string, error) { return "", errors.New("no mounting in tests") }
+	ejectDrive = func(string) (bool, error) { return false, errors.New("no ejecting in tests") }
 	os.Exit(m.Run())
 }

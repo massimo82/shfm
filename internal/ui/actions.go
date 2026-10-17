@@ -414,7 +414,7 @@ func (m *Model) openTaskList() {
 
 type sourceMenuEntry struct {
 	label     string
-	kind      string // "local" | "removable-mounted" | "removable-unmounted" | "format-request" | "mtp" | "remote" | "new-smb" | "new-nfs" | "new-sftp" | "cloud" | "new-cloud"
+	kind      string // "local" | "removable-mounted" | "removable-unmounted" | "format-request" | "eject-request" | "mtp" | "remote" | "new-smb" | "new-nfs" | "new-sftp" | "cloud" | "new-cloud"
 	local     drives.LocalDrive
 	remote    config.RemoteSource
 	removable drives.RemovableDevice
@@ -439,7 +439,7 @@ func sourceMenuGroup(kind string) int {
 	switch kind {
 	case "local":
 		return 0
-	case "removable-mounted", "removable-unmounted", "format-request":
+	case "removable-mounted", "removable-unmounted", "format-request", "eject-request":
 		return 1
 	case "mtp":
 		return 2
@@ -539,6 +539,8 @@ var (
 	listLocalDrives     = drives.ListLocal
 	listRemovableDrives = drives.ListRemovable
 	discoverMTPDevices  = mtp.DiscoverDevices
+	// ejectDrive too, so that tests never touch a real drive.
+	ejectDrive = drives.Eject
 )
 
 func (m *Model) openSourceMenu() {
@@ -565,7 +567,7 @@ func (m *Model) openSourceMenu() {
 		label := fmt.Sprintf("%s %s  %s(%s, %s, %s free)", iconSourceLocal, d.MountPoint, name, d.FSType, humanSize(int64(d.Total)), humanSize(int64(d.Free)))
 		entries = append(entries, sourceMenuEntry{label: label, kind: "local", local: d})
 	}
-	for _, r := range removable {
+	for i, r := range removable {
 		name := driveDisplayName(r.Vendor, r.Model)
 		if r.Mounted {
 			label := fmt.Sprintf("%s %s \u2192 %s  %s(%s, %s)", iconSourceRemovable, r.Path, r.MountPoint, name, r.FSType, humanSize(int64(r.SizeBytes)))
@@ -577,6 +579,14 @@ func (m *Model) openSourceMenu() {
 		if !drives.IsSystemDisk(r.Path) {
 			label := fmt.Sprintf("%s Format %s\u2026", iconSourceFormat, r.Path)
 			entries = append(entries, sourceMenuEntry{label: label, kind: "format-request", removable: r})
+		}
+		// One Eject per disk, after its last partition (ListRemovable
+		// lists a disk's partitions together).
+		disk := drives.WholeDiskDevicePath(r.Path)
+		last := i == len(removable)-1 || drives.WholeDiskDevicePath(removable[i+1].Path) != disk
+		if last && !drives.IsSystemDisk(r.Path) {
+			label := fmt.Sprintf("%s Eject %s  %s(safe to remove)", iconSourceEject, disk, name)
+			entries = append(entries, sourceMenuEntry{label: label, kind: "eject-request", removable: r})
 		}
 	}
 	for _, dev := range mtpDevices {
@@ -683,6 +693,8 @@ func (m *Model) selectSourceMenuItem() {
 		m.setStatus("Mounted %s at %s", entry.removable.Path, mp)
 	case "format-request":
 		m.openFormatChoose(entry.removable)
+	case "eject-request":
+		m.ejectDisk(entry.removable)
 	case "mtp":
 		mtpDevice := entry.mtpDevice
 		m.startConnect(m.active, mtpDevice.Label(), m.mtpDialer(mtpDevice), nil, nil)
@@ -992,6 +1004,44 @@ func (m *Model) openFormatChoose(dev drives.RemovableDevice) {
 		items[i] = c.Label
 	}
 	m.dialog = Dialog{Kind: DialogFormatChoose, Title: "Format " + dev.Path, Items: items, FormatDevice: dev}
+}
+
+// ejectDisk makes the removable disk holding dev safe to pull out (see
+// drives.Eject), in the background: unmounting waits for whatever is
+// still being written to it. Refused while a task runs, as it may be
+// writing there. Panes browsing the disk go back to the home folder.
+func (m *Model) ejectDisk(dev drives.RemovableDevice) {
+	m.dialog = Dialog{}
+	for _, t := range m.tasks {
+		if !t.Finished {
+			m.setError("Tasks running: wait for them before ejecting")
+			return
+		}
+	}
+	wholeDisk := drives.WholeDiskDevicePath(dev.Path)
+	inside := m.panesOnDisk(wholeDisk)
+	var poweredOff bool
+	t := m.startSimpleTask(TaskEject, wholeDisk, func() error {
+		var err error
+		poweredOff, err = ejectDrive(wholeDisk)
+		applog.Debug("eject finished", "disk", wholeDisk, "poweredOff", poweredOff, "error", err)
+		return err
+	})
+	t.onFinish = func(t *Task) {
+		if t.ErrorCount > 0 {
+			return
+		}
+		home := homeOrRoot()
+		for _, idx := range inside {
+			m.replaceFS(idx, vfs.NewLocalFS("Local", home), home)
+		}
+		t.CurrentName = wholeDisk + ": safe to remove"
+		if !poweredOff {
+			t.CurrentName = wholeDisk + " unmounted: safe to remove"
+		}
+		m.setStatus("%s", t.CurrentName)
+	}
+	m.dialog = Dialog{Kind: DialogProgress, Title: "Ejecting", TaskID: t.ID}
 }
 
 // panesOnDisk returns the indexes of the panes whose current folder lives
