@@ -75,6 +75,7 @@ func Run(src, dst Side, opts Options, prog *fileops.Progress) *fileops.Result {
 	} else {
 		res = runGeneric(src, dst, opts.StateFile, prog)
 	}
+	fileops.FlushRemovable(res, fileops.Item{FS: dst.FS, Path: dst.Path})
 	for _, err := range res.Errors {
 		applog.Warn("mirror", "src", src.Path, "dst", dst.Path, "error", err)
 	}

@@ -276,7 +276,11 @@ to toggle between single- and dual-pane layout.
   unmounted ones — mounted automatically, preferring the system's
   **udisks2** D-Bus service, the same mechanism GNOME/Nautilus/Thunar
   use, so a regular local user can mount/unmount without root; falls back
-  to a direct `mount(2)` syscall if udisks2 is unavailable), **MTP
+  to a direct `mount(2)` syscall if udisks2 is unavailable; what shfm
+  writes there — copies, moves, extractions, archives, mirrors, LocalSend
+  transfers — is flushed to the drive as it goes, and an operation
+  finishes only once it's all on the drive, so it can be pulled out
+  right away), **MTP
   devices** (detected and driven over USB via `github.com/hanwen/go-mtpfs`,
   see [Notes](#notes)), the saved [remote sources](#remote-sources) (SMB,
   NFS, SFTP) and, with the optional modules, the

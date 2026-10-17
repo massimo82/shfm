@@ -122,6 +122,7 @@ func Copy(items []Item, destFS vfs.FileSystem, destDir string, prog *Progress) *
 		}
 		prog.report(res.Done+len(res.Errors), total, name, err)
 	}
+	FlushRemovable(res, Item{destFS, destDir})
 	return res
 }
 
@@ -161,6 +162,8 @@ func Move(items []Item, destFS vfs.FileSystem, destDir string, prog *Progress) *
 		}
 		prog.report(res.Done+len(res.Errors), total, name, err)
 	}
+	// The sources too: removing them from a drive is a write as well.
+	FlushRemovable(res, append([]Item{{destFS, destDir}}, items...)...)
 	return res
 }
 
@@ -231,7 +234,32 @@ func Delete(items []Item, useTrash bool, prog *Progress) *Result {
 		}
 		prog.report(res.Done+len(res.Errors), total, name, err)
 	}
+	FlushRemovable(res, items...)
 	return res
+}
+
+// FlushRemovable makes sure what an operation wrote has reached the
+// removable drives among the local folders of where (items, or the
+// folders holding them), so one pulled out right after the operation
+// doesn't lose it (see vfs.FlushRemovable). Each drive is flushed once;
+// a failure is added to res.
+func FlushRemovable(res *Result, where ...Item) {
+	seen := map[string]bool{}
+	for _, it := range where {
+		lp, ok := it.FS.(vfs.LocalPath)
+		if !ok {
+			continue
+		}
+		p, ok := lp.LocalPath(it.Path)
+		if !ok || seen[p] {
+			continue
+		}
+		seen[p] = true
+		if err := vfs.FlushRemovable(p); err != nil {
+			res.Errors = append(res.Errors, err)
+			return
+		}
+	}
 }
 
 // Rename renames a single item within the same backend.
@@ -247,7 +275,14 @@ func Rename(fs vfs.FileSystem, oldPath, newName string) error {
 		if err := copyRecursive(fs, oldPath, fs, newPath, nil, nil); err != nil {
 			return err
 		}
-		return fs.Remove(oldPath)
+		if err := fs.Remove(oldPath); err != nil {
+			return err
+		}
+	}
+	res := &Result{}
+	FlushRemovable(res, Item{fs, newPath})
+	if len(res.Errors) > 0 {
+		return res.Errors[0]
 	}
 	return nil
 }

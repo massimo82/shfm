@@ -64,6 +64,7 @@ func Extract(items []Item, prog *Progress) *Result {
 		}
 		prog.report(res.Done+len(res.Errors), total, name, err)
 	}
+	FlushRemovable(res, items...)
 	return res
 }
 

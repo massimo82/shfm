@@ -186,8 +186,18 @@ func (l *LocalFS) Rename(oldPath, newPath string) error {
 }
 
 func (l *LocalFS) Open(path string) (io.ReadCloser, error) { return os.Open(path) }
+
+// Create opens path for writing; on a removable drive the file is
+// flushed as it's written (see flushFile).
 func (l *LocalFS) Create(path string) (io.WriteCloser, error) {
-	return os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if onRemovable(path) {
+		return &flushFile{File: f}, nil
+	}
+	return f, nil
 }
 func (l *LocalFS) Join(elem ...string) string { return filepath.Join(elem...) }
 func (l *LocalFS) Dir(path string) string     { return filepath.Dir(path) }

@@ -163,7 +163,9 @@ func (r *Request) Accept(fs vfs.FileSystem, dir string, prog *fileops.Progress) 
 	case <-r.r.gone:
 		return &fileops.Result{Errors: []error{errSenderGone}}
 	}
-	return sess.wait()
+	res := sess.wait()
+	fileops.FlushRemovable(res, fileops.Item{FS: fs, Path: dir})
+	return res
 }
 
 // receiveSession is a transfer being received.

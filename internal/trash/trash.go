@@ -32,6 +32,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"shfm/internal/vfs"
 )
 
 // Item represents an entry present in the trash.
@@ -310,7 +312,11 @@ func Restore(it Item) error {
 			return err
 		}
 	}
-	return os.Remove(it.InfoPath())
+	if err := os.Remove(it.InfoPath()); err != nil {
+		return err
+	}
+	// Restored from the home trash onto a removable drive, it was copied.
+	return vfs.FlushRemovable(it.OriginalPath)
 }
 
 // Purge permanently deletes an item from the trash.

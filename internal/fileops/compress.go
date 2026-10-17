@@ -58,7 +58,7 @@ func CreateArchive(items []Item, destFS vfs.FileSystem, destPath string, kind ar
 				return c.add(put, items[0].FS, items[0].Path, root)
 			})
 			prog.report(1, total, items[0].FS.Base(items[0].Path), nil)
-			return c.result(res, destPath, total, err)
+			return c.result(res, destFS, destPath, total, err)
 		}
 	}
 
@@ -79,11 +79,12 @@ func CreateArchive(items []Item, destFS vfs.FileSystem, destPath string, kind ar
 		}
 		return nil
 	})
-	return c.result(res, destPath, total, err)
+	return c.result(res, destFS, destPath, total, err)
 }
 
 // result fills res from the outcome of writing the archive.
-func (c *compressor) result(res *Result, destPath string, total int, err error) *Result {
+func (c *compressor) result(res *Result, destFS vfs.FileSystem, destPath string, total int, err error) *Result {
+	defer FlushRemovable(res, Item{destFS, destPath})
 	switch {
 	case errors.Is(err, errCancelled) || errors.Is(err, context.Canceled):
 		res.Cancelled = true
