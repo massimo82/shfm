@@ -80,7 +80,7 @@ func diskNameFromPartition(base string) string {
 // the OS) is running from — a hard safety rail independent of, and in
 // addition to, the UI's own confirmation dialogs.
 func SystemDiskName() (string, error) {
-	f, err := os.Open("/proc/mounts")
+	f, err := os.Open(mountsFile)
 	if err != nil {
 		return "", err
 	}

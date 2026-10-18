@@ -19,15 +19,38 @@
 
 package drives
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// fakeSystemDisk makes SystemDiskName see the root filesystem on
+// /dev/shfmtest1, for one test, and returns that disk: a name no machine
+// has, so that a refusal that doesn't happen acts on nothing real. Only
+// the system disk is told from these synthetic mounts: unmounting still
+// reads the real ones, where that disk never appears.
+func fakeSystemDisk(t *testing.T) string {
+	t.Helper()
+	mf := filepath.Join(t.TempDir(), "mounts")
+	if err := os.WriteFile(mf, []byte("/dev/shfmtest1 / ext4 rw 0 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := mountsFile
+	mountsFile = mf
+	t.Cleanup(func() { mountsFile = old })
+	if sys, err := SystemDiskName(); err != nil || sys != "shfmtest" {
+		t.Fatalf("synthetic system disk not seen: %q, %v", sys, err)
+	}
+	return "/dev/shfmtest"
+}
 
 // Eject refuses the system disk before unmounting anything on it.
 func TestEjectRefusesSystemDisk(t *testing.T) {
-	sys, err := SystemDiskName()
-	if err != nil {
-		t.Skip("cannot determine the system disk here")
-	}
-	if off, err := Eject("/dev/" + sys); err == nil || off {
+	disk := fakeSystemDisk(t)
+	off, err := Eject(disk)
+	if err == nil || off || !strings.Contains(err.Error(), "holds the system") {
 		t.Fatalf("Eject(system disk) = %v, %v; want a refusal", off, err)
 	}
 }
