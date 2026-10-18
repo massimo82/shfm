@@ -93,6 +93,10 @@ type Model struct {
 	// first next time (see archive.go).
 	archiveKind archive.Kind
 
+	// stagedImage is a disk image extracted to be written onto a drive
+	// and still waiting for it (see writeimage.go), nil when none.
+	stagedImage *diskImage
+
 	// Background task tracking (copy/move/delete): see tasks.go.
 	tasks         []*Task
 	nextTaskID    int
@@ -562,6 +566,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.openAssociations()
 	case config.ActionCompress:
 		m.askCreateArchive()
+	case config.ActionWriteImage:
+		m.askWriteImage()
 
 	// --- source and path ---
 	case config.ActionSourceMenu:

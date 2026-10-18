@@ -44,6 +44,8 @@ const (
 	TaskSend
 	TaskReceive
 	TaskEject
+	TaskStageImage
+	TaskWriteImage
 )
 
 func (k TaskKind) String() string {
@@ -70,6 +72,10 @@ func (k TaskKind) String() string {
 		return "Receive"
 	case TaskEject:
 		return "Eject"
+	case TaskStageImage:
+		return "Extract image"
+	case TaskWriteImage:
+		return "Write image"
 	default:
 		return "Task"
 	}

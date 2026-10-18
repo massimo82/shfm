@@ -495,6 +495,12 @@ func (m *Model) renderDialogBox() string {
 		b.WriteString("\n" + styleDim.Render("\u2191/\u2193 or click move · Enter/click select · Esc cancel"))
 		return dialogBox(48).Render(b.String())
 
+	case DialogWriteImage:
+		return renderWriteImageDialog(&b, &d)
+
+	case DialogWriteImageConfirm:
+		return renderWriteImageConfirm(&b, &d)
+
 	case DialogFormatConfirm1:
 		b.WriteString(styleErr.Render(fmt.Sprintf(
 			"WARNING: this will PERMANENTLY ERASE ALL DATA\non %s.\n\nA single %s partition will be created,\nreplacing everything currently on the device.",

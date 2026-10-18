@@ -67,6 +67,8 @@ page. Downloads: [latest release](https://github.com/massimo82/shfm/releases/lat
   the source.
 - Formatting removable drives (exFAT, FAT32, ext4, XFS), and ejecting
   them safely.
+- [Writing disk images](#writing-disk-images) (ISO, IMG, also inside an
+  archive) onto a USB drive, as balenaEtcher or `dd` do, verified.
 - Optional module: [encrypted vaults](#encrypted-vaults), folders on any
   source whose files and names are encrypted (standard age format).
 - Optional module: [LocalSend](#localsend), files and messages sent to
@@ -330,6 +332,9 @@ to toggle between single- and dual-pane layout.
   writing to the drive, and for the disk the system runs from; a drive
   still in use (an open vault, a file open in another program) can't be
   unmounted, and the error says so.
+- **Write a disk image onto a drive**: `w` on an ISO or IMG file, or on
+  an archive holding one, writes it onto a removable drive, replacing
+  everything on it. See [Writing disk images](#writing-disk-images).
 - **Desktop launcher entry**: on first run, shfm installs a `shfm.desktop`
   file so it shows up in your desktop environment's application menu —
   system-wide (`/usr/share/applications`) if run as root, per-user
@@ -491,6 +496,49 @@ straight away, saying what to install. External tools run without a terminal, so
 encrypted archive's password fails instead of taking over shfm's screen.
 The same code (`internal/archive`) reads the archives indexed by the
 semantic search.
+
+## Writing disk images
+
+`w` on a disk image writes it onto a removable drive byte by byte, as
+balenaEtcher or `dd` do: the way to make a USB stick that boots a Linux
+distribution's ISO or a Raspberry Pi's IMG. **Everything on the drive is
+lost**, replaced by the image.
+
+**What can be written.** A file named `.iso` or `.img`, or an
+[archive](#archives) of any format shfm reads holding exactly one of
+them: `distro.iso.xz`, `raspios.img.gz`, a ZIP or a `.tar.zst` with the
+image among other files. An archive is first extracted into the
+temporary folder (`/tmp`, or `$TMPDIR`), in the background, and so is an
+image on a network or cloud source copied there, so that a dropped
+connection can't cut the writing halfway; that copy is removed once
+written, or cancelled. An archive holding no image, or more than one,
+is refused, and nothing is written. Extracting stops, removing what it
+wrote, rather than leave the temporary folder with less than a tenth of
+its space (at least 512 MiB) free: `/tmp` is often in memory.
+
+**The dialog.** It lists the removable drives, never the disk the
+system runs from, with their model and size; a drive too small for the
+image, or holding the image itself, can't be chosen (`r` lists them
+again, after plugging one in). The drive is verified after writing
+(`v` or `Space` turns that off): it's read back, bypassing the cache, and
+compared with the image, as balenaEtcher does, which takes about as long
+again. An ISO without a boot sector (Windows installers, among others)
+is pointed out: it boots from a DVD, not once written onto a USB drive.
+
+**Before writing**, a warning says that all the data on the drive will
+be lost, overwritten, and asks to continue. Then the drive's filesystems
+are unmounted and panes browsing it go back to the home folder; writing
+is refused while another background task runs, and if the drive was
+swapped for another since it was listed. It runs as a background task
+(`c` cancels it, leaving the drive unusable until formatted or written
+again); [eject](#features-in-detail) the drive before unplugging it.
+
+**Permissions.** The drive is opened through udisks2
+(`Block.OpenDevice`, exclusively, so never while something still uses
+it), as GNOME Disks' "Restore Disk Image" does: polkit asks for your
+password, in shfm's own dialog, and remembers it for a few minutes.
+shfm itself never runs as root for it. Without udisks2, images can't be
+written.
 
 ## Automatic mirrors
 
@@ -1259,6 +1307,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `o` | file associations: the application opening each file type (see [File associations](#file-associations), for the dialog's own keys) |
 | `x` | extract the selected archives here, each into its own new folder |
 | `c` | create an archive of the selected entries, choosing the format |
+| `w` | write the disk image (ISO, IMG, or an archive holding one) onto a removable drive (see [Writing disk images](#writing-disk-images)) |
 | `/` | search/filter the current folder by name |
 | `Esc` | cancel a search/filter or close a dialog |
 | `Ctrl+F` | semantic search on file contents (optional, needs a special build: see [Optional: semantic (content) search](#optional-semantic-content-search)) |
@@ -1446,7 +1495,7 @@ match how the libraries in step 1 were built (see the table under
 [GPU acceleration](#gpu-acceleration)); for a CPU-only build use plain
 `make libbinding.a` and `go build -tags semantic -o shfm .` instead.
 
-Removable-device, MTP and disk-formatting support is Linux-only (it
+Removable-device, MTP, disk-formatting and image-writing support is Linux-only (it
 relies on `/sys/block`, `/sys/bus/usb`, `libusb`, and the udisks2
 D-Bus service): on other platforms those menu entries simply don't
 appear, the rest of the application is unaffected. That is only how the
@@ -2120,7 +2169,7 @@ internal/fileops/               copy/move/delete/rename, archive extract/create 
 internal/archive/               archive formats: detection, reading entries, creation (shared with semantic search)
 internal/mirror/                one-way mirrors: rsync (local) and generic engine
 internal/wlclip/                Wayland clipboard client (data-control protocol)
-internal/drives/                local disks, removable device mount/format (udisks2)
+internal/drives/                local disks, removable device mount/format/eject, writing disk images (udisks2)
 internal/secret/                at-rest encryption for saved passwords, client secrets and cloud tokens
 internal/vault/                 optional encrypted vaults (build tag vault): age-format storage, CryptFS decorator over any backend, split (2-of-3) storage
 internal/localsend/             optional LocalSend (build tag localsend): discovery, sending and receiving through any backend

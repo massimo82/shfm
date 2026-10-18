@@ -92,6 +92,8 @@ const (
 	DialogLocalSendIncoming
 	DialogLocalSendMessage
 	DialogLocalSendPIN
+	DialogWriteImage
+	DialogWriteImageConfirm
 )
 
 // Dialog is the state of any currently active modal.
@@ -149,6 +151,13 @@ type Dialog struct {
 	PropsAttrs []string       // DialogProperties: restricting chattr flags on the entry (immutable, append-only)
 	PropsPath  string
 	PropsEntry vfs.Entry
+
+	// DialogWriteImage, DialogWriteImageConfirm (see writeimage.go): the
+	// image, the drives it can go onto, parallel to Items, and whether
+	// to verify them after writing.
+	Image       *diskImage
+	ImageDisks  []imageDisk
+	ImageVerify bool
 
 	FormatDevice drives.RemovableDevice // DialogFormatChoose/Confirm1/Confirm2
 	FormatFSType drives.FSType          // chosen in DialogFormatChoose, carried forward
@@ -322,6 +331,16 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			return cmd, true
 		}
 	}
+	if d.Kind == DialogWriteImage && m.updateWriteImageKey(msg.String()) {
+		return nil, true
+	}
+	if d.Kind == DialogWriteImageConfirm {
+		if k := msg.String(); k == "esc" || k == "n" || k == "N" {
+			m.dialog = Dialog{}
+			m.DropStagedImage()
+			return nil, true
+		}
+	}
 	switch msg.String() {
 	case "esc":
 		if d.Kind == DialogProgress {
@@ -412,7 +431,8 @@ func hasListNav(k DialogKind) bool {
 	case DialogSourceMenu, DialogHelp, DialogNewChoice, DialogTaskList, DialogFormatChoose,
 		DialogMirrorConfirm, DialogMirrorList, DialogMirrorDeleteCopy,
 		DialogPickFilter, DialogPickOptions,
-		DialogLocalSend, DialogLocalSendIncoming, DialogLocalSendMessage:
+		DialogLocalSend, DialogLocalSendIncoming, DialogLocalSendMessage,
+		DialogWriteImage:
 		return true
 	default:
 		return false
@@ -423,7 +443,7 @@ func isYesNoDialog(k DialogKind) bool {
 	switch k {
 	case DialogConfirmTrash, DialogConfirmPermanent, DialogConfirmEmptyTrash,
 		DialogConfirmQuit, DialogFormatConfirm1, DialogMirrorConfirmDelete, DialogConfirmRemoveSource,
-		DialogPickOverwrite, DialogConfirmIcons:
+		DialogPickOverwrite, DialogConfirmIcons, DialogWriteImageConfirm:
 		return true
 	default:
 		return false

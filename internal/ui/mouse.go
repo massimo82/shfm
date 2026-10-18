@@ -258,6 +258,11 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 			m.dialog.ItemIdx = row
 			m.confirmDialog()
 		}
+	case DialogWriteImage:
+		// Select only: writing still needs Enter, then confirming.
+		if i := row - writeImageListTop(&m.dialog); i >= 0 && i < len(m.dialog.Items) {
+			m.dialog.ItemIdx = i
+		}
 	case DialogCreateArchive:
 		// Select only: the name still needs confirming.
 		if row >= 0 && row < len(m.dialog.Items) {

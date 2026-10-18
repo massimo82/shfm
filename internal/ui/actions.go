@@ -1260,6 +1260,12 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 		}
 		m.dialog = Dialog{Kind: DialogProgress, Title: "Formatting", TaskID: t.ID}
 
+	case DialogWriteImage:
+		m.confirmWriteImageDisk()
+
+	case DialogWriteImageConfirm:
+		m.writeImage()
+
 	case DialogMirrorConfirm:
 		m.confirmMirror()
 
