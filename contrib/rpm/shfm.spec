@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.6.4
+Version:        0.7.0
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Sun Oct 18 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.7.0-1
+- w on an ISO or IMG file, or on an archive holding one, writes it onto a removable drive, as balenaEtcher or dd do, and verifies it; a warning says all data on the drive will be lost.
+
 * Sat Oct 17 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.6.4-1
 - Writes to removable drives are flushed as they go and when an operation ends, so a drive pulled out right after a copy no longer holds truncated files.
 - The source picker has an Eject entry per removable drive: it unmounts it and powers it off, safe to remove.

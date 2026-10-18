@@ -1,3 +1,9 @@
+shfm (0.7.0) unstable; urgency=medium
+
+  * w on an ISO or IMG file, or on an archive holding one, writes it onto a removable drive, as balenaEtcher or dd do, and verifies it; a warning says all data on the drive will be lost.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  dom, 18 ott 2026 17:42:51 +0200
+
 shfm (0.6.4) unstable; urgency=medium
 
   * Writes to removable drives are flushed as they go and when an operation ends, so a drive pulled out right after a copy no longer holds truncated files.
