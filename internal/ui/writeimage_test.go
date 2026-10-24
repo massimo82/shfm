@@ -395,8 +395,8 @@ func TestWriteImageNoSSHForOtherImages(t *testing.T) {
 	}
 }
 
-// typeInto types text into the dialog's focused field.
-func typeInto(m *Model, text string) {
+// typeKeys types text, key by key, into the dialog's focused field.
+func typeKeys(m *Model, text string) {
 	for _, r := range text {
 		pressKey(m, r, string(r))
 	}
@@ -417,11 +417,14 @@ func TestWriteImageRaspiOSCreatesUser(t *testing.T) {
 	if m.dialog.Kind != DialogWriteImageUser {
 		t.Fatalf("dialog %v, want the user form", m.dialog.Kind)
 	}
-	typeInto(m, "pi-jk")
+	if got := m.dialog.Inputs[0].Value(); got != "pi" {
+		t.Fatalf("user name %q, want pi by default", got)
+	}
+	typeKeys(m, "-jk")
 	pressKey(m, tea.KeyTab, "")
-	typeInto(m, "secret")
+	typeKeys(m, "secret")
 	pressKey(m, tea.KeyTab, "")
-	typeInto(m, "secreT")
+	typeKeys(m, "secreT")
 	m.confirmDialog()
 	if m.dialog.Kind != DialogWriteImageUser || !strings.Contains(m.renderDialogBox(), "Passwords differ") {
 		t.Fatalf("different passwords accepted: dialog %v", m.dialog.Kind)
@@ -430,7 +433,7 @@ func TestWriteImageRaspiOSCreatesUser(t *testing.T) {
 		t.Error("password shown in clear")
 	}
 	pressKey(m, tea.KeyBackspace, "")
-	typeInto(m, "t")
+	typeKeys(m, "t")
 	m.confirmDialog()
 	d := &m.dialog
 	if d.Kind != DialogWriteImage || d.ImageUser == nil || d.ImageUser.Name != "pi-jk" || !strings.HasPrefix(d.ImageUser.PasswordHash, "$6$") {
@@ -469,11 +472,11 @@ func TestWriteImageRaspiOSUserFormEsc(t *testing.T) {
 		t.Fatalf("dialog %v, user %v: want back to the drives, no user", m.dialog.Kind, m.dialog.ImageUser)
 	}
 	pressKey(m, 'u', "u")
-	typeInto(m, "root")
+	m.dialog.Inputs[0].SetValue("root")
 	pressKey(m, tea.KeyTab, "")
-	typeInto(m, "x")
+	typeKeys(m, "x")
 	pressKey(m, tea.KeyTab, "")
-	typeInto(m, "x")
+	typeKeys(m, "x")
 	m.confirmDialog()
 	if m.dialog.Kind != DialogWriteImageUser || !strings.Contains(m.renderDialogBox(), "root") {
 		t.Fatalf("root accepted: dialog %v", m.dialog.Kind)

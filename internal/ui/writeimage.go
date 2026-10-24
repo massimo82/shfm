@@ -311,7 +311,8 @@ func (m *Model) updateWriteImageKey(key string) bool {
 }
 
 // askWriteImageUser asks, over the write image dialog, for the user
-// Raspberry Pi OS creates on first boot.
+// Raspberry Pi OS creates on first boot: pi, its name of old, unless
+// changed.
 func (m *Model) askWriteImageUser() {
 	d := &m.dialog
 	placeholders := []string{"lower case: a-z 0-9 -", "not empty", "the same again"}
@@ -328,6 +329,8 @@ func (m *Model) askWriteImageUser() {
 		d.Inputs[i] = ti
 	}
 	d.Inputs[0].CharLimit = 32
+	d.Inputs[0].SetValue("pi")
+	d.Inputs[0].CursorEnd()
 	d.Inputs[0].Focus()
 	d.FocusIdx, d.Message, d.IsError = 0, "", false
 	d.Kind, d.Title = DialogWriteImageUser, "Create a user"

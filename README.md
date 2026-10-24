@@ -538,8 +538,8 @@ removes the file.
 
 Since 2022 the images have no default user: the first boot asks for one,
 with a screen and keyboard attached. `u` **creates the user** instead,
-asking for its name (lower-case letters, digits and hyphens, starting
-with a letter, not `root`) and password, twice; `u` again removes it.
+asking for its name (`pi` unless changed; lower-case letters, digits
+and hyphens, starting with a letter, not `root`) and password, twice; `u` again removes it.
 It's written, as Raspberry Pi's documentation explains, into a
 `userconf.txt` in the boot partition, `name:password hash` (SHA-512
 crypt, as `openssl passwd -6` makes it: the password itself is never
