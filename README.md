@@ -525,6 +525,29 @@ compared with the image, as balenaEtcher does, which takes about as long
 again. An ISO without a boot sector (Windows installers, among others)
 is pointed out: it boots from a DVD, not once written onto a USB drive.
 
+**Raspberry Pi OS** (formerly Raspbian) is recognised by the `issue.txt`
+that pi-gen, the tool building it, leaves in its boot partition
+("Raspberry Pi reference", or "Generated using pi-gen" for images built
+as it is), or, for older images without it, by its name (`raspios`,
+`raspbian`). For it, the dialog offers to **enable SSH**, on by default
+(`s` turns it off): once the image is written and verified, an empty
+`ssh` file is created in the drive's boot partition (`/boot/firmware/ssh`,
+`/boot/ssh` on older releases), straight into its FAT filesystem,
+without mounting it; on first boot the system starts the SSH server and
+removes the file.
+
+Since 2022 the images have no default user: the first boot asks for one,
+with a screen and keyboard attached. `u` **creates the user** instead,
+asking for its name (lower-case letters, digits and hyphens, starting
+with a letter, not `root`) and password, twice; `u` again removes it.
+It's written, as Raspberry Pi's documentation explains, into a
+`userconf.txt` in the boot partition, `name:password hash` (SHA-512
+crypt, as `openssl passwd -6` makes it: the password itself is never
+stored), which the first boot reads, creating the user, then removes; one
+the image already has is replaced. With SSH enabled too, the Raspberry Pi
+can be set up without a screen: plug it into the network, then
+`ssh name@raspberrypi.local`.
+
 **Before writing**, a warning says that all the data on the drive will
 be lost, overwritten, and asks to continue. Then the drive's filesystems
 are unmounted and panes browsing it go back to the home folder; writing

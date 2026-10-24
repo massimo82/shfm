@@ -501,6 +501,9 @@ func (m *Model) renderDialogBox() string {
 	case DialogWriteImageConfirm:
 		return renderWriteImageConfirm(&b, &d)
 
+	case DialogWriteImageUser:
+		return renderWriteImageUser(&b, &d)
+
 	case DialogFormatConfirm1:
 		b.WriteString(styleErr.Render(fmt.Sprintf(
 			"WARNING: this will PERMANENTLY ERASE ALL DATA\non %s.\n\nA single %s partition will be created,\nreplacing everything currently on the device.",

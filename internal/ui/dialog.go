@@ -94,6 +94,7 @@ const (
 	DialogLocalSendPIN
 	DialogWriteImage
 	DialogWriteImageConfirm
+	DialogWriteImageUser
 )
 
 // Dialog is the state of any currently active modal.
@@ -153,11 +154,15 @@ type Dialog struct {
 	PropsEntry vfs.Entry
 
 	// DialogWriteImage, DialogWriteImageConfirm (see writeimage.go): the
-	// image, the drives it can go onto, parallel to Items, and whether
-	// to verify them after writing.
+	// image, the drives it can go onto, parallel to Items, whether to
+	// verify them after writing and, for Raspberry Pi OS, to enable SSH
+	// and create a user (nil: none). DialogWriteImageUser asks for that
+	// user, over them.
 	Image       *diskImage
 	ImageDisks  []imageDisk
 	ImageVerify bool
+	ImageSSH    bool
+	ImageUser   *drives.RaspiUser
 
 	FormatDevice drives.RemovableDevice // DialogFormatChoose/Confirm1/Confirm2
 	FormatFSType drives.FSType          // chosen in DialogFormatChoose, carried forward
@@ -332,6 +337,10 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 	}
 	if d.Kind == DialogWriteImage && m.updateWriteImageKey(msg.String()) {
+		return nil, true
+	}
+	if d.Kind == DialogWriteImageUser && msg.String() == "esc" {
+		m.closeWriteImageUser()
 		return nil, true
 	}
 	if d.Kind == DialogWriteImageConfirm {

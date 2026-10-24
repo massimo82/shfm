@@ -29,6 +29,6 @@ import (
 func DiskSize(wholeDiskPath string) int64 { return 0 }
 
 // WriteImage is not supported on this platform.
-func WriteImage(ctx context.Context, wholeDiskPath string, src io.Reader, size int64, verify bool, progress func(ImageProgress)) error {
+func WriteImage(ctx context.Context, wholeDiskPath string, src io.Reader, size int64, opts ImageOptions, progress func(ImageProgress)) error {
 	return errors.New("writing images isn't supported here")
 }

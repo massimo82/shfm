@@ -43,7 +43,7 @@ func TestMain(m *testing.M) {
 	autoMount = func(string, string) (string, error) { return "", errors.New("no mounting in tests") }
 	ejectDrive = func(string) (bool, error) { return false, errors.New("no ejecting in tests") }
 	diskSizeOf = func(string) int64 { return 0 }
-	writeImageOnto = func(context.Context, string, io.Reader, int64, bool, func(drives.ImageProgress)) error {
+	writeImageOnto = func(context.Context, string, io.Reader, int64, drives.ImageOptions, func(drives.ImageProgress)) error {
 		return errors.New("no writing images in tests")
 	}
 	os.Exit(m.Run())

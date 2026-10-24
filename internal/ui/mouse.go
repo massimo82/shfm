@@ -284,7 +284,7 @@ func (m *Model) handleDialogMouse(msg mouseEvent) {
 	case DialogHelp, DialogAbout:
 		m.dialog = Dialog{}
 	case DialogConnectSMB, DialogConnectNFS, DialogConnectSFTP, DialogConnectCloud, DialogProperties,
-		DialogVaultUnlock, DialogNewVault, DialogVaultPassword, DialogVaultShowKey:
+		DialogVaultUnlock, DialogNewVault, DialogVaultPassword, DialogVaultShowKey, DialogWriteImageUser:
 		if row >= 0 && row < len(m.dialog.Inputs) {
 			m.dialog.Inputs[m.dialog.FocusIdx].Blur()
 			m.dialog.FocusIdx = row

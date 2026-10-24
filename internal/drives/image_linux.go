@@ -30,6 +30,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"golang.org/x/sys/unix"
@@ -53,8 +54,9 @@ func DiskSize(wholeDiskPath string) int64 {
 
 // WriteImage writes the size bytes of src onto the whole disk
 // wholeDiskPath, byte by byte as dd does, replacing everything on it, and
-// then, when verify is set, reads them back to check the drive holds
-// them. progress, when not nil, is called after every chunk.
+// then, as opts asks, reads them back to check the drive holds them and
+// sets up the Raspberry Pi OS written (SSH, user). progress, when not nil, is
+// called after every chunk.
 //
 // Every filesystem on the disk is unmounted first. The disk is then
 // opened through udisks2 (Block.OpenDevice, exclusively: it fails if the
@@ -62,7 +64,7 @@ func DiskSize(wholeDiskPath string) int64 {
 // GNOME Disks' "Restore Disk Image" does: shfm needs no root. Refused
 // for the system disk, and for an image larger than the disk before
 // anything is written.
-func WriteImage(ctx context.Context, wholeDiskPath string, src io.Reader, size int64, verify bool, progress func(ImageProgress)) error {
+func WriteImage(ctx context.Context, wholeDiskPath string, src io.Reader, size int64, opts ImageOptions, progress func(ImageProgress)) error {
 	if IsSystemDisk(wholeDiskPath) {
 		return fmt.Errorf("%s holds the system", wholeDiskPath)
 	}
@@ -81,7 +83,7 @@ func WriteImage(ctx context.Context, wholeDiskPath string, src io.Reader, size i
 	if end, err := f.Seek(0, io.SeekEnd); err == nil && end > 0 && size > end {
 		return ErrImageTooBig
 	}
-	return writeImage(ctx, f, src, size, verify, progress)
+	return writeImage(ctx, f, src, size, opts, progress)
 }
 
 // openDeviceViaUDisks2 opens the block device devicePath for reading and
@@ -108,8 +110,9 @@ func openDeviceViaUDisks2(ctx context.Context, devicePath string) (*os.File, err
 }
 
 // writeImage writes the size bytes of src at the start of dst and syncs
-// them, then verifies them when asked (see WriteImage).
-func writeImage(ctx context.Context, dst *os.File, src io.Reader, size int64, verify bool, progress func(ImageProgress)) error {
+// them, then verifies them and sets up Raspberry Pi OS when asked (see
+// WriteImage).
+func writeImage(ctx context.Context, dst *os.File, src io.Reader, size int64, opts ImageOptions, progress func(ImageProgress)) error {
 	buf := make([]byte, imageChunk)
 	h := sha256.New()
 	var done, unsynced int64
@@ -145,10 +148,19 @@ func writeImage(ctx context.Context, dst *os.File, src io.Reader, size int64, ve
 	if err := dst.Sync(); err != nil {
 		return err
 	}
-	if !verify {
+	if opts.Verify {
+		if err := verifyImage(ctx, dst, size, h.Sum(nil), progress); err != nil {
+			return err
+		}
+	}
+	if opts.Raspi.Empty() {
 		return nil
 	}
-	return verifyImage(ctx, dst, size, h.Sum(nil), progress)
+	// Once verified: the files change the drive from the image.
+	if err := SetupRaspiOS(dst, opts.Raspi, time.Now()); err != nil {
+		return fmt.Errorf("written, but SSH/user not set: %w", err)
+	}
+	return dst.Sync()
 }
 
 // verifyImage reads back the first size bytes of f and checks their
@@ -163,6 +175,10 @@ func verifyImage(ctx context.Context, f *os.File, size int64, want []byte, progr
 	if direct {
 		if _, err := unix.FcntlInt(fd, unix.F_SETFL, flags|unix.O_DIRECT); err != nil {
 			direct = false
+		} else {
+			// Writes after it (SetupRaspiOS's) are neither aligned
+			// nor sized for O_DIRECT.
+			defer unix.FcntlInt(fd, unix.F_SETFL, flags)
 		}
 	}
 	// O_DIRECT reads need a buffer aligned to the block size: mmap's

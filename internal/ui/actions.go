@@ -1266,6 +1266,9 @@ func (m *Model) confirmDialog() (tea.Cmd, bool) {
 	case DialogWriteImageConfirm:
 		m.writeImage()
 
+	case DialogWriteImageUser:
+		m.confirmWriteImageUser()
+
 	case DialogMirrorConfirm:
 		m.confirmMirror()
 

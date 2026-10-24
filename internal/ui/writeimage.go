@@ -27,6 +27,8 @@ import (
 	"sync"
 	"time"
 
+	"charm.land/bubbles/v2/textinput"
+
 	"shfm/internal/applog"
 	"shfm/internal/archive"
 	"shfm/internal/config"
@@ -45,6 +47,7 @@ var (
 	stageImage      = drives.StageImage
 	stageImageFile  = drives.StageFile
 	imageStagingDir = os.TempDir
+	isRaspiOSImage  = drives.IsRaspiOSImage // tests fake it: their images hold no filesystem
 )
 
 // diskImage is an image ready to be written: always a local file, its own
@@ -56,6 +59,7 @@ type diskImage struct {
 	Size      int64
 	Staged    bool
 	NotHybrid bool // an ISO that won't boot from a USB drive (see drives.ISONotHybrid)
+	RaspiOS   bool // Raspberry Pi OS: SSH can be turned on (see drives.IsRaspiOSImage)
 
 	// Where it comes from, so pressing the key again on that file finds
 	// the image already extracted.
@@ -208,9 +212,10 @@ func (m *Model) startStageImage(fs vfs.FileSystem, full, name string, size int64
 func (m *Model) openWriteImage(img *diskImage) {
 	if f, err := os.Open(img.Path); err == nil {
 		img.NotHybrid = drives.ISONotHybrid(img.Name, f)
+		img.RaspiOS = isRaspiOSImage(img.Name, f)
 		f.Close()
 	}
-	d := Dialog{Kind: DialogWriteImage, Title: "Write image", Image: img, ImageVerify: true}
+	d := Dialog{Kind: DialogWriteImage, Title: "Write image", Image: img, ImageVerify: true, ImageSSH: img.RaspiOS}
 	m.dialog = d
 	m.refreshImageDisks()
 }
@@ -272,13 +277,28 @@ func (m *Model) refreshImageDisks() {
 }
 
 // updateWriteImageKey handles the write image dialog's own keys: v/Space
-// turn verifying on and off, r lists the drives again; Esc drops the
-// image extracted for it.
+// turn verifying on and off, s enabling SSH and u creating a user
+// (Raspberry Pi OS only), r lists the drives again; Esc drops the image
+// extracted for it.
 func (m *Model) updateWriteImageKey(key string) bool {
 	d := &m.dialog
 	switch key {
 	case "v", "space":
 		d.ImageVerify = !d.ImageVerify
+	case "s":
+		if !d.Image.RaspiOS {
+			return false
+		}
+		d.ImageSSH = !d.ImageSSH
+	case "u":
+		if !d.Image.RaspiOS {
+			return false
+		}
+		if d.ImageUser != nil {
+			d.ImageUser = nil
+		} else {
+			m.askWriteImageUser()
+		}
 	case "r":
 		m.refreshImageDisks()
 	case "esc":
@@ -288,6 +308,54 @@ func (m *Model) updateWriteImageKey(key string) bool {
 		return false
 	}
 	return true
+}
+
+// askWriteImageUser asks, over the write image dialog, for the user
+// Raspberry Pi OS creates on first boot.
+func (m *Model) askWriteImageUser() {
+	d := &m.dialog
+	placeholders := []string{"lower case: a-z 0-9 -", "not empty", "the same again"}
+	d.Inputs = make([]textinput.Model, len(placeholders))
+	for i, p := range placeholders {
+		ti := textinput.New()
+		ti.Placeholder = p
+		ti.SetWidth(36)
+		ti.CharLimit = 255
+		if i > 0 {
+			ti.EchoMode = textinput.EchoPassword
+			ti.EchoCharacter = '•'
+		}
+		d.Inputs[i] = ti
+	}
+	d.Inputs[0].CharLimit = 32
+	d.Inputs[0].Focus()
+	d.FocusIdx, d.Message, d.IsError = 0, "", false
+	d.Kind, d.Title = DialogWriteImageUser, "Create a user"
+}
+
+// confirmWriteImageUser takes the user asked for, its password kept
+// hashed only, back to the write image dialog; or says what's wrong.
+func (m *Model) confirmWriteImageUser() {
+	d := &m.dialog
+	name, pw, again := d.Inputs[0].Value(), d.Inputs[1].Value(), d.Inputs[2].Value()
+	if pw != again {
+		d.Message, d.IsError = "Passwords differ", true
+		return
+	}
+	u, err := drives.NewRaspiUser(name, pw)
+	if err != nil {
+		d.Message, d.IsError = err.Error(), true
+		return
+	}
+	d.ImageUser = &u
+	m.closeWriteImageUser()
+}
+
+// closeWriteImageUser goes back to the write image dialog.
+func (m *Model) closeWriteImageUser() {
+	d := &m.dialog
+	d.Inputs, d.FocusIdx, d.Message, d.IsError = nil, 0, "", false
+	d.Kind, d.Title = DialogWriteImage, "Write image"
 }
 
 // confirmWriteImageDisk moves from the drive chosen to the warning that
@@ -332,7 +400,10 @@ func (m *Model) writeImage() {
 	for _, idx := range m.panesOnDisk(dk.Path) {
 		m.replaceFS(idx, vfs.NewLocalFS("Local", home), home)
 	}
-	verify := d.ImageVerify
+	opts := drives.ImageOptions{Verify: d.ImageVerify}
+	if img.RaspiOS {
+		opts.Raspi = drives.RaspiSetup{SSH: d.ImageSSH, User: d.ImageUser}
+	}
 	t := m.startTask(TaskWriteImage, 1, func(prog *fileops.Progress) *fileops.Result {
 		defer img.drop()
 		ctx, stop := progressContext(prog)
@@ -342,7 +413,7 @@ func (m *Model) writeImage() {
 		if err == nil {
 			report := throttledBytes(prog)
 			verifying := false
-			err = writeImageOnto(ctx, dk.Path, f, img.Size, verify, func(p drives.ImageProgress) {
+			err = writeImageOnto(ctx, dk.Path, f, img.Size, opts, func(p drives.ImageProgress) {
 				if p.Verifying && !verifying {
 					verifying = true
 					report(fileops.Bytes{Done: p.Done, Total: p.Total, FilesTotal: 1}, true)
@@ -353,7 +424,7 @@ func (m *Model) writeImage() {
 			})
 			f.Close()
 		}
-		applog.Debug("image written", "image", img.Name, "disk", dk.Path, "verify", verify, "error", err)
+		applog.Debug("image written", "image", img.Name, "disk", dk.Path, "verify", opts.Verify, "ssh", opts.Raspi.SSH, "user", opts.Raspi.User != nil, "error", err)
 		switch {
 		case ctx.Err() != nil:
 			res.Cancelled = true
@@ -370,7 +441,14 @@ func (m *Model) writeImage() {
 	t.onFinish = func(t *Task) {
 		if t.ErrorCount == 0 && !t.Cancelled {
 			t.CurrentName = dk.Path + ": done, eject it before unplugging"
-			m.setStatus("%s written onto %s", img.Name, dk.Path)
+			done := img.Name + " written onto " + dk.Path
+			if opts.Raspi.SSH {
+				done += ", SSH enabled"
+			}
+			if u := opts.Raspi.User; u != nil {
+				done += ", user " + u.Name + " set"
+			}
+			m.setStatus("%s", done)
 		}
 	}
 	m.dialog = Dialog{Kind: DialogProgress, Title: "Writing image", TaskID: t.ID}
@@ -440,6 +518,9 @@ func writeImageDialogText(d *Dialog) []string {
 	if img.NotHybrid {
 		lines = append(lines, styleWarn.Render("Not a hybrid ISO: it may not boot from a USB drive"))
 	}
+	if img.RaspiOS {
+		lines = append(lines, styleDim.Render("Raspberry Pi OS"))
+	}
 	lines = append(lines, "", "Write it onto:")
 	return lines
 }
@@ -472,7 +553,21 @@ func renderWriteImageDialog(b *strings.Builder, d *Dialog) string {
 		check = "[x]"
 	}
 	b.WriteString("\n" + check + " Verify the drive after writing\n")
-	b.WriteString("\n" + styleDim.Render("↑/↓ drive · v/Space verify · r refresh · Enter write · Esc cancel"))
+	help := "↑/↓ drive · v/Space verify · r refresh · Enter write · Esc cancel"
+	if d.Image.RaspiOS {
+		check = "[ ]"
+		if d.ImageSSH {
+			check = "[x]"
+		}
+		b.WriteString(check + " Enable SSH (an empty ssh file in its boot partition)\n")
+		if d.ImageUser != nil {
+			b.WriteString("[x] Create the user " + styleAccent.Render(d.ImageUser.Name) + " (userconf.txt)\n")
+		} else {
+			b.WriteString("[ ] Create a user (else asked for on first boot)\n")
+		}
+		help = "↑/↓ drive · v/Space verify · s SSH · u user · r refresh · Enter write · Esc cancel"
+	}
+	b.WriteString("\n" + styleDim.Render(help))
 	return dialogBox(72).Render(b.String())
 }
 
@@ -496,8 +591,31 @@ func renderWriteImageConfirm(b *strings.Builder, d *Dialog) string {
 	if dk.Mounted {
 		b.WriteString("Its filesystems will be unmounted first.\n")
 	}
+	if d.Image.RaspiOS && d.ImageSSH {
+		b.WriteString("SSH will be enabled on it.\n")
+	}
+	if d.Image.RaspiOS && d.ImageUser != nil {
+		b.WriteString("The user " + d.ImageUser.Name + " will be created on first boot.\n")
+	}
 	b.WriteString(styleDim.Render("Stopping the writing halfway leaves the drive unusable\nuntil it's formatted or written again.") + "\n")
 	b.WriteString("\nContinue?\n\n")
 	b.WriteString(styleDim.Render("y / Enter write · n / Esc cancel"))
+	return dialogBox(64).Render(b.String())
+}
+
+func renderWriteImageUser(b *strings.Builder, d *Dialog) string {
+	// The fields first: a click's row is the field's (see mouse.go).
+	for i, label := range []string{"User name", "Password", "Repeat password"} {
+		marker := "  "
+		if i == d.FocusIdx {
+			marker = "▸ "
+		}
+		b.WriteString(fmt.Sprintf("%s%-17s %s\n", marker, label+":", d.Inputs[i].View()))
+	}
+	if d.IsError && d.Message != "" {
+		b.WriteString("\n" + styleErr.Render(d.Message) + "\n")
+	}
+	b.WriteString("\n" + styleDim.Render("Raspberry Pi OS creates it on first boot, in place\nof asking for one; the password is stored hashed.") + "\n")
+	b.WriteString("\n" + styleDim.Render("Tab/↑/↓ field · Enter OK · Esc back"))
 	return dialogBox(64).Render(b.String())
 }

@@ -50,7 +50,7 @@ func TestWriteImageWritesAndVerifies(t *testing.T) {
 	f := fakeDrive(t, len(img)+4096)
 	var last ImageProgress
 	verified := false
-	err := writeImage(context.Background(), f, bytes.NewReader(img), int64(len(img)), true, func(p ImageProgress) {
+	err := writeImage(context.Background(), f, bytes.NewReader(img), int64(len(img)), ImageOptions{Verify: true}, func(p ImageProgress) {
 		last = p
 		verified = verified || p.Verifying
 	})
@@ -72,7 +72,7 @@ func TestWriteImageWritesAndVerifies(t *testing.T) {
 func TestWriteImageWithoutVerify(t *testing.T) {
 	img := testImage(imageChunk + 5)
 	f := fakeDrive(t, len(img))
-	err := writeImage(context.Background(), f, bytes.NewReader(img), int64(len(img)), false, func(p ImageProgress) {
+	err := writeImage(context.Background(), f, bytes.NewReader(img), int64(len(img)), ImageOptions{}, func(p ImageProgress) {
 		if p.Verifying {
 			t.Error("verified though not asked")
 		}
@@ -85,7 +85,7 @@ func TestWriteImageWithoutVerify(t *testing.T) {
 func TestWriteImageShortSource(t *testing.T) {
 	img := testImage(1000)
 	f := fakeDrive(t, 4096)
-	err := writeImage(context.Background(), f, bytes.NewReader(img), 2000, true, nil)
+	err := writeImage(context.Background(), f, bytes.NewReader(img), 2000, ImageOptions{Verify: true}, nil)
 	if err == nil {
 		t.Fatal("an image shorter than its size was accepted")
 	}
@@ -95,7 +95,7 @@ func TestWriteImageCancelled(t *testing.T) {
 	img := testImage(3 * imageChunk)
 	f := fakeDrive(t, len(img))
 	ctx, cancel := context.WithCancel(context.Background())
-	err := writeImage(ctx, f, bytes.NewReader(img), int64(len(img)), true, func(ImageProgress) { cancel() })
+	err := writeImage(ctx, f, bytes.NewReader(img), int64(len(img)), ImageOptions{Verify: true}, func(ImageProgress) { cancel() })
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v, want context.Canceled", err)
 	}
@@ -132,8 +132,37 @@ func TestVerifyImageDriveTooShort(t *testing.T) {
 // WriteImage refuses the system disk before unmounting or opening it.
 func TestWriteImageRefusesSystemDisk(t *testing.T) {
 	disk := fakeSystemDisk(t)
-	err := WriteImage(context.Background(), disk, bytes.NewReader(nil), 0, false, nil)
+	err := WriteImage(context.Background(), disk, bytes.NewReader(nil), 0, ImageOptions{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "holds the system") {
 		t.Fatalf("WriteImage(system disk) = %v; want a refusal", err)
+	}
+}
+
+// SSH and the user are set up once the image is verified, on the drive only.
+func TestWriteImageEnablesSSH(t *testing.T) {
+	img := buildFATImage(t, fatSpec{bits: 32, issue: piIssue})
+	before := bytes.Clone(img)
+	f := fakeDrive(t, len(img)+4096)
+	if err := writeImage(context.Background(), f, bytes.NewReader(img), int64(len(img)), ImageOptions{Verify: true, Raspi: RaspiSetup{SSH: true, User: &testUser}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(f.Name())
+	if !rootHas(t, memDisk(got), "SSH        ") {
+		t.Fatal("no ssh file on the drive")
+	}
+	if got := userconf(t, memDisk(got), "USERCONFTXT"); got != testUserLine {
+		t.Errorf("userconf.txt %q, want %q", got, testUserLine)
+	}
+	if !bytes.Equal(img, before) {
+		t.Error("the image itself changed")
+	}
+}
+
+func TestWriteImageSSHNotEnabledReported(t *testing.T) {
+	img := testImage(64 << 10)
+	f := fakeDrive(t, len(img))
+	err := writeImage(context.Background(), f, bytes.NewReader(img), int64(len(img)), ImageOptions{Raspi: RaspiSetup{SSH: true}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "SSH/user not set") {
+		t.Fatalf("got %v, want SSH/user not set", err)
 	}
 }

@@ -46,6 +46,12 @@ func ISONotHybrid(name string, r io.ReaderAt) bool {
 	return sig != [2]byte{0x55, 0xAA}
 }
 
+// ImageOptions are what WriteImage does once the image is written.
+type ImageOptions struct {
+	Verify bool       // read the drive back, checking it holds the image
+	Raspi  RaspiSetup // set up the Raspberry Pi OS written (see SetupRaspiOS)
+}
+
 // ImageProgress is how far WriteImage got: Done of Total bytes, first
 // written, then (Verifying) read back.
 type ImageProgress struct {

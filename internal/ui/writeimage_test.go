@@ -34,9 +34,10 @@ import (
 
 // imageWrite is one writeImageOnto call a test recorded.
 type imageWrite struct {
-	disk   string
-	data   []byte
-	verify bool
+	disk        string
+	data        []byte
+	verify, ssh bool
+	user        *drives.RaspiUser
 }
 
 // fakeImageDrives makes the machine show, for one test, the removable
@@ -63,12 +64,12 @@ func fakeImageDrives(t *testing.T) (*[]imageWrite, string) {
 		return 1024
 	}
 	var writes []imageWrite
-	writeImageOnto = func(_ context.Context, disk string, src io.Reader, size int64, verify bool, progress func(drives.ImageProgress)) error {
+	writeImageOnto = func(_ context.Context, disk string, src io.Reader, size int64, opts drives.ImageOptions, progress func(drives.ImageProgress)) error {
 		data, err := io.ReadAll(src)
 		if err != nil {
 			return err
 		}
-		writes = append(writes, imageWrite{disk, data[:size], verify})
+		writes = append(writes, imageWrite{disk, data[:size], opts.Verify, opts.Raspi.SSH, opts.Raspi.User})
 		progress(drives.ImageProgress{Done: size, Total: size})
 		return nil
 	}
@@ -311,5 +312,185 @@ func writeTestZip(t *testing.T, p string, files map[string][]byte) {
 	}
 	if err := os.WriteFile(p, b.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// fakeRaspiOS makes, for one test, every image whose name says so taken
+// for Raspberry Pi OS.
+func fakeRaspiOS(t *testing.T) {
+	old := isRaspiOSImage
+	t.Cleanup(func() { isRaspiOSImage = old })
+	isRaspiOSImage = func(name string, _ io.ReaderAt) bool { return strings.Contains(name, "raspios") }
+}
+
+func TestWriteImageRaspiOSEnablesSSH(t *testing.T) {
+	writes, _ := fakeImageDrives(t)
+	fakeRaspiOS(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "raspios-lite.img"), isoImage(true), 0o644)
+	m := archiveTestModel(t, dir)
+	moveCursorTo(t, m.panes[0], "raspios-lite.img")
+	m.askWriteImage()
+	if !m.dialog.ImageSSH {
+		t.Fatal("SSH not on by default for Raspberry Pi OS")
+	}
+	if view := m.renderDialogBox(); !strings.Contains(view, "[x] Enable SSH") {
+		t.Errorf("no SSH option checked:\n%s", view)
+	}
+	m.confirmDialog()
+	if view := m.renderDialogBox(); !strings.Contains(view, "SSH will be enabled") {
+		t.Errorf("warning doesn't say SSH will be enabled:\n%s", view)
+	}
+	m.confirmDialog()
+	waitTask(t, m)
+	if len(*writes) != 1 || !(*writes)[0].ssh {
+		t.Fatalf("writes %+v, want one enabling SSH", *writes)
+	}
+	if !strings.Contains(m.status, "SSH enabled") {
+		t.Errorf("status %q doesn't say SSH was enabled", m.status)
+	}
+}
+
+func TestWriteImageRaspiOSWithoutSSH(t *testing.T) {
+	writes, _ := fakeImageDrives(t)
+	fakeRaspiOS(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "raspios-lite.img"), isoImage(true), 0o644)
+	m := archiveTestModel(t, dir)
+	moveCursorTo(t, m.panes[0], "raspios-lite.img")
+	m.askWriteImage()
+	pressKey(m, 's', "s")
+	if m.dialog.ImageSSH || !strings.Contains(m.renderDialogBox(), "[ ] Enable SSH") {
+		t.Fatal("s didn't turn SSH off")
+	}
+	m.confirmDialog()
+	if strings.Contains(m.renderDialogBox(), "SSH will be enabled") {
+		t.Error("warning says SSH will be enabled though turned off")
+	}
+	m.confirmDialog()
+	waitTask(t, m)
+	if len(*writes) != 1 || (*writes)[0].ssh {
+		t.Fatalf("writes %+v, want one not enabling SSH", *writes)
+	}
+}
+
+// Other images have no SSH option, and s does nothing to them.
+func TestWriteImageNoSSHForOtherImages(t *testing.T) {
+	writes, _ := fakeImageDrives(t)
+	fakeRaspiOS(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "linux.iso"), isoImage(false), 0o644)
+	m := archiveTestModel(t, dir)
+	moveCursorTo(t, m.panes[0], "linux.iso")
+	m.askWriteImage()
+	pressKey(m, 's', "s")
+	if m.dialog.ImageSSH || strings.Contains(m.renderDialogBox(), "SSH") {
+		t.Fatal("SSH offered for an image that isn't Raspberry Pi OS")
+	}
+	m.confirmDialog()
+	m.confirmDialog()
+	waitTask(t, m)
+	if len(*writes) != 1 || (*writes)[0].ssh {
+		t.Fatalf("writes %+v, want one not enabling SSH", *writes)
+	}
+}
+
+// typeInto types text into the dialog's focused field.
+func typeInto(m *Model, text string) {
+	for _, r := range text {
+		pressKey(m, r, string(r))
+	}
+}
+
+func TestWriteImageRaspiOSCreatesUser(t *testing.T) {
+	writes, _ := fakeImageDrives(t)
+	fakeRaspiOS(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "raspios-lite.img"), isoImage(true), 0o644)
+	m := archiveTestModel(t, dir)
+	moveCursorTo(t, m.panes[0], "raspios-lite.img")
+	m.askWriteImage()
+	if !strings.Contains(m.renderDialogBox(), "[ ] Create a user") {
+		t.Fatalf("no user option, unchecked:\n%s", m.renderDialogBox())
+	}
+	pressKey(m, 'u', "u")
+	if m.dialog.Kind != DialogWriteImageUser {
+		t.Fatalf("dialog %v, want the user form", m.dialog.Kind)
+	}
+	typeInto(m, "pi-jk")
+	pressKey(m, tea.KeyTab, "")
+	typeInto(m, "secret")
+	pressKey(m, tea.KeyTab, "")
+	typeInto(m, "secreT")
+	m.confirmDialog()
+	if m.dialog.Kind != DialogWriteImageUser || !strings.Contains(m.renderDialogBox(), "Passwords differ") {
+		t.Fatalf("different passwords accepted: dialog %v", m.dialog.Kind)
+	}
+	if strings.Contains(m.renderDialogBox(), "secret") {
+		t.Error("password shown in clear")
+	}
+	pressKey(m, tea.KeyBackspace, "")
+	typeInto(m, "t")
+	m.confirmDialog()
+	d := &m.dialog
+	if d.Kind != DialogWriteImage || d.ImageUser == nil || d.ImageUser.Name != "pi-jk" || !strings.HasPrefix(d.ImageUser.PasswordHash, "$6$") {
+		t.Fatalf("dialog %v, user %+v: want back to the drives with pi-jk", d.Kind, d.ImageUser)
+	}
+	if view := m.renderDialogBox(); !strings.Contains(view, "[x] Create the user") || !strings.Contains(view, "pi-jk") {
+		t.Errorf("user not shown:\n%s", view)
+	}
+	m.confirmDialog()
+	if view := m.renderDialogBox(); !strings.Contains(view, "pi-jk will be created") {
+		t.Errorf("warning doesn't name the user:\n%s", view)
+	}
+	m.confirmDialog()
+	waitTask(t, m)
+	if len(*writes) != 1 || (*writes)[0].user == nil || (*writes)[0].user.Name != "pi-jk" || !(*writes)[0].ssh {
+		t.Fatalf("writes %+v, want one creating pi-jk, SSH on", *writes)
+	}
+	if !strings.Contains(m.status, "user pi-jk set") {
+		t.Errorf("status %q doesn't name the user", m.status)
+	}
+}
+
+// Esc leaves the form, keeping the image and drives; u on a user set
+// removes it; a name Raspberry Pi OS refuses is refused.
+func TestWriteImageRaspiOSUserFormEsc(t *testing.T) {
+	writes, _ := fakeImageDrives(t)
+	fakeRaspiOS(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "raspios-lite.img"), isoImage(true), 0o644)
+	m := archiveTestModel(t, dir)
+	moveCursorTo(t, m.panes[0], "raspios-lite.img")
+	m.askWriteImage()
+	pressKey(m, 'u', "u")
+	pressKey(m, tea.KeyEscape, "")
+	if m.dialog.Kind != DialogWriteImage || m.dialog.ImageUser != nil || len(m.dialog.ImageDisks) != 2 {
+		t.Fatalf("dialog %v, user %v: want back to the drives, no user", m.dialog.Kind, m.dialog.ImageUser)
+	}
+	pressKey(m, 'u', "u")
+	typeInto(m, "root")
+	pressKey(m, tea.KeyTab, "")
+	typeInto(m, "x")
+	pressKey(m, tea.KeyTab, "")
+	typeInto(m, "x")
+	m.confirmDialog()
+	if m.dialog.Kind != DialogWriteImageUser || !strings.Contains(m.renderDialogBox(), "root") {
+		t.Fatalf("root accepted: dialog %v", m.dialog.Kind)
+	}
+	m.dialog.Inputs[0].SetValue("pi")
+	m.confirmDialog()
+	if m.dialog.ImageUser == nil {
+		t.Fatal("pi refused")
+	}
+	pressKey(m, 'u', "u")
+	if m.dialog.Kind != DialogWriteImage || m.dialog.ImageUser != nil {
+		t.Fatal("u didn't remove the user")
+	}
+	m.confirmDialog()
+	m.confirmDialog()
+	waitTask(t, m)
+	if len(*writes) != 1 || (*writes)[0].user != nil {
+		t.Fatalf("writes %+v, want one creating no user", *writes)
 	}
 }
