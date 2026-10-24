@@ -1,3 +1,9 @@
+shfm (0.7.1) unstable; urgency=medium
+
+  * Writing a Raspberry Pi OS image offers to enable SSH (on by default) and to create a user, through ssh and userconf.txt files in its boot partition.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  sab, 24 ott 2026 13:26:34 +0200
+
 shfm (0.7.0) unstable; urgency=medium
 
   * w on an ISO or IMG file, or on an archive holding one, writes it onto a removable drive, as balenaEtcher or dd do, and verifies it; a warning says all data on the drive will be lost.

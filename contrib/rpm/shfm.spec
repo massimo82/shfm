@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.7.0
+Version:        0.7.1
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Sat Oct 24 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.7.1-1
+- Writing a Raspberry Pi OS image offers to enable SSH (on by default) and to create a user, through ssh and userconf.txt files in its boot partition.
+
 * Sun Oct 18 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.7.0-1
 - w on an ISO or IMG file, or on an archive holding one, writes it onto a removable drive, as balenaEtcher or dd do, and verifies it; a warning says all data on the drive will be lost.
 
