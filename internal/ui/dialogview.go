@@ -18,7 +18,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -31,6 +33,7 @@ import (
 	"shfm/internal/semantic"
 	"shfm/internal/vault"
 	"shfm/internal/version"
+	"shfm/internal/vfs"
 )
 
 // helpEntry is one "key — action" row in the compact help dialog.
@@ -451,6 +454,29 @@ func (m *Model) renderDialogBox() string {
 			kind = "Symlink"
 		}
 		b.WriteString(fmt.Sprintf("Type:      %s\n", kind))
+		if e.StatErr != nil {
+			b.WriteString("Size:      ?\nModified:  ?\nMode:      ?\nOwner:     ?\nGroup:     ?\n\n")
+			b.WriteString(styleErr.Render("Details unreadable: "+statErrText(e.StatErr)) + "\n")
+			denied := errors.Is(e.StatErr, fs.ErrPermission)
+			if denied {
+				b.WriteString(styleDim.Render("(its folder can be listed but not\n searched: it lacks the x permission)") + "\n")
+			}
+			hasOrig := m.writeOriginalLine(&b, d)
+			var hints []string
+			if _, ok := d.PropsFS.(vfs.ElevatedStater); ok {
+				hints = append(hints, "e read as root")
+			}
+			_, su := d.PropsFS.(vfs.SearchUnlocker)
+			if _, pe := d.PropsFS.(vfs.PermissionsEditor); su && pe && denied {
+				hints = append(hints, "u unlock folder")
+			}
+			if hasOrig {
+				hints = append(hints, "Ctrl+R restore")
+			}
+			hints = append(hints, "Esc close")
+			b.WriteString("\n" + styleDim.Render(strings.Join(hints, " \u00b7 ")))
+			return dialogBox(56).Render(b.String())
+		}
 		if e.SizeUnknown {
 			b.WriteString("Size:      unknown until read (exported on the fly)\n")
 		} else {
@@ -461,6 +487,10 @@ func (m *Model) renderDialogBox() string {
 			b.WriteString(fmt.Sprintf("Attributes: %s\n", styleErr.Render(strings.Join(d.PropsAttrs, ", "))))
 			b.WriteString(styleDim.Render("(chattr flags: not even root can change or delete it;\n clear them first with chattr -i / -a)") + "\n")
 		}
+		if d.PropsAsRoot {
+			b.WriteString(styleDim.Render("(details read as root)") + "\n")
+		}
+		hasOrig := m.writeOriginalLine(&b, d)
 		if len(d.Inputs) >= 3 {
 			b.WriteString("\n")
 			propRow := func(i int, label string) {
@@ -473,7 +503,11 @@ func (m *Model) renderDialogBox() string {
 			propRow(0, "Mode (octal)")
 			propRow(1, "Owner")
 			propRow(2, "Group")
-			b.WriteString("\n" + styleDim.Render("Tab/click field · Enter apply · Esc close"))
+			hint := "Tab/click field · Enter apply · Esc close"
+			if hasOrig {
+				hint = "Tab/click field · Enter apply\nCtrl+R restore original · Esc close"
+			}
+			b.WriteString("\n" + styleDim.Render(hint))
 		} else {
 			b.WriteString(fmt.Sprintf("Mode:      %s\n", e.Mode.String()))
 			b.WriteString(fmt.Sprintf("Owner:     %s\n", firstNonEmpty(e.Owner, "?")))
@@ -695,4 +729,17 @@ func firstNonEmpty(s, fallback string) string {
 		return fallback
 	}
 	return s
+}
+
+// writeOriginalLine adds to b, for the entry in Properties dialog d, the
+// permissions it had before shfm first changed them, when recorded (see
+// origperm.go), and reports whether there were any.
+func (m *Model) writeOriginalLine(b *strings.Builder, d Dialog) bool {
+	o, ok := m.originals().Get(permKey(d.PropsFS, d.PropsPath))
+	if !ok {
+		return false
+	}
+	b.WriteString(fmt.Sprintf("Original:  %s %s\n", styleAccent.Render(describeOriginal(o)),
+		styleDim.Render("(saved "+o.Saved.Format("2006-01-02 15:04")+")")))
+	return true
 }

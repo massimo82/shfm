@@ -148,10 +148,11 @@ type Dialog struct {
 	AssocMine   bool
 	AssocQuery  string
 
-	PropsFS    vfs.FileSystem // DialogProperties
-	PropsAttrs []string       // DialogProperties: restricting chattr flags on the entry (immutable, append-only)
-	PropsPath  string
-	PropsEntry vfs.Entry
+	PropsFS     vfs.FileSystem // DialogProperties
+	PropsAttrs  []string       // DialogProperties: restricting chattr flags on the entry (immutable, append-only)
+	PropsAsRoot bool           // DialogProperties: PropsEntry's details were read as root (see origperm.go)
+	PropsPath   string
+	PropsEntry  vfs.Entry
 
 	// DialogWriteImage, DialogWriteImageConfirm (see writeimage.go): the
 	// image, the drives it can go onto, parallel to Items, whether to
@@ -323,6 +324,16 @@ func (m *Model) updateDialogKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if isLocalSendDialog(d.Kind) {
 		if cmd, handled := m.updateLocalSendKey(msg); handled {
 			return cmd, true
+		}
+	}
+	if d.Kind == DialogProperties {
+		switch k := msg.String(); {
+		case k == "ctrl+r":
+			return m.restoreOriginal(), true
+		case len(d.Inputs) == 0 && k == "e":
+			return m.readPropertiesAsRoot(), true
+		case len(d.Inputs) == 0 && k == "u":
+			return m.unlockParentFolder(), true
 		}
 	}
 	if d.Kind == DialogSourceMenu {

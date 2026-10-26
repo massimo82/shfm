@@ -18,7 +18,9 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 
 	"shfm/internal/vfs"
 )
@@ -30,6 +32,17 @@ func sizeLabel(e vfs.Entry) string {
 		return "size unknown"
 	}
 	return humanSize(e.Size)
+}
+
+// statErrText is the short reason an entry's metadata is unknown
+// (vfs.Entry.StatErr): the bare cause, e.g. "permission denied", without
+// the path a *fs.PathError repeats.
+func statErrText(err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Err.Error()
+	}
+	return err.Error()
 }
 
 func humanSize(n int64) string {

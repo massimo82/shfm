@@ -34,6 +34,7 @@ import (
 	"shfm/internal/fusemount"
 	"shfm/internal/localsend"
 	"shfm/internal/opener"
+	"shfm/internal/origperm"
 	"shfm/internal/semantic"
 	"shfm/internal/vfs"
 	"shfm/internal/wlclip"
@@ -168,6 +169,10 @@ type Model struct {
 	vaults       map[string]*vaultSession
 	lastInput    time.Time
 	vaultTicking bool
+
+	// Permissions as they were before the Properties dialog first changed
+	// them, to restore (see origperm.go); loaded on first use.
+	origPerms *origperm.Store
 
 	// LocalSend (see localsend.go): the Service, once started; its
 	// messages; the requests waiting to be shown; the dialog shown over
@@ -350,6 +355,10 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case mirrorCheckMsg:
 		m.handleMirrorCheck(msg)
 		return nil
+	case propsStatMsg:
+		m.handlePropsStat(msg)
+		return nil
+
 	case elevatedDoneMsg:
 		m.handleElevatedDone(msg)
 		return nil

@@ -222,3 +222,46 @@ func renameNeedsElevation(oldPath, newPath string) bool {
 	}
 	return !canWrite(dUID, dGID, dMode, currentIdentity())
 }
+
+// metadataHidden reports whether path's own metadata can't be read because
+// its folder isn't searchable for the caller (r without x): no prediction
+// is possible then, and a plain chmod/chown is bound to fail the same way,
+// so callers go straight to pkexec.
+func metadataHidden(path string) bool {
+	if isRoot() {
+		return false
+	}
+	_, err := os.Lstat(path)
+	return os.IsPermission(err)
+}
+
+// searchBit is the x bit that would grant id search permission on an object
+// owned by (uid, gid): like every other check here, only the first class
+// that applies counts.
+func searchBit(uid, gid uint32, id identity) os.FileMode {
+	switch {
+	case id.euid == uid:
+		return 0o100
+	case id.groups[gid]:
+		return 0o010
+	default:
+		return 0o001
+	}
+}
+
+// searchUnlockMode implements LocalFS.SearchUnlockMode: dir's mode and the
+// same mode plus just the x bit the caller lacks, special bits kept.
+func searchUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
+	if isRoot() {
+		return 0, 0, false
+	}
+	uid, gid, mode, ok := statOwnerGroupMode(dir)
+	if !ok || !mode.IsDir() {
+		return 0, 0, false
+	}
+	bit := searchBit(uid, gid, currentIdentity())
+	if mode&bit != 0 {
+		return 0, 0, false
+	}
+	return mode, mode | bit, true
+}

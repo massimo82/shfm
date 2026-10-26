@@ -149,7 +149,15 @@ func (n *NFSFS) List(path string) ([]Entry, error) {
 			Mode:      it.Mode(),
 			ModTime:   it.ModTime(),
 		}
-		if isSymlink {
+		if !it.Attr.IsSet {
+			// READDIRPLUS may leave an entry's attributes out: ask for
+			// them with a LOOKUP rather than show zeros as if real.
+			if full, err := n.Stat(n.Join(path, it.Name())); err == nil {
+				e = full
+			} else {
+				e.StatErr = err
+			}
+		} else if isSymlink {
 			if info, err := n.symlinkTarget(target, path, it.Name()); err == nil {
 				followSymlink(&e, info)
 			}
@@ -345,7 +353,7 @@ func (n *NFSFS) Redial() (FileSystem, error) { return DialNFS(n.opts) }
 
 // Chmod implements PermissionsEditor (NFSPROC3_SETATTR).
 func (n *NFSFS) Chmod(path string, mode os.FileMode) error {
-	attr := nfsc.Sattr3{Mode: nfsc.SetMode{SetIt: true, Mode: uint32(mode.Perm())}}
+	attr := nfsc.Sattr3{Mode: nfsc.SetMode{SetIt: true, Mode: UnixMode(mode)}}
 	return n.do(func(t *nfsc.Target) error { return t.SetAttr(nfsPath(path), attr) })
 }
 

@@ -58,6 +58,13 @@ type Entry struct {
 	// an OpenDocument file): Size is then meaningless (zero), and a reader
 	// must go on until EOF rather than stop after Size bytes.
 	SizeUnknown bool
+
+	// StatErr is why the entry's metadata couldn't be read although its
+	// name could be listed (locally: a folder that is readable but not
+	// searchable, r without x, or an inode the filesystem fails to read;
+	// on NFS: a server reply without attributes). Size, Mode, ModTime,
+	// Owner and Group are then unknown, not zero. Nil otherwise.
+	StatErr error
 }
 
 // Kind identifies the backend type.
@@ -205,6 +212,21 @@ type PermissionsEditor interface {
 // either change needs root.
 type OwnerModeSetter interface {
 	SetOwnerAndMode(path string, uid, gid int, mode os.FileMode) error
+}
+
+// ElevatedStater is an optional interface for a backend that can read, as
+// root, the metadata of an entry the caller can't stat (an Entry with
+// StatErr set): the local filesystem, through pkexec.
+type ElevatedStater interface {
+	StatElevated(path string) (Entry, error)
+}
+
+// SearchUnlocker is an optional interface for a backend that can tell
+// which mode would let the caller search (traverse) dir: its current mode
+// plus only the x bit of the owner/group/other class the caller falls in.
+// ok is false when dir is already searchable, or that can't be told.
+type SearchUnlocker interface {
+	SearchUnlockMode(dir string) (cur, want os.FileMode, ok bool)
 }
 
 // AttrReader is an optional interface a backend may implement to report the

@@ -36,3 +36,9 @@ func elevateIfPermissionError(err error, elevated func() error) error {
 func runElevated(name string, args ...string) error {
 	return errors.New("privilege elevation is only available on Linux")
 }
+
+// runElevatedOutput, like runElevated, exists for LocalFS.StatElevated to
+// compile: elevation is Linux-only.
+func runElevatedOutput(name string, args ...string) (string, error) {
+	return "", errors.New("privilege elevation is only available on Linux")
+}

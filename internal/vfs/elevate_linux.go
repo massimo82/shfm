@@ -78,23 +78,31 @@ const elevateTimeout = 5 * time.Minute
 // the terminal handed over to it (TerminalHandoff), the TUI stepping aside
 // until it exits.
 func runElevated(name string, args ...string) error {
+	_, err := runElevatedOutput(name, args...)
+	return err
+}
+
+// runElevatedOutput is runElevated, also returning what the command wrote
+// to its standard output.
+func runElevatedOutput(name string, args ...string) (string, error) {
 	locatePkexec()
 	if pkexecPath == "" {
-		return fmt.Errorf("elevation needs pkexec, which isn't installed")
+		return "", fmt.Errorf("elevation needs pkexec, which isn't installed")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), elevateTimeout)
 	defer cancel()
 	argv := append([]string{name}, args...)
 
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, pkexecPath, append([]string{"--disable-internal-agent"}, argv...)...)
-	cmd.Stdout = io.Discard
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if isNoAgent(err, stderr.String()) {
+		stdout.Reset()
 		stderr.Reset()
 		cmd = exec.CommandContext(ctx, pkexecPath, argv...)
-		cmd.Stdout = io.Discard
+		cmd.Stdout = &stdout
 		if TerminalHandoff != nil {
 			cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 			err = TerminalHandoff(cmd)
@@ -104,10 +112,10 @@ func runElevated(name string, args ...string) error {
 		}
 	}
 	if err == nil {
-		return nil
+		return stdout.String(), nil
 	}
 	if ctx.Err() == context.DeadlineExceeded {
-		return fmt.Errorf("elevated %s timed out", name)
+		return "", fmt.Errorf("elevated %s timed out", name)
 	}
 	// pkexec itself exits 126 (auth dismissed) or 127 (not authorized,
 	// or couldn't even run the command) — distinguish those from the wrapped
@@ -117,22 +125,22 @@ func runElevated(name string, args ...string) error {
 	if errors.As(err, &exitErr) {
 		switch exitErr.ExitCode() {
 		case 126:
-			return errors.New("authentication dismissed or not authorized")
+			return "", errors.New("authentication dismissed or not authorized")
 		case 127:
 			// 127 covers every failure of pkexec's own (not authorized,
 			// wrong password, agent registration, missing command): its
 			// message is the only way to tell them apart.
 			if msg := strings.Join(strings.Fields(stderr.String()), " "); msg != "" {
-				return errors.New("pkexec: " + msg)
+				return "", errors.New("pkexec: " + msg)
 			}
-			return errors.New("pkexec: not authorized, or the command couldn't be run")
+			return "", errors.New("pkexec: not authorized, or the command couldn't be run")
 		}
 	}
 	msg := strings.TrimSpace(stderr.String())
 	if msg == "" {
 		msg = err.Error()
 	}
-	return fmt.Errorf("%s: %s", name, msg)
+	return "", fmt.Errorf("%s: %s", name, msg)
 }
 
 // isNoAgent reports whether a pkexec run with --disable-internal-agent

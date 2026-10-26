@@ -19,6 +19,8 @@
 
 package vfs
 
+import "os"
+
 // Proactive permission prediction is Linux-only, same as elevation itself
 // (see elevate_other.go) — these always report "no elevation needed"
 // (never eagerly true), so the plain attempt always runs first, same as
@@ -27,3 +29,10 @@ func chmodNeedsElevation(path string) bool                     { return false }
 func chownNeedsElevation(path string, newUID, newGID int) bool { return false }
 func removeOrRenameNeedsElevation(path string) bool            { return false }
 func renameNeedsElevation(oldPath, newPath string) bool        { return false }
+
+// Without elevation there's nothing to route a hidden entry to, and no
+// identity model to work out a search bit from.
+func metadataHidden(path string) bool { return false }
+func searchUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
+	return 0, 0, false
+}

@@ -46,5 +46,6 @@ func TestMain(m *testing.M) {
 	writeImageOnto = func(context.Context, string, io.Reader, int64, drives.ImageOptions, func(drives.ImageProgress)) error {
 		return errors.New("no writing images in tests")
 	}
+	originalsPath = func() string { return "" } // in memory: never the real state dir
 	os.Exit(m.Run())
 }

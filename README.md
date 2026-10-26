@@ -244,8 +244,11 @@ to toggle between single- and dual-pane layout.
 - **Properties dialog** (`i`): view type, size, modification date,
   permissions, owner and group (plus any `immutable`/`append-only` `chattr`
   flag, on the local filesystem); on backends that support it (local
-  filesystem, SFTP, NFS), edit permissions (octal), owner and group
-  directly.
+  filesystem, SFTP, NFS), edit permissions (octal, setuid/setgid/sticky
+  included, e.g. `2755`), owner and group directly. The first change
+  records the previous values, which `Ctrl+R` restores later; entries whose
+  details can't be read show `?`. See
+  [Unreadable entries and restoring permissions](#unreadable-entries-and-restoring-permissions).
 - **Automatic elevation for permission-denied operations** (Linux only):
   chmod/chown (Properties dialog), delete and move/rename on the *local*
   filesystem go straight to `pkexec` when shfm can already tell, from the
@@ -1326,7 +1329,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Ctrl+Alt+D` | delete permanently |
 | `Ctrl+Alt+M` | paste as an automatic mirror (empty clipboard: list mirrors) |
 | `r`, `m`, `f` | rename, new folder, new file |
-| `i` | properties (permissions, owner, group) |
+| `i` | properties (permissions, owner, group; `Ctrl+R` restores the original ones, see [Unreadable entries and restoring permissions](#unreadable-entries-and-restoring-permissions)) |
 | `o` | file associations: the application opening each file type (see [File associations](#file-associations), for the dialog's own keys) |
 | `x` | extract the selected archives here, each into its own new folder |
 | `c` | create an archive of the selected entries, choosing the format |
@@ -2383,6 +2386,32 @@ packages.
   on `$PATH` at
   runtime — without it, or on non-Linux platforms, shfm behaves exactly
   as it did before this feature existed.
+- <a id="unreadable-entries-and-restoring-permissions"></a>**Unreadable
+  entries and restoring permissions.** A folder that is readable but not
+  searchable for you (`r` without `x`, e.g. mode `766` on a root-owned
+  folder) lets its names be listed but not their details: like `ls -l`,
+  shfm then shows `?` for size, permissions, owner and group (instead of
+  a fake empty file), and the Properties dialog says why ("permission
+  denied", or an I/O error on a damaged filesystem). Two emergency ways in,
+  from that read-only dialog (local filesystem, Linux):
+  - `u` **unlocks the folder**: adds to it only the `x` bit of the class
+    you fall in (owner, group or others — `766` becomes `767`), via
+    `pkexec` when it isn't yours; its entries become readable and editable
+    as usual.
+  - `e` **reads the details as root** (`stat` via `pkexec`): the dialog
+    becomes editable with the real values, and changes go straight to
+    `pkexec`, without touching the folder.
+
+  Every change made from the Properties dialog — including an unlock,
+  recorded on the folder — first saves the entry's previous mode, owner
+  and group, shown as `Original:` in its Properties; `Ctrl+R` there puts
+  them back exactly (setuid/setgid/sticky included) and forgets them. Only
+  the first change is recorded, so after several edits `Ctrl+R` still
+  returns to how things were before shfm touched them. The record survives
+  restarts, in `$XDG_STATE_HOME/shfm/original-permissions.json` (default
+  `~/.local/state/shfm/`), keyed by path: a removable drive mounted
+  elsewhere next time has its own. Ownership is restored only where the
+  source reports it (not on SFTP/NFS, whose mode alone is restored).
 - **Immutable and append-only entries** (Linux `chattr +i` / `+a`, shown by
   `lsattr`) are refused by every kernel operation that would change them —
   write, `chmod`, `chown`, delete, rename — *even for root*, so `pkexec`

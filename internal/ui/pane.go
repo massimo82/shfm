@@ -221,7 +221,9 @@ func (p *Pane) Load() {
 		p.DirSizesSupported = true
 		var pendingNames []string
 		for i := range filtered {
-			if filtered[i].IsDir && !IsParentEntry(filtered[i]) {
+			// A folder whose metadata couldn't be read can't be walked
+			// either: its size stays unknown ("?"), not pending.
+			if filtered[i].IsDir && !IsParentEntry(filtered[i]) && filtered[i].StatErr == nil {
 				filtered[i].Size = SizePending
 				pendingNames = append(pendingNames, filtered[i].Name)
 			}

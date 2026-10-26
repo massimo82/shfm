@@ -477,7 +477,7 @@ func TestSetOwnerAndModeElevatesOnce(t *testing.T) {
 		t.Errorf("pkexec ran %d times, want once", n)
 	}
 	got := readLoggedArgs(t, logPath)
-	want := []string{"sh", "-c", `chown "$1" -- "$3" && chmod "$2" -- "$3"`, "sh", "0:0", "600", f}
+	want := []string{"sh", "-c", `chown "$1" -- "$3" && chmod "$2" -- "$3"`, "sh", "0:0", "00600", f}
 	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
 		t.Errorf("logged args = %q, want %q", got, want)
 	}

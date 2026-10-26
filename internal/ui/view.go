@@ -217,6 +217,10 @@ func detailLineText(p *Pane) string {
 	if !ok || IsParentEntry(e) {
 		return ""
 	}
+	if e.StatErr != nil {
+		// Like ls -l's "?????????": nothing known but the reason.
+		return fmt.Sprintf(" ?????????  ?:?  %s", statErrText(e.StatErr))
+	}
 
 	perm := permString(e.Mode)
 	// A chattr flag (immutable/append-only) that not even root can override
@@ -358,6 +362,12 @@ func (m *Model) renderEntryLines(paneIdx int, p *Pane, w, h int) []string {
 		switch {
 		case IsParentEntry(e):
 			sizeStr = ""
+		case e.StatErr != nil:
+			// Listed but its metadata unreadable: unknown, not "0B".
+			sizeStr = "?"
+			if e.IsDir {
+				countStr = "?"
+			}
 		case e.IsDir && !p.DirSizesSupported:
 			// This source can't compute recursive folder sizes/counts at
 			// all (e.g. SMB/NFS/MTP/SFTP: walking a remote subtree just to

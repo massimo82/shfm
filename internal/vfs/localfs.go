@@ -60,8 +60,16 @@ func (l *LocalFS) List(path string) ([]Entry, error) {
 	for _, de := range des {
 		info, err := de.Info()
 		if err != nil {
-			// Unreadable entry (broken link, permissions...): include it anyway.
-			entries = append(entries, Entry{Name: de.Name(), IsDir: de.IsDir()})
+			// Name listed but metadata unreadable (a folder with r but not
+			// x, an I/O error...): include it anyway, flagged as such so
+			// the UI shows "?" rather than a fake 0 size and mode. The type
+			// still comes from readdir's d_type.
+			entries = append(entries, Entry{
+				Name:      de.Name(),
+				IsDir:     de.IsDir(),
+				IsSymlink: de.Type()&os.ModeSymlink != 0,
+				StatErr:   err,
+			})
 			continue
 		}
 		isSymlink := info.Mode()&os.ModeSymlink != 0
@@ -251,12 +259,12 @@ func (l *LocalFS) Chmod(path string, mode os.FileMode) error {
 	if err := checkChangeable(path); err != nil {
 		return err
 	}
-	if chmodNeedsElevation(path) {
-		return runElevated("chmod", fmt.Sprintf("%o", mode.Perm()), "--", path)
+	if chmodNeedsElevation(path) || metadataHidden(path) {
+		return runElevated("chmod", chmodArg(mode), "--", path)
 	}
 	err := os.Chmod(path, mode)
 	return elevateIfPermissionError(err, func() error {
-		return runElevated("chmod", fmt.Sprintf("%o", mode.Perm()), "--", path)
+		return runElevated("chmod", chmodArg(mode), "--", path)
 	})
 }
 
@@ -271,7 +279,7 @@ func (l *LocalFS) Chown(path string, uid, gid int) error {
 	if err := checkChangeable(path); err != nil {
 		return err
 	}
-	if chownNeedsElevation(path, uid, gid) {
+	if chownNeedsElevation(path, uid, gid) || metadataHidden(path) {
 		return runElevated("chown", fmt.Sprintf("%d:%d", uid, gid), "--", path)
 	}
 	err := os.Chown(path, uid, gid)
@@ -289,14 +297,59 @@ func (l *LocalFS) SetOwnerAndMode(path string, uid, gid int, mode os.FileMode) e
 	if err := checkChangeable(path); err != nil {
 		return err
 	}
-	if chownNeedsElevation(path, uid, gid) || chmodNeedsElevation(path) {
+	if chownNeedsElevation(path, uid, gid) || chmodNeedsElevation(path) || metadataHidden(path) {
 		return runElevated("sh", "-c", `chown "$1" -- "$3" && chmod "$2" -- "$3"`, "sh",
-			fmt.Sprintf("%d:%d", uid, gid), fmt.Sprintf("%o", mode.Perm()), path)
+			fmt.Sprintf("%d:%d", uid, gid), chmodArg(mode), path)
 	}
 	if err := l.Chown(path, uid, gid); err != nil {
 		return err
 	}
 	return l.Chmod(path, mode)
+}
+
+// StatElevated implements ElevatedStater: path's metadata read by a
+// pkexec-run stat(1), for an entry the caller can't stat itself (its
+// folder lacks the x permission for them). The symlink itself is
+// described, as with Stat, but its target isn't followed.
+func (l *LocalFS) StatElevated(path string) (Entry, error) {
+	out, err := runElevatedOutput("stat", "-c", "%f %u %g %s %Y", "--", path)
+	if err != nil {
+		return Entry{}, err
+	}
+	return parseStatLine(filepath.Base(path), out)
+}
+
+// parseStatLine reads stat(1)'s "%f %u %g %s %Y" line: raw mode in hex,
+// uid, gid, size and mtime in seconds.
+func parseStatLine(name, line string) (Entry, error) {
+	f := strings.Fields(line)
+	if len(f) != 5 {
+		return Entry{}, fmt.Errorf("unexpected stat output %q", strings.TrimSpace(line))
+	}
+	raw, err1 := strconv.ParseUint(f[0], 16, 32)
+	uid, err2 := strconv.ParseUint(f[1], 10, 32)
+	gid, err3 := strconv.ParseUint(f[2], 10, 32)
+	size, err4 := strconv.ParseInt(f[3], 10, 64)
+	mtime, err5 := strconv.ParseInt(f[4], 10, 64)
+	if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
+		return Entry{}, fmt.Errorf("unexpected stat output %q", strings.TrimSpace(line))
+	}
+	mode := FromUnixMode(uint32(raw))
+	return Entry{
+		Name:      name,
+		IsDir:     mode.IsDir(),
+		IsSymlink: mode&os.ModeSymlink != 0,
+		Size:      size,
+		Mode:      mode,
+		ModTime:   time.Unix(mtime, 0),
+		Owner:     userName(uint32(uid)),
+		Group:     groupName(uint32(gid)),
+	}, nil
+}
+
+// SearchUnlockMode implements SearchUnlocker.
+func (l *LocalFS) SearchUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
+	return searchUnlockMode(dir)
 }
 
 // Attributes implements AttrReader: the restricting chattr flags currently

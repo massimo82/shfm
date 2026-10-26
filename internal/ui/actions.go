@@ -259,14 +259,25 @@ func (m *Model) openProperties() {
 	if !ok || IsParentEntry(e) {
 		return
 	}
-	fullPath := p.FS.Join(p.Path, e.Name)
-	d := Dialog{Kind: DialogProperties, Title: "Properties", PropsFS: p.FS, PropsPath: fullPath, PropsEntry: e}
-	if ar, ok := p.FS.(vfs.AttrReader); ok {
+	m.dialog = propertiesDialog(p.FS, p.FS.Join(p.Path, e.Name), e)
+}
+
+// propertiesDialog is the Properties dialog for e at fullPath: editable
+// when the source can change permissions and e's details are known. An
+// entry whose details couldn't be read gets a read-only view, nothing to
+// prefill the fields with (a "0" mode would be a guess) — until they are
+// read as root (see origperm.go).
+func propertiesDialog(fsys vfs.FileSystem, fullPath string, e vfs.Entry) Dialog {
+	d := Dialog{Kind: DialogProperties, Title: "Properties", PropsFS: fsys, PropsPath: fullPath, PropsEntry: e}
+	if e.StatErr != nil {
+		return d
+	}
+	if ar, ok := fsys.(vfs.AttrReader); ok {
 		d.PropsAttrs = ar.Attributes(fullPath)
 	}
-	if _, ok := p.FS.(vfs.PermissionsEditor); ok {
+	if _, ok := fsys.(vfs.PermissionsEditor); ok {
 		modeInput := textinput.New()
-		modeInput.SetValue(fmt.Sprintf("%o", e.Mode.Perm()))
+		modeInput.SetValue(describeMode(e.Mode))
 		modeInput.CharLimit = 4
 		modeInput.SetWidth(10)
 		modeInput.Focus()
@@ -279,7 +290,7 @@ func (m *Model) openProperties() {
 		d.Inputs = []textinput.Model{modeInput, ownerInput, groupInput}
 		d.FocusIdx = 0
 	}
-	m.dialog = d
+	return d
 }
 
 // applyProperties runs chmod/chown off the event loop (see
@@ -298,12 +309,13 @@ func (m *Model) applyProperties() tea.Cmd {
 	groupStr := strings.TrimSpace(d.Inputs[2].Value())
 
 	modeVal, err := strconv.ParseUint(modeStr, 8, 32)
-	if err != nil {
+	if err != nil || modeVal > 0o7777 {
 		m.setError("Invalid mode (expected octal, e.g. 644)")
 		return nil
 	}
-	mode := os.FileMode(modeVal)
-	modeChanged := mode.Perm() != d.PropsEntry.Mode.Perm()
+	// Setuid/setgid/sticky included: typed as 4 digits, e.g. 2755.
+	mode := vfs.FromUnixMode(uint32(modeVal))
+	modeChanged := vfs.UnixMode(mode) != vfs.UnixMode(d.PropsEntry.Mode)
 	ownerChanged := ownerStr != d.PropsEntry.Owner || groupStr != d.PropsEntry.Group
 	uid, gid := -1, -1
 	if ownerChanged {
@@ -320,6 +332,7 @@ func (m *Model) applyProperties() tea.Cmd {
 		return nil
 	}
 	path := d.PropsPath
+	store, key, orig := m.originals(), permKey(d.PropsFS, path), originalOf(d.PropsEntry)
 
 	return runElevatable(func() elevatedDoneMsg {
 		var err error
@@ -336,6 +349,9 @@ func (m *Model) applyProperties() tea.Cmd {
 		}
 		if err != nil {
 			return elevatedDoneMsg{err: fmt.Sprintf("Properties not applied: %v", err)}
+		}
+		if err := store.Remember(key, orig); err != nil {
+			return elevatedDoneMsg{err: fmt.Sprintf("Updated, original not saved: %v", err)}
 		}
 		return elevatedDoneMsg{status: "Properties updated"}
 	})
