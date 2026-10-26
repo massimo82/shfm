@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.7.2
+Version:        0.7.3
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Mon Oct 26 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.7.3-1
+- A folder that cannot be opened (permission denied) now offers u to unlock it (adding the user's r and x, restorable with Ctrl+R), e to list it as root without changing it, and Esc to go back to the folder the user came from.
+
 * Mon Oct 26 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.7.2-1
 - Entries whose details cannot be read (a folder readable but not searchable) show "?" instead of a fake empty file; from their Properties, u unlocks the folder and e reads them as root; every change made in Properties records the original mode, owner and group, which Ctrl+R restores.
 

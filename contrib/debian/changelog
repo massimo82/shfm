@@ -1,3 +1,9 @@
+shfm (0.7.3) unstable; urgency=medium
+
+  * A folder that cannot be opened (permission denied) now offers u to unlock it (adding the user's r and x, restorable with Ctrl+R), e to list it as root without changing it, and Esc to go back to the folder the user came from.
+
+ -- Massimo Cavalleri <massimo.cavalleri@gmail.com>  lun, 26 ott 2026 08:44:33 +0100
+
 shfm (0.7.2) unstable; urgency=medium
 
   * Entries whose details cannot be read (a folder readable but not searchable) show "?" instead of a fake empty file; from their Properties, u unlocks the folder and e reads them as root; every change made in Properties records the original mode, owner and group, which Ctrl+R restores.
