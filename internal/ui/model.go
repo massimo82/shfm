@@ -358,6 +358,9 @@ func (m *Model) update(msg tea.Msg) tea.Cmd {
 	case propsStatMsg:
 		m.handlePropsStat(msg)
 		return nil
+	case rootListMsg:
+		m.handleRootList(msg)
+		return nil
 
 	case elevatedDoneMsg:
 		m.handleElevatedDone(msg)
@@ -443,6 +446,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if p := m.activePane(); p.PathEditing {
 		return m, m.handlePathEditKey(msg)
+	}
+	if cmd, ok := m.lockedDirKey(msg); ok {
+		return m, cmd
 	}
 
 	action, ok := m.keymap.ActionFor(msg.String())
@@ -590,6 +596,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case config.ActionRestoreOrRefresh:
 		if p.Mode == PaneTrash {
 			m.restoreTrashCurrent()
+		} else if p.showsRootList() {
+			return m, m.listAsRoot()
 		} else {
 			p.Load()
 			m.setStatus("Refreshed")

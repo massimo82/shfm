@@ -229,6 +229,21 @@ type SearchUnlocker interface {
 	SearchUnlockMode(dir string) (cur, want os.FileMode, ok bool)
 }
 
+// ElevatedLister is an optional interface for a backend that can list, as
+// root, a folder the caller can't read: the local filesystem, through
+// pkexec. The entries come with their details, read as root too.
+type ElevatedLister interface {
+	ListElevated(path string) ([]Entry, error)
+}
+
+// ListUnlocker is an optional interface for a backend that can tell which
+// mode would let the caller list and enter dir: its current mode plus only
+// the r and x bits of the owner/group/other class the caller falls in. ok
+// is false when dir already has them, or that can't be told.
+type ListUnlocker interface {
+	ListUnlockMode(dir string) (cur, want os.FileMode, ok bool)
+}
+
 // AttrReader is an optional interface a backend may implement to report the
 // attribute flags (Linux chattr/lsattr: immutable, append-only) that make an
 // entry unchangeable even by root. Implemented by the local backend only.

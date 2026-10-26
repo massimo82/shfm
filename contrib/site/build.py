@@ -25,6 +25,8 @@ HOME_SECTIONS = {"Features"}
 FENCE = re.compile(r"^\s*(```|~~~)")
 HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 LINK = re.compile(r"(!?\[(?:[^\]\[]|\[[^\]]*\])*\])\(([^)\s]+)\)")
+# An anchor set by hand, for a target that isn't a heading (a list item)
+HTML_ANCHOR = re.compile(r'<a id="([^"]+)"></a>')
 
 
 def slug(title):
@@ -61,7 +63,8 @@ def split(readme):
 
 
 def anchors(pages):
-    """Maps every heading's anchor to the page holding it."""
+    """Maps every heading's anchor, and every <a id="..."> set by hand, to
+    the page holding it."""
     where = {}
     for _, name, lines in pages:
         fenced = False
@@ -71,6 +74,9 @@ def anchors(pages):
             m = None if fenced else HEADING.match(line)
             if m:
                 where.setdefault(slug(m.group(2)), name)
+            if not fenced:
+                for a in HTML_ANCHOR.findall(line):
+                    where.setdefault(a, name)
     return where
 
 

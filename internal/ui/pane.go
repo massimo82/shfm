@@ -99,6 +99,19 @@ type Pane struct {
 	ShowHidden bool
 	Err        error
 
+	// For a folder that couldn't be listed (see lockeddir.go): how u would
+	// unlock it (Unlock.ok false when it can't be told), and where Esc goes
+	// back to, the last folder listed fine on the same source.
+	Unlock   folderUnlock
+	lastOK   string
+	lastOKFS vfs.FileSystem
+
+	// rootList is a listing read as root (e on a folder that couldn't be
+	// listed), shown in place of FS.List while Path is that folder; kept
+	// while the pane stays inside it, so that coming back from a subfolder
+	// doesn't ask for the password again (see lockeddir.go).
+	rootList *rootListing
+
 	// EntryFilter, when set, narrows every folder listing further to the
 	// entries it accepts: the file chooser's file types, or folders only
 	// when choosing a folder (see picker.go).
@@ -181,16 +194,27 @@ func (p *Pane) Load() {
 	}
 
 	p.ShowingSearchResults = false
-	entries, err := p.FS.List(p.Path)
+	p.Unlock = folderUnlock{}
+	var entries []vfs.Entry
+	var err error
+	asRoot := p.showsRootList()
+	if asRoot {
+		entries = p.rootEntries()
+	} else {
+		entries, err = p.FS.List(p.Path)
+	}
 	if err != nil {
 		p.Err = err
-		if errors.Is(err, fs.ErrPermission) &&
-			isLostAndFound(p.FS, p.FS.Dir(p.Path), vfs.Entry{Name: p.FS.Base(p.Path), IsDir: true}) {
-			p.Err = errLostAndFound
+		if errors.Is(err, fs.ErrPermission) {
+			p.Unlock = unlockFor(p.FS, p.Path)
+			if isLostAndFound(p.FS, p.FS.Dir(p.Path), vfs.Entry{Name: p.FS.Base(p.Path), IsDir: true}) {
+				p.Err = errLostAndFound
+			}
 		}
 		p.Entries = nil
 		return
 	}
+	p.lastOK, p.lastOKFS = p.Path, p.FS
 	match := func(string) bool { return true }
 	if p.FilterActive {
 		// An invalid in-progress regex (e.g. typing "foo[") falls back to
@@ -217,7 +241,8 @@ func (p *Pane) Load() {
 	p.XDGNames = xdgEntryNames(p.FS, p.Path, filtered)
 	sortEntriesXDGFirst(filtered, p.XDGNames)
 
-	if sizer, ok := p.FS.(vfs.DirSizer); ok {
+	// Folders listed as root can't be walked by shfm: no sizes, no vaults.
+	if sizer, ok := p.FS.(vfs.DirSizer); ok && !asRoot {
 		p.DirSizesSupported = true
 		var pendingNames []string
 		for i := range filtered {
@@ -250,7 +275,9 @@ func (p *Pane) Load() {
 	} else {
 		p.DirSizesSupported = false
 	}
-	p.findVaults(filtered)
+	if !asRoot {
+		p.findVaults(filtered)
+	}
 
 	if p.FS.Dir(p.Path) != p.Path || p.VaultExit.leavable() {
 		filtered = append([]vfs.Entry{{Name: parentEntryName, IsDir: true}}, filtered...)

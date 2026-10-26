@@ -265,3 +265,21 @@ func searchUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
 	}
 	return mode, mode | bit, true
 }
+
+// listUnlockMode implements LocalFS.ListUnlockMode: dir's mode and the same
+// mode plus the r and x bits of the caller's class, special bits kept.
+func listUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
+	if isRoot() {
+		return 0, 0, false
+	}
+	uid, gid, mode, ok := statOwnerGroupMode(dir)
+	if !ok || !mode.IsDir() {
+		return 0, 0, false
+	}
+	x := searchBit(uid, gid, currentIdentity())
+	rx := x<<2 | x
+	if mode&rx == rx {
+		return 0, 0, false
+	}
+	return mode, mode | rx, true
+}

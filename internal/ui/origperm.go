@@ -68,7 +68,7 @@ func originalOf(e vfs.Entry) origperm.Original {
 
 // describeMode is mode as shown in messages: octal, special bits included.
 func describeMode(mode fs.FileMode) string {
-	return fmt.Sprintf("%o", vfs.UnixMode(mode))
+	return fmt.Sprintf("%03o", vfs.UnixMode(mode))
 }
 
 // describeOriginal is o as shown in the dialog, e.g. "766 root:root".
@@ -137,22 +137,8 @@ func (m *Model) unlockParentFolder() tea.Cmd {
 		m.setError("Folder can't be unlocked")
 		return nil
 	}
-	orig := origperm.Original{Mode: cur}
-	if de, err := d.PropsFS.Stat(dir); err == nil {
-		orig = originalOf(de)
-	}
 	m.dialog = Dialog{}
-	store, key, name := m.originals(), permKey(d.PropsFS, dir), d.PropsFS.Base(dir)
-	return runElevatable(func() elevatedDoneMsg {
-		if err := pe.Chmod(dir, want); err != nil {
-			return elevatedDoneMsg{err: fmt.Sprintf("Not unlocked: %v", err)}
-		}
-		if err := store.Remember(key, orig); err != nil {
-			return elevatedDoneMsg{err: fmt.Sprintf("Unlocked, original not saved: %v", err)}
-		}
-		return elevatedDoneMsg{status: fmt.Sprintf("Unlocked %s: %s→%s (Ctrl+R in its Properties restores)",
-			name, describeMode(cur), describeMode(want))}
-	})
+	return m.unlockFolder(d.PropsFS, pe, dir, cur, want)
 }
 
 // restoreOriginal (Ctrl+R in Properties) puts back the mode, and owner and

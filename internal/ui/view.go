@@ -135,6 +135,12 @@ func (m *Model) renderPane(idx, width, height int) string {
 	if p.Err != nil {
 		errLine := padRight(" error: "+p.Err.Error(), g.innerW)
 		listLines := []string{styleErr.Render(errLine)}
+		if p.Mode == PaneNormal {
+			listLines = append(listLines, strings.Repeat(" ", g.innerW))
+			for _, h := range lockedDirHints(p) {
+				listLines = append(listLines, styleDim.Render(padRight("  "+h, g.innerW)))
+			}
+		}
 		for len(listLines) < g.listH {
 			listLines = append(listLines, strings.Repeat(" ", g.innerW))
 		}
@@ -188,7 +194,11 @@ func (m *Model) renderPathRow(p *Pane, g paneGeom) string {
 		p.PathInput.SetWidth(maxInt(g.pathBoxW-3, 1))
 		box = styleFieldBoxEdit.Render(padRight(" "+p.PathInput.View(), g.pathBoxW))
 	} else {
-		box = styleFieldBox.Render(padRight(" "+p.Path, g.pathBoxW))
+		path := p.Path
+		if p.rootList != nil && p.rootList.path == p.Path {
+			path += "  [as root]"
+		}
+		box = styleFieldBox.Render(padRight(" "+path, g.pathBoxW))
 	}
 	btn := " " + styleFieldButton.Render(padRight(pathButtonText, g.pathBtnW))
 	newBtn := " " + styleFieldButton.Render(padRight(newButtonText, g.pathNewW))

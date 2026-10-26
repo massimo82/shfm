@@ -347,6 +347,86 @@ func parseStatLine(name, line string) (Entry, error) {
 	}, nil
 }
 
+// findListFormat is what ListElevated asks find(1) to print for each
+// entry: type, type of a symlink's target, permission bits in octal
+// (special bits included), uid, gid, size, mtime in seconds and the name,
+// NUL-terminated since a name may hold any other byte.
+const findListFormat = `%y %Y %m %U %G %s %T@ %f\0`
+
+// ListElevated implements ElevatedLister: path's entries and their details,
+// read by a pkexec-run find(1) in a single elevation, for a folder the
+// caller can't read (it lacks the r or x permission for them).
+func (l *LocalFS) ListElevated(path string) ([]Entry, error) {
+	out, err := runElevatedOutput("find", "-H", path, "-mindepth", "1", "-maxdepth", "1", "-printf", findListFormat)
+	if err != nil {
+		return nil, err
+	}
+	return parseFindList(out)
+}
+
+// findTypes maps find's %y letters to the raw Unix file type.
+var findTypes = map[string]uint32{
+	"f": 0o100000, "d": unixDir, "l": unixSymlink, "p": unixFIFO,
+	"s": unixSocket, "c": unixCharDev, "b": unixBlockDev,
+}
+
+// parseFindList reads find(1)'s findListFormat records.
+func parseFindList(out string) ([]Entry, error) {
+	var entries []Entry
+	for _, rec := range strings.Split(out, "\x00") {
+		if rec == "" {
+			continue
+		}
+		f := strings.SplitN(rec, " ", 8)
+		if len(f) != 8 || f[7] == "" {
+			return nil, fmt.Errorf("unexpected find output %q", rec)
+		}
+		perm, err1 := strconv.ParseUint(f[2], 8, 32)
+		uid, err2 := strconv.ParseUint(f[3], 10, 32)
+		gid, err3 := strconv.ParseUint(f[4], 10, 32)
+		size, err4 := strconv.ParseInt(f[5], 10, 64)
+		mtime, err5 := parseFindTime(f[6])
+		if err := errors.Join(err1, err2, err3, err4, err5); err != nil {
+			return nil, fmt.Errorf("unexpected find output %q", rec)
+		}
+		mode := FromUnixMode(findTypes[f[0]] | uint32(perm))
+		entries = append(entries, Entry{
+			Name:      f[7],
+			IsDir:     f[0] == "d" || f[0] == "l" && f[1] == "d",
+			IsSymlink: f[0] == "l",
+			Size:      size,
+			Mode:      mode,
+			ModTime:   mtime,
+			Owner:     userName(uint32(uid)),
+			Group:     groupName(uint32(gid)),
+		})
+	}
+	return entries, nil
+}
+
+// parseFindTime reads find's %T@, seconds with a fraction, e.g.
+// "1700000000.1234567890".
+func parseFindTime(s string) (time.Time, error) {
+	secStr, fracStr, _ := strings.Cut(s, ".")
+	sec, err := strconv.ParseInt(secStr, 10, 64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	var nsec int64
+	if fracStr != "" {
+		fracStr = (fracStr + "000000000")[:9]
+		if nsec, err = strconv.ParseInt(fracStr, 10, 64); err != nil {
+			return time.Time{}, err
+		}
+	}
+	return time.Unix(sec, nsec), nil
+}
+
+// ListUnlockMode implements ListUnlocker.
+func (l *LocalFS) ListUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
+	return listUnlockMode(dir)
+}
+
 // SearchUnlockMode implements SearchUnlocker.
 func (l *LocalFS) SearchUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
 	return searchUnlockMode(dir)

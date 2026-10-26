@@ -36,3 +36,7 @@ func metadataHidden(path string) bool { return false }
 func searchUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
 	return 0, 0, false
 }
+
+func listUnlockMode(dir string) (cur, want os.FileMode, ok bool) {
+	return 0, 0, false
+}

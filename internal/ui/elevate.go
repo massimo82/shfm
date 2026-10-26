@@ -70,10 +70,15 @@ func runElevatable(op func() elevatedDoneMsg) tea.Cmd {
 }
 
 func (m *Model) handleElevatedDone(msg elevatedDoneMsg) {
-	m.activePane().Load()
-	if msg.err != "" {
+	p := m.activePane()
+	p.Load()
+	switch {
+	case msg.err != "":
 		m.setError("%s", msg.err)
-	} else {
+	case p.showsRootList():
+		// What the user can't stat stays as root last saw it.
+		m.setStatus("%s · R reads again as root", msg.status)
+	default:
 		m.setStatus("%s", msg.status)
 	}
 }

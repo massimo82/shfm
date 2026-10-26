@@ -247,7 +247,8 @@ to toggle between single- and dual-pane layout.
   filesystem, SFTP, NFS), edit permissions (octal, setuid/setgid/sticky
   included, e.g. `2755`), owner and group directly. The first change
   records the previous values, which `Ctrl+R` restores later; entries whose
-  details can't be read show `?`. See
+  details can't be read show `?`, and a folder you can't open offers to
+  unlock it (`u`), list it as root (`e`) or go back (`Esc`). See
   [Unreadable entries and restoring permissions](#unreadable-entries-and-restoring-permissions).
 - **Automatic elevation for permission-denied operations** (Linux only):
   chmod/chown (Properties dialog), delete and move/rename on the *local*
@@ -1315,6 +1316,7 @@ even after rebinding (see below), not a separate hardcoded reference.
 | `Left` / `Right`, `Tab` | switch active pane (dual-pane) |
 | `Enter` / double-click | open (folder, or file with its default app) |
 | `Backspace` / `h` | go up one folder |
+| `Esc` / `u` / `e` (in a folder that couldn't be opened) | back to the folder you came from / unlock it / list it as root, see [Unreadable entries and restoring permissions](#unreadable-entries-and-restoring-permissions) |
 | `Ctrl+P` / click PATH | edit the path directly |
 | `Ctrl+S` / click SOURCE | open the source picker |
 | `Ctrl+L` / click title | toggle single/dual pane |
@@ -2401,6 +2403,24 @@ packages.
   - `e` **reads the details as root** (`stat` via `pkexec`): the dialog
     becomes editable with the real values, and changes go straight to
     `pkexec`, without touching the folder.
+
+  A folder you can't open at all (no `r` permission, or no `r` and no
+  `x`, e.g. mode `700` on a folder of root's) shows "permission denied"
+  instead of its contents, and right below it what you can do from there:
+  - `u` **unlocks it**: adds the `r` and `x` bits of the class you fall in
+    (`700` owned by root becomes `705`), via `pkexec` when it isn't yours,
+    and opens it. Recorded like any other change: `Ctrl+R` in its
+    Properties, from the folder above, puts the mode back.
+  - `e` **lists it as root** (one `find` via `pkexec`), changing nothing:
+    the PATH row says `[as root]`, names and details are shown, and each
+    entry's Properties can be edited (through `pkexec`); its files stay
+    unreadable for you, so they can't be opened or copied. The listing is
+    kept while you stay in the folder or its subfolders, without asking
+    for the password again; `R` reads it again as root.
+  - `Esc` **goes back** to the folder you came from — even when you got
+    there by typing the path — the cursor on the folder you left;
+    `Backspace` goes to its parent folder. `Esc` goes back from any folder
+    that couldn't be opened, whatever the error.
 
   Every change made from the Properties dialog — including an unlock,
   recorded on the folder — first saves the entry's previous mode, owner

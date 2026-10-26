@@ -61,14 +61,21 @@ var mouseOnlyHelpEntries = []helpEntry{
 	{"Mouse wheel", "scroll list"},
 }
 
+// contextHelpEntries are rows for keys that only act in one situation,
+// outside the configurable catalogue too.
+var contextHelpEntries = []helpEntry{
+	{"Esc (no access)", "back where you came from"},
+	{"u / e (no access)", "unlock / list as root"},
+}
+
 // buildHelpEntries turns the active keymap into the Help dialog's rows —
 // one per configurable action, in the same order as keybindings.conf lists
 // them, always showing whatever keys are actually bound (so Help can never
 // drift out of sync with a customized keybindings.conf) — plus the fixed
-// mouse-only rows above. An action the user disabled (bound to no keys) is
+// fixed rows above. An action the user disabled (bound to no keys) is
 // simply omitted: there's nothing to show for it.
 func (m *Model) buildHelpEntries() []helpEntry {
-	entries := make([]helpEntry, 0, len(mouseOnlyHelpEntries)+32)
+	entries := make([]helpEntry, 0, len(contextHelpEntries)+len(mouseOnlyHelpEntries)+32)
 	for _, kb := range m.keymap.All() {
 		if len(kb.Keys) == 0 {
 			continue
@@ -83,6 +90,7 @@ func (m *Model) buildHelpEntries() []helpEntry {
 		}
 		entries = append(entries, helpEntry{key: key, desc: strings.ToLower(kb.Description)})
 	}
+	entries = append(entries, contextHelpEntries...)
 	entries = append(entries, mouseOnlyHelpEntries...)
 	return entries
 }
