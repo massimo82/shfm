@@ -27,7 +27,7 @@
 %global _lto_cflags %{nil}
 
 Name:           shfm
-Version:        0.7.1
+Version:        0.7.2
 Release:        1%{?dist}
 Summary:        Terminal file manager for local, MTP, network and cloud files, with encrypted vaults
 License:        GPL-3.0-or-later AND MIT
@@ -142,6 +142,9 @@ make -C contrib/desktop-integration DESTDIR=%{buildroot} SHFM=%{_bindir}/shfm in
 %{_datadir}/xdg-desktop-portal/portals/shfm.portal
 
 %changelog
+* Mon Oct 26 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.7.2-1
+- Entries whose details cannot be read (a folder readable but not searchable) show "?" instead of a fake empty file; from their Properties, u unlocks the folder and e reads them as root; every change made in Properties records the original mode, owner and group, which Ctrl+R restores.
+
 * Sat Oct 24 2026 Massimo Cavalleri <massimo.cavalleri@gmail.com> - 0.7.1-1
 - Writing a Raspberry Pi OS image offers to enable SSH (on by default) and to create a user, through ssh and userconf.txt files in its boot partition.
 
